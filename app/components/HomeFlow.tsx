@@ -1,0 +1,525 @@
+"use client";
+
+import { uploadFileToFirebase } from "@/lib/firebaseUtils";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import toast from "react-hot-toast";
+import IdentityVerificationStep from "./auth/IdentityVerificationStep";
+import OTPVerification from "./auth/OTPVerification";
+import ProfilePicStep from "./auth/ProfilePicStep";
+import UsernameStep from "./auth/UsernameStep";
+import OnboardingStepLayout from "./OnboardingStepLayout";
+import PostOnboardingAuthScreen from "./PostOnboardingAuthScreen";
+import SplashScreen from "./SplashScreen";
+
+const STEPS = [
+  {
+    logoSrc: "/images/icons/cloakLogo.svg",
+    headline: "CLOAK",
+    subheadline: "Detect where you appear online",
+    heroSrc: "/images/splashScreen/compressed/first.webp",
+    heroAlt: "Illustration for uploading identity",
+    title: "Upload identity",
+    description:
+      "Securely provide reference images to create your digital cloak.",
+    buttonLabel: "Next",
+  },
+  {
+    logoSrc: "/images/icons/cloakLogo.svg",
+    headline: "CLOAK",
+    subheadline: "Detect where you appear online",
+    heroSrc: "/images/splashScreen/compressed/second.webp",
+    heroAlt: "Illustration for community detection",
+    title: "Community detects content",
+    description: "Our network scans and reports where you appear online.",
+    buttonLabel: "Next",
+  },
+  {
+    logoSrc: "/images/icons/cloakLogo.svg",
+    headline: "CLOAK",
+    subheadline: "Detect where you appear online",
+    heroSrc: "/images/splashScreen/compressed/third.webp",
+    heroAlt: "Illustration for notifications and rewards",
+    title: "Get notified & rewarded",
+    description:
+      "Take control of your privacy and earn points for helping others.",
+    buttonLabel: "Next",
+  },
+] as const;
+
+const IDENTITY_DRAFT_STORAGE_KEY = "cloak-identity-verification-draft";
+
+function preloadImage(src: string) {
+  return new Promise<void>((resolve) => {
+    const image = new window.Image();
+
+    const finish = () => {
+      image.onload = null;
+      image.onerror = null;
+      resolve();
+    };
+
+    image.onload = finish;
+    image.onerror = finish;
+    image.src = src;
+
+    if (image.complete) {
+      finish();
+    }
+  });
+}
+
+export type AuthStep =
+  | "EMAIL"
+  | "OTP"
+  | "USERNAME"
+  | "PROFILE_PIC"
+  | "IDENTITY"
+  | "COMPLETED";
+
+function HomeFlowContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedAuthStep = searchParams.get("authStep") as AuthStep | null;
+  const { data: session, status, update } = useSession();
+  const [showSplash, setShowSplash] = useState(status === "loading");
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [authStep, setAuthStep] = useState<AuthStep | null>(null);
+  const [email, setEmail] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Handle initial authStep from URL (for logout redirect)
+  useEffect(() => {
+    if (requestedAuthStep) {
+      setAuthStep(requestedAuthStep);
+      setShowSplash(false);
+    }
+  }, [requestedAuthStep]);
+
+  // Handle session-based redirection/onboarding
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      const user = session.user as any;
+
+      if ((session as any).sessionExpired || user.sessionExpired || !user.id) {
+        void signOut({ callbackUrl: "/?authStep=EMAIL" });
+        return;
+      }
+
+      setUserId(user.id);
+
+      // If we have an explicit authStep, we stay there.
+      // This prevents session updates from kicking us out of the onboarding flow.
+      if (authStep && authStep !== "EMAIL" && authStep !== "OTP") {
+        setShowSplash(false);
+        return;
+      }
+
+      // Logic for users arriving at the page (fresh login or page refresh)
+      if (user.username) {
+        if (!user.image && !user.profileImage) {
+          setAuthStep("PROFILE_PIC");
+          setShowSplash(false);
+          return;
+        }
+        router.push("/dashboard");
+        setShowSplash(false);
+      } else {
+        setAuthStep("USERNAME");
+        setShowSplash(false);
+      }
+    } else if (status === "loading") {
+      // Only show splash on initial load, not during session updates
+      if (!authStep) {
+        setShowSplash(true);
+      }
+    }
+  }, [status, session, router, authStep, requestedAuthStep]);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Stay on this page after sign in to let the useEffect handle the routing
+      const result = await signIn("google", { redirect: false });
+      if (result?.error) {
+        setError("Failed to sign in with Google. Please try again.");
+      }
+    } catch (error) {
+      console.error("Google Sign-In Error:", error);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const splashStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      setShowSplash(false);
+      return;
+    }
+
+    splashStartRef.current = Date.now();
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const firstStepAssets = Array.from(
+      new Set([STEPS[0]?.logoSrc, STEPS[0]?.heroSrc].filter(Boolean)),
+    );
+
+    const remainingAssets = Array.from(
+      new Set(
+        STEPS.slice(1)
+          .flatMap((step) => [step.logoSrc, step.heroSrc])
+          .filter(Boolean),
+      ),
+    );
+
+    const hideSplash = () => {
+      const elapsed = Date.now() - (splashStartRef.current ?? 0);
+      const minDelay = 3000;
+      const remainingTime = Math.max(minDelay - elapsed, 0);
+
+      if (remainingTime <= 0) {
+        setShowSplash(false);
+      } else {
+        timeoutId = setTimeout(() => {
+          if (!cancelled) {
+            setShowSplash(false);
+          }
+        }, remainingTime);
+      }
+    };
+
+    Promise.all(firstStepAssets.map((src) => preloadImage(src)))
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          hideSplash();
+        }
+      });
+
+    remainingAssets.forEach((src) => {
+      void preloadImage(src);
+    });
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [status]);
+
+  const handleEmailSubmit = async (submittedEmail: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: submittedEmail }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setEmail(submittedEmail);
+        setAuthStep("OTP");
+        toast.success("OTP sent to your email! Please check your inbox.", {
+          id: "otp-sent",
+        });
+      } else {
+        setError(data.error || "Failed to send OTP. Please try again.");
+      }
+    } catch (error) {
+      console.error("Failed to send OTP", error);
+      setError(
+        "Failed to connect to the server. Please check your connection.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOTPVerify = async (otp: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: otp }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setUserId(data.user.id);
+
+        // Use NextAuth signIn to create a session for the OTP user
+        // This ensures the session is established and data is synced
+        await signIn("credentials", {
+          email,
+          redirect: false,
+        });
+
+        if (data.user.username) {
+          router.push("/dashboard");
+        } else {
+          setAuthStep("USERNAME");
+        }
+      } else {
+        setError(data.error || "Invalid verification code.");
+      }
+    } catch (error) {
+      console.error("Failed to verify OTP", error);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUsernameSubmit = async (username: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, username }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        // Move to the next step FIRST
+        setAuthStep("PROFILE_PIC");
+        // Then update the session in the background
+        update({ username });
+      } else {
+        setError(data.error || "Failed to update username.");
+      }
+    } catch (error) {
+      console.error("Failed to update username", error);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleProfilePicSubmit = async (file: File | null) => {
+    if (!file) {
+      setAuthStep("IDENTITY");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Upload to Local Storage via API
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "profile");
+      formData.append("userId", userId || "");
+
+      const uploadRes = await fetch("/api/auth/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const { url: downloadURL } = await uploadRes.json();
+
+      const response = await fetch("/api/auth/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, image: downloadURL }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        // Move to the next step FIRST
+        setAuthStep("IDENTITY");
+        // Then update the session in the background
+        update({ image: downloadURL });
+      } else {
+        setError(data.error || "Failed to upload profile picture.");
+      }
+    } catch (error) {
+      console.error("Failed to upload profile pic", error);
+      setError("An unexpected error occurred during upload.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleIdentitySubmit = async (data: {
+    documentType: string;
+    files: File[];
+  }) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Upload files to Local Storage via API
+      const uploadPromises = data.files.map(async (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("type", "identity");
+        formData.append("userId", userId || "");
+
+        const res = await fetch("/api/auth/upload", {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to upload document.");
+        }
+        const json = await res.json();
+        return json.url;
+      });
+
+      const uploadedDocumentUrls = await Promise.all(uploadPromises);
+      const documentUrls = [
+        ...((data as { existingUrls?: string[] }).existingUrls || []),
+        ...uploadedDocumentUrls,
+      ];
+
+      const response = await fetch("/api/auth/identity-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          documentType: data.documentType,
+          documentUrls,
+        }),
+      });
+      const resData = await response.json();
+      if (response.ok) {
+        try {
+          window.sessionStorage.setItem(
+            IDENTITY_DRAFT_STORAGE_KEY,
+            JSON.stringify({
+              documentType: data.documentType,
+              documentUrls,
+            }),
+          );
+        } catch (storageError) {
+          console.error("Failed to persist identity draft:", storageError);
+        }
+
+        // Update the session status
+        await update({
+          identityVerificationStatus: "PENDING",
+          documentType: data.documentType,
+        });
+        router.push("/reference-media?mode=onboarding");
+        return false;
+      } else {
+        setError(resData.error || "Failed to submit identity verification.");
+        return false;
+      }
+    } catch (error) {
+      console.error("Failed to submit identity verification", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again.",
+      );
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
+
+  if (authStep === "EMAIL") {
+    return (
+      <PostOnboardingAuthScreen
+        onEmailSubmit={handleEmailSubmit}
+        onGoogleSignIn={handleGoogleSignIn}
+        error={error}
+        isLoading={isLoading}
+      />
+    );
+  }
+
+  if (authStep === "OTP") {
+    return (
+      <OTPVerification
+        email={email}
+        onVerify={handleOTPVerify}
+        onResend={() => handleEmailSubmit(email)}
+        onGoogleSignIn={handleGoogleSignIn}
+        error={error}
+        isLoading={isLoading}
+      />
+    );
+  }
+
+  if (authStep === "USERNAME") {
+    const user = session?.user as any;
+    return (
+      <UsernameStep
+        onContinue={handleUsernameSubmit}
+        error={error}
+        initialBase={user?.name || user?.email?.split("@")[0] || ""}
+        isLoading={isLoading}
+      />
+    );
+  }
+
+  if (authStep === "PROFILE_PIC") {
+    return (
+      <ProfilePicStep
+        onContinue={handleProfilePicSubmit}
+        onSkip={() => setAuthStep("IDENTITY")}
+        error={error}
+      />
+    );
+  }
+
+  if (authStep === "IDENTITY") {
+    const user = session?.user as any;
+    return (
+      <IdentityVerificationStep
+        onSkip={() => router.push("/reference-media?mode=onboarding")}
+        onSubmit={handleIdentitySubmit}
+        onContinueToDashboard={() =>
+          router.push("/reference-media?mode=onboarding")
+        }
+        error={error}
+        status={user?.identityVerificationStatus}
+        showSkip={false}
+        isLoading={isLoading}
+      />
+    );
+  }
+
+  const currentStep = STEPS[currentStepIndex];
+
+  return (
+    <OnboardingStepLayout
+      {...currentStep}
+      onNext={() => {
+        if (currentStepIndex === STEPS.length - 1) {
+          setAuthStep("EMAIL");
+          return;
+        }
+
+        setCurrentStepIndex((stepIndex) => stepIndex + 1);
+      }}
+      currentStep={currentStepIndex + 1}
+      totalSteps={STEPS.length}
+    />
+  );
+}
+
+export default function HomeFlow() {
+  return (
+    <Suspense fallback={<SplashScreen />}>
+      <HomeFlowContent />
+    </Suspense>
+  );
+}
