@@ -210,6 +210,13 @@ export default function CaptureScreen({
       throw new Error("Unable to process captured image.");
     }
 
+    // Keep the saved image consistent with the on-screen preview across
+    // browsers by explicitly mirroring only the user-facing camera output.
+    if (facingMode === "user") {
+      context.translate(canvas.width, 0);
+      context.scale(-1, 1);
+    }
+
     context.drawImage(
       video,
       cropX,
@@ -293,7 +300,9 @@ export default function CaptureScreen({
             autoPlay
             muted
             playsInline
-            className="h-full w-full scale-[1.05] object-cover blur-[10px] brightness-[0.45]"
+            className={`h-full w-full scale-[1.05] object-cover blur-[10px] brightness-[0.45] ${
+              facingMode === "user" ? "scale-x-[-1]" : ""
+            }`}
           />
         </div>
       )}
@@ -318,7 +327,7 @@ export default function CaptureScreen({
         />
       </div>
 
-      <div className="relative flex h-full flex-col px-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-[max(env(safe-area-inset-top),1rem)]">
+      <div className="relative flex h-full min-h-0 flex-col px-5 pb-[max(env(safe-area-inset-bottom),1.1rem)] pt-[max(env(safe-area-inset-top),0.9rem)]">
         <header className="relative flex items-center justify-between pt-1 h-12">
           <div className="flex w-20 justify-start z-20">
             <button
@@ -341,7 +350,7 @@ export default function CaptureScreen({
           </div>
         </header>
 
-        <div className="mx-auto mt-6 flex w-full max-w-[268px] justify-between items-center gap-2.5 rounded-[24px] border border-white/10 bg-black/28 p-2.5 shadow-[0_20px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        <div className="mx-auto mt-4 shrink-0 flex w-full max-w-[268px] items-center justify-between gap-2.5 rounded-[24px] border border-white/10 bg-black/28 p-2.5 shadow-[0_20px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
           {[0, 1, 2].map((index) => {
             const preview = previews[index];
 
@@ -383,10 +392,10 @@ export default function CaptureScreen({
           })}
         </div>
 
-        <div className="relative flex flex-1 items-center justify-center pb-6 pt-6">
+        <div className="relative flex min-h-0 flex-1 items-center justify-center py-4">
           <div
             ref={captureFrameRef}
-            className="relative aspect-[4/5] w-full max-w-[430px] overflow-hidden rounded-[40px] border-4 border-white bg-transparent shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
+            className="relative aspect-[4/5] h-full w-auto max-h-full max-w-[min(100%,430px)] overflow-hidden rounded-[40px] border-4 border-white bg-transparent shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
           >
             {cameraError ? (
               <div className="flex h-full flex-col items-center justify-center bg-[#1A1715] px-8 text-center">
@@ -403,7 +412,9 @@ export default function CaptureScreen({
                   autoPlay
                   muted
                   playsInline
-                  className="h-full w-full scale-[1] object-cover"
+                  className={`h-full w-full object-cover ${
+                    facingMode === "user" ? "scale-x-[-1]" : ""
+                  }`}
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/10" />
               </>
@@ -411,7 +422,7 @@ export default function CaptureScreen({
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-[350px] rounded-[36px] border border-white/10 bg-[#1E1B19]/50 p-4 shadow-[0_24px_48px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+        <div className="mx-auto mt-3 shrink-0 w-full max-w-[350px] rounded-[36px] border border-white/10 bg-[#1E1B19]/50 p-3.5 shadow-[0_24px_48px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2">
             {/* Upload Button */}
             <button
@@ -437,9 +448,9 @@ export default function CaptureScreen({
               type="button"
               onClick={handleCapture}
               disabled={isReadyToComplete || isSaving || Boolean(cameraError)}
-              className="relative flex h-[76px] w-[76px] items-center justify-center rounded-full border-2 border-white bg-white/5 transition active:scale-95 disabled:opacity-30 mx-4"
+              className="relative mx-3 flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-white bg-white/5 transition active:scale-95 disabled:opacity-30"
             >
-              <div className="h-[64px] w-[64px] rounded-full bg-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]" />
+              <div className="h-[60px] w-[60px] rounded-full bg-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]" />
             </button>
 
             {/* Contextual Action Button (Flip Cam or Submit Complete) */}
