@@ -11,11 +11,11 @@ import {
   Camera,
   Bookmark,
   User as UserIcon,
-  Award,
   X,
   Trophy,
   Flag,
   Shield,
+  Search,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
@@ -24,24 +24,34 @@ import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
+import { PostCard } from "@/app/(protected)/cloak-watch/_components/PostUI";
+import {
+  fetchPosts,
+  type CloakWatchPost,
+  type CloakWatchPostScope,
+} from "@/app/(protected)/cloak-watch/_lib/posts";
 
 type ProfileView =
   | "main"
   | "edit"
-  | "coming-soon"
   | "verification"
-  | "verified-status";
+  | "verified-status"
+  | "posts";
 
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const [view, setView] = useState<ProfileView>("main");
-  const [comingSoonTitle, setComingSoonTitle] = useState("");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [postsViewTitle, setPostsViewTitle] = useState("");
+  const [postsScope, setPostsScope] = useState<CloakWatchPostScope>("all");
+  const [postsQuery, setPostsQuery] = useState("");
+  const [profilePosts, setProfilePosts] = useState<CloakWatchPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -272,10 +282,41 @@ export default function ProfilePage() {
     }
   };
 
-  const showComingSoon = (title: string) => {
-    setComingSoonTitle(title);
-    setView("coming-soon");
+  const openPostsView = async (
+    title: string,
+    scope: Extract<CloakWatchPostScope, "my" | "saved">,
+  ) => {
+    setPostsViewTitle(title);
+    setPostsScope(scope);
+    setPostsQuery("");
+    setView("posts");
   };
+
+  useEffect(() => {
+    if (view !== "posts" || (postsScope !== "my" && postsScope !== "saved")) {
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
+      setPostsLoading(true);
+      try {
+        const posts = await fetchPosts(postsQuery, { scope: postsScope });
+        setProfilePosts(posts);
+      } catch (error) {
+        console.error(`Failed to load ${postsScope} posts`, error);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : `Failed to load ${postsViewTitle}.`,
+        );
+        setProfilePosts([]);
+      } finally {
+        setPostsLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [view, postsScope, postsQuery, postsViewTitle]);
 
   const handleVerificationClick = () => {
     if (
@@ -364,22 +405,75 @@ export default function ProfilePage() {
     );
   }
 
-  if (view === "coming-soon") {
+  if (view === "posts") {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4 px-6 text-center">
-        <div className="h-20 w-20 bg-[#14C3CF]/10 rounded-full flex items-center justify-center">
-          <Award className="h-10 w-10 text-[#14C3CF]" />
+      <div className="flex h-full flex-col bg-white font-sf-pro-display">
+        <header className="shrink-0 bg-white">
+          <div className="flex items-center justify-between px-4 py-4">
+            <button onClick={() => setView("main")} className="p-2">
+              <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
+            </button>
+            <h1 className="text-lg font-semibold text-[#2D2D2D]">
+              {postsViewTitle}
+            </h1>
+            <div className="w-10" />
+          </div>
+
+          <div className="px-4 pb-2">
+            <div className="flex items-center gap-3 rounded-full bg-[#F3F3F3] px-4 py-3">
+              <Search className="h-5 w-5 text-[#98A0A7]" />
+              <input
+                value={postsQuery}
+                onChange={(e) => setPostsQuery(e.target.value)}
+                placeholder="Search posts,people,topics..."
+                className="w-full bg-transparent text-[14px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7]"
+              />
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2 no-scrollbar">
+          {postsLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
+            </div>
+          ) : profilePosts.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#14C3CF]/10">
+                {postsScope === "my" ? (
+                  <FileText className="h-7 w-7 text-[#14C3CF]" />
+                ) : (
+                  <Bookmark className="h-7 w-7 text-[#14C3CF]" />
+                )}
+              </div>
+              <h2 className="mt-4 text-[18px] font-semibold text-[#2D2D2D]">
+                No {postsScope === "my" ? "posts" : "saved posts"} yet
+              </h2>
+              <p className="mx-auto mt-2 max-w-[260px] text-[14px] leading-6 text-[#8F98A0]">
+                {postsScope === "my"
+                  ? "Posts you create in Cloak Watch will appear here."
+                  : "Posts you save from Cloak Watch will appear here."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {profilePosts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onOpenPost={(selectedPost) =>
+                    router.push(`/cloak-watch/post/${selectedPost.id}`)
+                  }
+                  onDeleted={(postId) =>
+                    setProfilePosts((prev) =>
+                      prev.filter((item) => item.id !== postId),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">{comingSoonTitle}</h2>
-        <p className="text-slate-500">
-          This feature is currently under development. Stay tuned!
-        </p>
-        <button
-          onClick={() => setView("main")}
-          className="mt-4 px-8 py-3 bg-[#14C3CF] text-white rounded-full font-medium active:scale-[0.98] transition-all shadow-lg shadow-[#14C3CF]/20"
-        >
-          Go Back
-        </button>
       </div>
     );
   }
@@ -595,13 +689,13 @@ export default function ProfilePage() {
             <MenuButton
               icon={<FileText size={19} className="text-[#14C3CF]" />}
               label="My Posts"
-              onClick={() => showComingSoon("My Posts")}
+              onClick={() => void openPostsView("My Posts", "my")}
               showDivider={true}
             />
             <MenuButton
               icon={<Bookmark size={19} className="text-[#14C3CF]" />}
               label="Saved Posts"
-              onClick={() => showComingSoon("Saved Posts")}
+              onClick={() => void openPostsView("Saved Posts", "saved")}
             />
           </MenuGroup>
 

@@ -14,7 +14,11 @@ export default function ProtectedLayout({
   const router = useRouter();
   const pathname = usePathname();
   const hideBottomNav =
-    pathname === "/subscription" || pathname.startsWith("/subscription/");
+    pathname === "/subscription" ||
+    pathname.startsWith("/subscription/") ||
+    pathname === "/cloak-watch/personalised-appearance" ||
+    pathname.startsWith("/cloak-watch/new-post") ||
+    pathname.startsWith("/cloak-watch/post/");
 
   useEffect(() => {
     if (status === "unauthenticated") {
