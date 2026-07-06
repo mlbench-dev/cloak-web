@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const db = client.db();
 
     const suggestions: string[] = [];
-    const baseCleaned = base.replace(/[^a-zA-Z0-0_]/g, "").toLowerCase();
+    const baseCleaned = base.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
 
     // Strategy 1: base + random numbers
     // Strategy 2: base + underscores

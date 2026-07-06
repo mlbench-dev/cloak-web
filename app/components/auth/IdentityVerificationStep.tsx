@@ -318,7 +318,7 @@ export default function IdentityVerificationStep({
 
   if (step === "submitted") {
     return (
-      <main className="font-sf-pro-display flex flex-col min-h-full bg-[#F5F5F5] text-[#2D2D2D]">
+      <main className="font-sf-pro-display flex min-h-full flex-col overflow-x-hidden bg-[#F5F5F5] text-[#2D2D2D]">
         <div className="w-full max-w-[390px] mx-auto px-4 pt-[max(env(safe-area-inset-top),1.25rem)] pb-10">
           <div className="flex flex-col items-start">
             {!hideHeader && (
@@ -411,7 +411,7 @@ export default function IdentityVerificationStep({
             )}
           </div>
 
-          <div className="w-full space-y-6 flex-1 min-h-0 overflow-y-auto pb-4">
+          <div className="flex-1 min-h-0 w-full space-y-6 overflow-y-auto overflow-x-hidden pb-4">
             <div className="space-y-2.5 relative">
               <label className="block text-[15px] font-medium text-[#3E454B]">
                 Document type
@@ -419,10 +419,12 @@ export default function IdentityVerificationStep({
               <button
                 onClick={() => setShowDocTypeMenu(!showDocTypeMenu)}
                 disabled={isLoading}
-                className="w-full h-14 bg-[#ECECEC] rounded-[18px] px-5 flex items-center justify-between text-[15px] text-[#2D2D2D]"
+                className="flex h-14 w-full min-w-0 items-center justify-between rounded-[18px] bg-[#ECECEC] px-5 text-[15px] text-[#2D2D2D]"
               >
                 <span
-                  className={documentType ? "text-[#2D2D2D]" : "text-[#A7ADB2]"}
+                  className={`min-w-0 flex-1 truncate pr-3 text-left ${
+                    documentType ? "text-[#2D2D2D]" : "text-[#A7ADB2]"
+                  }`}
                 >
                   {documentType || "Select document type"}
                 </span>
@@ -431,7 +433,9 @@ export default function IdentityVerificationStep({
                   height="8"
                   viewBox="0 0 12 8"
                   fill="none"
-                  className={`transition-transform ${showDocTypeMenu ? "rotate-180" : ""}`}
+                  className={`shrink-0 transition-transform ${
+                    showDocTypeMenu ? "rotate-180" : ""
+                  }`}
                 >
                   <path
                     d="M1 1.5L6 6.5L11 1.5"
@@ -444,7 +448,7 @@ export default function IdentityVerificationStep({
               </button>
 
               {showDocTypeMenu && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-3xl shadow-xl z-50 overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-w-full overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl animate-in fade-in zoom-in-95 duration-200">
                   <div className="p-4 border-b border-gray-50 flex justify-center">
                     <div className="w-10 h-1 bg-[#E5E5E5] rounded-full" />
                   </div>
@@ -460,7 +464,7 @@ export default function IdentityVerificationStep({
                           setShowDocTypeMenu(false);
                           setFieldError(null);
                         }}
-                        className="w-full text-left px-4 py-3 text-[15px] hover:bg-[#F5F5F5] rounded-xl transition-colors"
+                        className="w-full rounded-xl px-4 py-3 text-left text-[15px] break-words hover:bg-[#F5F5F5] transition-colors"
                       >
                         {type}
                       </button>
@@ -509,14 +513,14 @@ export default function IdentityVerificationStep({
                 {maxFiles === 1 ? "" : "s"}.
               </p>
 
-              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 snap-x">
+              <div className="grid grid-cols-1 gap-4 pb-4 sm:flex sm:overflow-x-auto sm:no-scrollbar sm:snap-x">
                 {files.map((file, idx) => (
                   <div
                     key={idx}
-                    className="flex-none w-[280px] flex flex-col p-4 bg-white rounded-2xl border border-gray-100 gap-3 snap-center shadow-sm"
+                    className="flex w-full min-w-0 flex-col gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:w-[280px] sm:flex-none sm:snap-center"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <svg
                           width="20"
                           height="20"
@@ -532,7 +536,7 @@ export default function IdentityVerificationStep({
                             strokeLinejoin="round"
                           />
                         </svg>
-                        <span className="text-[14px] text-[#2D2D2D] truncate max-w-[160px] font-medium">
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-[#2D2D2D]">
                           {file.name}
                         </span>
                       </div>

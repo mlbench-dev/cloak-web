@@ -42,12 +42,14 @@ export default function UsernameStep({
         setIsChecking(false);
       }
     }, 500),
-    []
+    [],
   );
 
   const fetchSuggestions = async (base: string) => {
     try {
-      const res = await fetch(`/api/auth/username-suggestions?base=${base || "user"}`);
+      const res = await fetch(
+        `/api/auth/username-suggestions?base=${base || "user"}`,
+      );
       const data = await res.json();
       setSuggestions(data.suggestions || []);
     } catch (err) {
@@ -64,7 +66,7 @@ export default function UsernameStep({
   }, [username, initialBase]);
 
   const handleUsernameChange = (value: string) => {
-    const cleaned = value.replace(/[^a-zA-Z0-0_]/g, "").toLowerCase();
+    const cleaned = value.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
     setUsername(cleaned);
     if (cleaned.length >= 3) {
       checkAvailability(cleaned);
@@ -85,8 +87,12 @@ export default function UsernameStep({
       {(isTaken || error) && (
         <div className="absolute top-6 left-4 right-4 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center gap-2 rounded-2xl bg-white p-4 shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-[#FF3B30]/10">
-            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#FF3B30] text-[#FF3B30] text-[12px] font-bold">!</div>
-            <p className="text-[13px] font-medium text-[#2D2D2D]">{error || "This username is already taken, please try again"}</p>
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#FF3B30] text-[#FF3B30] text-[12px] font-bold">
+              !
+            </div>
+            <p className="text-[13px] font-medium text-[#2D2D2D]">
+              {error || "This username is already taken, please try again"}
+            </p>
           </div>
         </div>
       )}
@@ -109,17 +115,23 @@ export default function UsernameStep({
               Create a Username
             </h1>
             <p className="max-w-[280px] text-[14px] leading-6 text-[#8F98A0] 2xl:max-w-[320px] 2xl:text-[16px]">
-              Create a username so its easy for people to mention you in the platform
+              Create a username so its easy for people to mention you in the
+              platform
             </p>
           </div>
 
           <div className="w-full space-y-8">
             <div className="space-y-2.5">
-              <label htmlFor="username" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
+              <label
+                htmlFor="username"
+                className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]"
+              >
                 Username
               </label>
               <div className="relative">
-                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[16px] text-[#2D2D2D]">@</span>
+                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[16px] font-bold text-[#2D2D2D]">
+                  @
+                </span>
                 <input
                   id="username"
                   type="text"
@@ -127,7 +139,11 @@ export default function UsernameStep({
                   value={username}
                   onChange={(e) => handleUsernameChange(e.target.value)}
                   className={`h-14 w-full rounded-[18px] border bg-[#ECECEC] pl-10 pr-12 text-[16px] text-[#2D2D2D] outline-none transition-all 2xl:h-16 2xl:text-[18px] ${
-                    isTaken ? "border-[#FF3B30] bg-white" : isValid ? "border-transparent bg-[#ECECEC]" : "border-transparent"
+                    isTaken
+                      ? "border-[#FF3B30] bg-white"
+                      : isValid
+                        ? "border-transparent bg-[#ECECEC]"
+                        : "border-transparent"
                   } focus:border-[#14C3CF]`}
                 />
                 {isChecking && (
@@ -137,27 +153,53 @@ export default function UsernameStep({
                 )}
                 {isValid && !isTaken && !isChecking && (
                   <div className="absolute right-5 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-[#14C3CF]">
-                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <svg
+                      width="10"
+                      height="8"
+                      viewBox="0 0 10 8"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M1 4L3.5 6.5L9 1"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   </div>
                 )}
                 {isTaken && !isChecking && (
-                   <button 
+                  <button
                     onClick={() => setUsername("")}
                     className="absolute right-5 top-1/2 -translate-y-1/2 text-[#FF3B30]"
-                   >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M15 5L5 15M5 5L15 15"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
-                   </button>
+                  </button>
                 )}
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="space-y-3">
-                <p className="text-[13px] font-medium text-[#8F98A0]">Suggested usernames</p>
+                <p className="text-[13px] font-bold text-[#2D2D2D]">
+                  Suggested usernames
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((suggestion, idx) => (
                     <button

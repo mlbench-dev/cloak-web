@@ -47,6 +47,9 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [pendingProfileImageFile, setPendingProfileImageFile] =
+    useState<File | null>(null);
+  const [pendingProfileImageUrl, setPendingProfileImageUrl] = useState("");
   const [postsViewTitle, setPostsViewTitle] = useState("");
   const [postsScope, setPostsScope] = useState<CloakWatchPostScope>("all");
   const [postsQuery, setPostsQuery] = useState("");
@@ -94,6 +97,14 @@ export default function ProfilePage() {
   }, [session]);
 
   useEffect(() => {
+    return () => {
+      if (pendingProfileImageUrl) {
+        URL.revokeObjectURL(pendingProfileImageUrl);
+      }
+    };
+  }, [pendingProfileImageUrl]);
+
+  useEffect(() => {
     const fetchProfileStats = async () => {
       setStatsLoading(true);
       try {
@@ -126,42 +137,17 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
+    if (pendingProfileImageUrl) {
+      URL.revokeObjectURL(pendingProfileImageUrl);
+    }
+
+    const localPreviewUrl = URL.createObjectURL(file);
+    setPendingProfileImageFile(file);
+    setPendingProfileImageUrl(localPreviewUrl);
     setError(null);
 
-    try {
-      // Upload file
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", "profile");
-      formData.append("userId", user.id || "");
-
-      const uploadRes = await fetch("/api/auth/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const { url: downloadURL } = await uploadRes.json();
-
-      // Update profile in DB
-      const response = await fetch("/api/auth/update-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, image: downloadURL }),
-      });
-
-      if (response.ok) {
-        // Update session
-        await update({ image: downloadURL });
-      } else {
-        const data = await response.json();
-        setError(data.error || "Failed to upload profile picture.");
-      }
-    } catch (err) {
-      console.error("Failed to upload profile pic", err);
-      setError("An unexpected error occurred during upload.");
-    } finally {
-      setIsUploading(false);
+    if (e.target) {
+      e.target.value = "";
     }
   };
 
@@ -199,6 +185,31 @@ export default function ProfilePage() {
 
   const handleEditProfile = async () => {
     try {
+      let nextImage = pendingProfileImageFile
+        ? undefined
+        : user?.image || user?.profileImage;
+
+      if (pendingProfileImageFile) {
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append("file", pendingProfileImageFile);
+        formData.append("type", "profile");
+        formData.append("userId", user.id || "");
+
+        const uploadRes = await fetch("/api/auth/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok || !uploadData.url) {
+          throw new Error(
+            uploadData.error || "Failed to upload profile picture.",
+          );
+        }
+        nextImage = uploadData.url;
+      }
+
       const response = await fetch("/api/auth/update-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,17 +217,32 @@ export default function ProfilePage() {
           userId: user.id,
           username: editData.username,
           name: editData.displayName,
+          image: nextImage,
         }),
       });
       if (response.ok) {
         await update({
           username: editData.username,
           name: editData.displayName,
+          image: nextImage,
         });
+        if (pendingProfileImageUrl) {
+          URL.revokeObjectURL(pendingProfileImageUrl);
+        }
+        setPendingProfileImageFile(null);
+        setPendingProfileImageUrl("");
         setView("main");
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || "Failed to update profile.");
       }
     } catch (error) {
       console.error("Failed to update profile", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to update profile.",
+      );
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -331,6 +357,16 @@ export default function ProfilePage() {
     } else {
       setView("verification");
     }
+  };
+
+  const exitEditView = () => {
+    if (pendingProfileImageUrl) {
+      URL.revokeObjectURL(pendingProfileImageUrl);
+    }
+    setPendingProfileImageFile(null);
+    setPendingProfileImageUrl("");
+    setError(null);
+    setView("main");
   };
 
   if (view === "verified-status") {
@@ -482,7 +518,7 @@ export default function ProfilePage() {
     return (
       <div className="flex flex-col h-full bg-white">
         <header className="shrink-0 flex items-center justify-between py-4 px-4 bg-white">
-          <button onClick={() => setView("main")} className="p-2">
+          <button onClick={exitEditView} className="p-2">
             <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
           </button>
           <h1 className="text-lg font-semibold">Edit Profile</h1>
@@ -499,9 +535,9 @@ export default function ProfilePage() {
                 {imageLoading && !profileImage && (
                   <UserIcon className="h-16 w-16 text-gray-400" />
                 )}
-                {profileImage && (
+                {(pendingProfileImageUrl || profileImage) && (
                   <Image
-                    src={profileImage}
+                    src={pendingProfileImageUrl || profileImage}
                     alt="Profile"
                     fill
                     className="object-cover"
