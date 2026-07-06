@@ -426,6 +426,7 @@ export default function IdentityVerificationStep({
                     documentType ? "text-[#2D2D2D]" : "text-[#A7ADB2]"
                   }`}
                 >
+                  
                   {documentType || "Select document type"}
                 </span>
                 <svg
