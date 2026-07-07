@@ -649,7 +649,7 @@ export function PostCard({
             <button
               type="button"
               onClick={() => void handleVote(1)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold min-w-[64px] justify-center ${
                 localPost.viewerVote === 1
                   ? "bg-[#E8FEFF] text-[#00C3D0]"
                   : "bg-[#F3F3F3] text-[#2B2B2B]"
@@ -676,14 +676,14 @@ export function PostCard({
                   />
                 )}
               </svg>
-              <span className="text-[#2B2B2B]">{localPost.up}</span>
+              <span className="text-[#2B2B2B] tabular-nums">{localPost.up}</span>
             </button>
 
             {/* Downvote Button */}
             <button
               type="button"
               onClick={() => void handleVote(-1)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold min-w-[64px] justify-center ${
                 localPost.viewerVote === -1
                   ? "bg-[#FFEDED] text-[#A84141]"
                   : "bg-[#F6F6F6] text-[#2B2B2B]"
@@ -710,7 +710,7 @@ export function PostCard({
                   />
                 )}
               </svg>
-              <span className="text-[#2B2B2B]">{localPost.down}</span>
+              <span className="text-[#2B2B2B] tabular-nums">{localPost.down}</span>
             </button>
 
             {/* Share Button (Unchanged) */}
