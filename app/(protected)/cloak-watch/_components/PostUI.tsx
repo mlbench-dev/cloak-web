@@ -419,59 +419,116 @@ export function PostCard({
     return null;
   }
 
-  const handleVote = async (value: 1 | -1) => {
-    try {
-      const response = await fetch(
-        `/api/cloak-watch/posts/${localPost.id}/vote`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value }),
-        },
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || "Unable to update vote");
+  const voteRequestIdRef = useRef(0);
+
+  const handleVote = (value: 1 | -1) => {
+    const requestId = ++voteRequestIdRef.current;
+    let prevSnapshot: CloakWatchPost | null = null;
+
+    // 1. Optimistically update — mirrors the server's toggle logic exactly
+    setLocalPost((prev) => {
+      prevSnapshot = prev; // capture the real "before" state for rollback
+
+      let { up, down, viewerVote } = prev;
+
+      if (viewerVote === value) {
+        // clicking the same arrow again -> remove vote
+        viewerVote = 0;
+        if (value === 1) up -= 1;
+        else down -= 1;
+      } else if (viewerVote === 0) {
+        // no prior vote -> add it
+        viewerVote = value;
+        if (value === 1) up += 1;
+        else down += 1;
+      } else {
+        // switching from up->down or down->up
+        viewerVote = value;
+        if (value === 1) {
+          up += 1;
+          down -= 1;
+        } else {
+          down += 1;
+          up -= 1;
+        }
       }
 
-      setLocalPost((prev) => ({
-        ...prev,
-        up: data.up,
-        down: data.down,
-        viewerVote: data.viewerVote,
-      }));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to update vote",
-      );
-    }
+      return { ...prev, up, down, viewerVote };
+    });
+
+    // 2. Fire the request in the background
+    fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Unable to update vote");
+        }
+        // Only reconcile if no newer click has happened since
+        if (voteRequestIdRef.current === requestId) {
+          setLocalPost((prev) => ({
+            ...prev,
+            up: data.up,
+            down: data.down,
+            viewerVote: data.viewerVote,
+          }));
+        }
+      })
+      .catch((error) => {
+        if (voteRequestIdRef.current === requestId && prevSnapshot) {
+          setLocalPost(prevSnapshot); // roll back only this click's change
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Unable to update vote",
+        );
+      });
   };
 
-  const handleToggleSave = async () => {
-    try {
-      const response = await fetch(
-        `/api/cloak-watch/posts/${localPost.id}/save`,
-        {
-          method: "POST",
-        },
-      );
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || "Unable to save post");
-      }
+  const saveRequestIdRef = useRef(0);
 
-      setLocalPost((prev) => ({
+  const handleToggleSave = () => {
+    const requestId = ++saveRequestIdRef.current;
+    let prevSnapshot: CloakWatchPost | null = null;
+
+    // 1. Optimistically flip save state
+    setLocalPost((prev) => {
+      prevSnapshot = prev;
+      const nextIsSaved = !prev.isSaved;
+      return {
         ...prev,
-        isSaved: data.isSaved,
-        saves: data.saves,
-      }));
+        isSaved: nextIsSaved,
+        saves: prev.saves + (nextIsSaved ? 1 : -1),
+      };
+    });
 
-      toast.success(data.isSaved ? "Post saved" : "Post removed from saved");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to save post",
-      );
-    }
+    // 2. Fire request in background
+    fetch(`/api/cloak-watch/posts/${post.id}/save`, {
+      method: "POST",
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Unable to save post");
+        }
+        if (saveRequestIdRef.current === requestId) {
+          setLocalPost((prev) => ({
+            ...prev,
+            isSaved: data.isSaved,
+            saves: data.saves,
+          }));
+        }
+      })
+      .catch((error) => {
+        if (saveRequestIdRef.current === requestId && prevSnapshot) {
+          setLocalPost(prevSnapshot);
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Unable to save post",
+        );
+      });
   };
 
   const handleCopyLink = async () => {
@@ -680,7 +737,7 @@ export function PostCard({
           {/* Bookmark Button (Unchanged) */}
           <button
             type="button"
-            onClick={() => void handleToggleSave()}
+            onClick={() => handleToggleSave()}
             className={`flex h-9 w-9 items-center justify-center rounded-full ${
               localPost.isSaved
                 ? "bg-[#E8FEFF] text-[#00C3D0]"
@@ -700,7 +757,7 @@ export function PostCard({
         onClose={() => setOptionsOpen(false)}
         isSaved={localPost.isSaved}
         isOwner={localPost.isOwner}
-        onToggleSave={() => void handleToggleSave()}
+        onToggleSave={() => handleToggleSave()}
         onCopyLink={() => void handleCopyLink()}
         onDelete={() => void handleDelete()}
         onReport={() => {
