@@ -6,6 +6,7 @@ import {
   CLOAK_WATCH_POSTS_COLLECTION,
   ensureCloakWatchIndexes,
   getViewerMetaForPosts,
+  getVoteCountsForPosts,
   mapPostDocToFeedItem,
   safeObjectId,
 } from "@/lib/cloakWatch";
@@ -41,11 +42,13 @@ export async function GET(
     }
 
     const viewerMeta = await getViewerMetaForPosts(db, userId, [post as any]);
+    const voteCounts = await getVoteCountsForPosts(db, [post._id]);
     return NextResponse.json({
       success: true,
       post: mapPostDocToFeedItem(
         post as any,
         viewerMeta.get(post._id.toString())!,
+        voteCounts.get(post._id.toString()),
       ),
     });
   } catch (error) {
@@ -115,4 +118,3 @@ export async function DELETE(
     );
   }
 }
-

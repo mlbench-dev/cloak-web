@@ -6,6 +6,7 @@ import {
   CLOAK_WATCH_POSTS_COLLECTION,
   CLOAK_WATCH_VOTES_COLLECTION,
   ensureCloakWatchIndexes,
+  getVoteCountsForPosts,
   safeObjectId,
 } from "@/lib/cloakWatch";
 import type { CloakWatchVoteValue } from "@/models/CloakWatch";
@@ -52,8 +53,6 @@ export async function POST(
     const existingVote = await votesCollection.findOne({ postId, userId });
 
     let viewerVote: CloakWatchVoteValue | 0 = nextVote;
-    let incUp = 0;
-    let incDown = 0;
 
     if (!existingVote) {
       await votesCollection.insertOne({
@@ -63,40 +62,34 @@ export async function POST(
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      if (nextVote === 1) incUp = 1;
-      if (nextVote === -1) incDown = 1;
     } else if (existingVote.value === nextVote) {
       await votesCollection.deleteOne({ _id: existingVote._id });
       viewerVote = 0;
-      if (nextVote === 1) incUp = -1;
-      if (nextVote === -1) incDown = -1;
     } else {
       await votesCollection.updateOne(
         { _id: existingVote._id },
         { $set: { value: nextVote, updatedAt: new Date() } },
       );
-      if (existingVote.value === 1) incUp -= 1;
-      if (existingVote.value === -1) incDown -= 1;
-      if (nextVote === 1) incUp += 1;
-      if (nextVote === -1) incDown += 1;
     }
+
+    const voteCounts = await getVoteCountsForPosts(db, [postId]);
+    const updatedCounts = voteCounts.get(postId.toString()) ?? { up: 0, down: 0 };
 
     await db.collection(CLOAK_WATCH_POSTS_COLLECTION).updateOne(
       { _id: postId },
       {
-        $inc: { upvotesCount: incUp, downvotesCount: incDown },
-        $set: { updatedAt: new Date() },
+        $set: {
+          upvotesCount: updatedCounts.up,
+          downvotesCount: updatedCounts.down,
+          updatedAt: new Date(),
+        },
       },
     );
 
-    const updatedPost = await db.collection(CLOAK_WATCH_POSTS_COLLECTION).findOne({
-      _id: postId,
-    });
-
     return NextResponse.json({
       success: true,
-      up: updatedPost?.upvotesCount || 0,
-      down: updatedPost?.downvotesCount || 0,
+      up: updatedCounts.up,
+      down: updatedCounts.down,
       viewerVote,
     });
   } catch (error) {
@@ -107,4 +100,3 @@ export async function POST(
     );
   }
 }
-

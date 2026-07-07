@@ -8,6 +8,7 @@ import {
   createPostDocument,
   ensureCloakWatchIndexes,
   getViewerMetaForPosts,
+  getVoteCountsForPosts,
   mapPostDocToFeedItem,
   safeObjectId,
   uploadCloakWatchImages,
@@ -79,8 +80,16 @@ export async function GET(request: Request) {
     }
 
     const viewerMeta = await getViewerMetaForPosts(db, userId, posts as any);
+    const voteCounts = await getVoteCountsForPosts(
+      db,
+      posts.map((post) => post._id),
+    );
     const items = posts.map((post) =>
-      mapPostDocToFeedItem(post as any, viewerMeta.get(post._id.toString())!),
+      mapPostDocToFeedItem(
+        post as any,
+        viewerMeta.get(post._id.toString())!,
+        voteCounts.get(post._id.toString()),
+      ),
     );
 
     return NextResponse.json({ success: true, posts: items });

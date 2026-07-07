@@ -35,6 +35,11 @@ type ViewerMeta = {
   isOwner: boolean;
 };
 
+type VoteCountOverride = {
+  up: number;
+  down: number;
+};
+
 export const CLOAK_WATCH_POSTS_COLLECTION = "cloakWatchPosts";
 export const CLOAK_WATCH_VOTES_COLLECTION = "cloakWatchPostVotes";
 export const CLOAK_WATCH_SAVES_COLLECTION = "cloakWatchPostSaves";
@@ -72,6 +77,7 @@ export async function ensureCloakWatchIndexes(db: any) {
 export function mapPostDocToFeedItem(
   post: CloakWatchPostDoc & { _id: ObjectId },
   viewer: ViewerMeta,
+  voteCounts?: VoteCountOverride,
 ): CloakWatchFeedItem {
   return {
     id: post._id.toString(),
@@ -82,8 +88,8 @@ export function mapPostDocToFeedItem(
     avatarUrl: post.authorAvatarUrl,
     body: post.body,
     images: post.imageUrls,
-    up: post.upvotesCount,
-    down: post.downvotesCount,
+    up: voteCounts?.up ?? post.upvotesCount,
+    down: voteCounts?.down ?? post.downvotesCount,
     shares: post.sharesCount,
     saves: post.savesCount,
     reports: post.reportsCount,
@@ -92,6 +98,49 @@ export function mapPostDocToFeedItem(
     isOwner: viewer.isOwner,
     isDeleted: post.isDeleted,
   };
+}
+
+export async function getVoteCountsForPosts(
+  db: any,
+  postIds: ObjectId[],
+): Promise<Map<string, VoteCountOverride>> {
+  if (!postIds.length) {
+    return new Map();
+  }
+
+  const groupedVotes = await db
+    .collection(CLOAK_WATCH_VOTES_COLLECTION)
+    .aggregate([
+      { $match: { postId: { $in: postIds } } },
+      {
+        $group: {
+          _id: "$postId",
+          up: {
+            $sum: {
+              $cond: [{ $eq: ["$value", 1] }, 1, 0],
+            },
+          },
+          down: {
+            $sum: {
+              $cond: [{ $eq: ["$value", -1] }, 1, 0],
+            },
+          },
+        },
+      },
+    ])
+    .toArray();
+
+  const counts = new Map<string, VoteCountOverride>();
+  groupedVotes.forEach(
+    (item: { _id: ObjectId; up?: number; down?: number }) => {
+      counts.set(item._id.toString(), {
+        up: item.up ?? 0,
+        down: item.down ?? 0,
+      });
+    },
+  );
+
+  return counts;
 }
 
 export async function getViewerMetaForPosts(
@@ -147,10 +196,7 @@ export async function getViewerMetaForPosts(
   return fallback;
 }
 
-export async function uploadCloakWatchImages(
-  files: File[],
-  userId: string,
-) {
+export async function uploadCloakWatchImages(files: File[], userId: string) {
   const uploadedUrls: string[] = [];
 
   for (const file of files) {
