@@ -21,7 +21,7 @@ import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
 import { PostCard } from "@/app/(protected)/cloak-watch/_components/PostUI";
@@ -30,6 +30,9 @@ import {
   type CloakWatchPost,
   type CloakWatchPostScope,
 } from "@/app/(protected)/cloak-watch/_lib/posts";
+
+const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
+  `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
 type ProfileView =
   | "main"
@@ -41,7 +44,10 @@ type ProfileView =
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<ProfileView>("main");
+  const [forceVerificationForm, setForceVerificationForm] = useState(false);
+  const [verificationFormKey, setVerificationFormKey] = useState(0);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +101,19 @@ export default function ProfilePage() {
       });
     }
   }, [session]);
+
+  useEffect(() => {
+    const verificationParam = searchParams.get("verification");
+    if (verificationParam === "retry" || verificationParam === "document") {
+      if (verificationParam === "retry") {
+        window.sessionStorage.removeItem(getIdentityDraftStorageKey(user?.id));
+      }
+      setView("verification");
+      setError(null);
+      setForceVerificationForm(true);
+      setVerificationFormKey((prev) => prev + 1);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     return () => {
@@ -249,6 +268,7 @@ export default function ProfilePage() {
   const handleIdentitySubmit = async (data: {
     documentType: string;
     files: File[];
+    existingUrls?: string[];
   }) => {
     setIsUploading(true);
     setError(null);
@@ -272,7 +292,11 @@ export default function ProfilePage() {
         return json.url;
       });
 
-      const documentUrls = await Promise.all(uploadPromises);
+      const uploadedDocumentUrls = await Promise.all(uploadPromises);
+      const documentUrls = [
+        ...(data.existingUrls || []),
+        ...uploadedDocumentUrls,
+      ];
       const response = await fetch("/api/auth/identity-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,13 +307,25 @@ export default function ProfilePage() {
         }),
       });
       if (response.ok) {
+        try {
+          window.sessionStorage.setItem(
+            getIdentityDraftStorageKey(user.id),
+            JSON.stringify({
+              documentType: data.documentType,
+              documentUrls,
+            }),
+          );
+        } catch (storageError) {
+          console.error("Failed to persist identity draft:", storageError);
+        }
+
         // Update the session status
         await update({
           identityVerificationStatus: "PENDING",
           documentType: data.documentType,
         });
-        // The view change is handled by IdentityVerificationStep internal state "submitted"
-        // but here we might want to stay in "verification" view as it handles the Step component
+        router.push("/reference-media?mode=profile");
+        return true;
       } else {
         const resData = await response.json();
         setError(resData.error || "Failed to submit identity verification.");
@@ -345,13 +381,12 @@ export default function ProfilePage() {
   }, [view, postsScope, postsQuery, postsViewTitle]);
 
   const handleVerificationClick = () => {
-    if (
-      user?.identityVerificationStatus === "APPROVED" ||
-      user?.identityVerificationStatus === "REJECTED"
-    ) {
-      setView("verification");
+    if (user?.identityVerificationStatus === "APPROVED") {
+      router.push("/verification?status=APPROVED");
+    } else if (user?.identityVerificationStatus === "REJECTED") {
+      router.push("/verification?status=REJECTED");
     } else if (isVerified) {
-      setView("verified-status");
+      router.push("/verification?status=APPROVED");
     } else if (user?.identityVerificationStatus === "PENDING") {
       setView("verified-status");
     } else {
@@ -383,17 +418,20 @@ export default function ProfilePage() {
           )}
         </div>
         <h2 className="text-2xl font-bold text-slate-900">
-          {isPending ? "Verification Under Process" : "Already Verified"}
+          {isPending ? "Your Verification is Pending " : "Already Verified"}
         </h2>
         <p className="text-slate-500">
           {isPending
-            ? "Upload your protected images to verify your identity."
+            ? "Upload your protected Document & images  to verify your identity."
             : "Your identity has been verified. You now have a verification badge on your profile!"}
         </p>
         <button
           onClick={() => {
             if (isPending) {
-              window.location.href = "/reference-media?mode=onboarding";
+              setError(null);
+              setForceVerificationForm(true);
+              setVerificationFormKey((prev) => prev + 1);
+              setView("verification");
               return;
             }
             setView("main");
@@ -408,17 +446,19 @@ export default function ProfilePage() {
 
   if (view === "verification") {
     const handleVerificationAction = () => {
-      if (user?.identityVerificationStatus === "REJECTED") {
-        window.location.href = "/reference-media?mode=profile";
-        return;
-      }
-      setView("main");
+      router.push("/reference-media?mode=profile");
     };
 
     return (
       <div className="flex flex-col h-full">
         <header className="flex items-center py-4 bg-white">
-          <button onClick={() => setView("main")} className="p-2">
+          <button
+            onClick={() => {
+              setForceVerificationForm(false);
+              setView("main");
+            }}
+            className="p-2"
+          >
             <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
           </button>
           <h1 className="flex-1 text-center text-lg font-semibold mr-10">
@@ -427,14 +467,26 @@ export default function ProfilePage() {
         </header>
         <div className="flex-1">
           <IdentityVerificationStep
-            onSkip={() => setView("main")}
+            key={verificationFormKey}
+            onSkip={() => {
+              setForceVerificationForm(false);
+              setView("main");
+            }}
             onSubmit={handleIdentitySubmit}
             onContinueToDashboard={handleVerificationAction}
             error={error}
             hideHeader={true}
             showSkip={false}
-            status={user?.identityVerificationStatus}
+            status={
+              forceVerificationForm
+                ? undefined
+                : user?.identityVerificationStatus
+            }
             isLoading={isUploading}
+            prefillFromSavedVerification={
+              searchParams.get("verification") !== "retry"
+            }
+            draftScopeKey={user?.id}
           />
         </div>
       </div>

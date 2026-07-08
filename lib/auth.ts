@@ -4,21 +4,6 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { ObjectId } from "mongodb";
 
-function expireToken(token: Record<string, unknown>) {
-  delete token.id;
-  delete token.username;
-  delete token.isVerified;
-  delete token.identityVerificationStatus;
-  delete token.documentType;
-  delete token.role;
-  delete token.image;
-  delete token.name;
-  delete token.email;
-  delete token.onboardingStartedAt;
-  token.sessionExpired = true;
-  return token;
-}
-
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -65,7 +50,7 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
         try {
           console.log("Google sign-in callback started for:", user.email);
@@ -169,25 +154,6 @@ export const authOptions: NextAuthOptions = {
               userFromDb.image || userFromDb.profileImage || token.image;
             token.name = userFromDb.name || token.name;
             token.email = userFromDb.email || token.email;
-
-            // Check if onboarding is completed
-            const onboardingCompleted = userFromDb.username && userFromDb.image;
-
-            // If onboarding not completed, check if session should expire
-            if (!onboardingCompleted && token.onboardingStartedAt) {
-              const startedAt = new Date(token.onboardingStartedAt as string);
-              const now = new Date();
-              const minutesSinceStarted =
-                (now.getTime() - startedAt.getTime()) / (1000 * 60);
-
-              // Expire session after 5 minutes if onboarding not completed
-              if (minutesSinceStarted > 5) {
-                console.log(
-                  `Session expired for incomplete onboarding, user: ${userFromDb.email}`,
-                );
-                return expireToken(token);
-              }
-            }
           }
         } catch (err) {
           console.error("Error fetching fresh user data for JWT:", err);

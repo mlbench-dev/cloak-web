@@ -1,6 +1,5 @@
 "use client";
 
-import { uploadFileToFirebase } from "@/lib/firebaseUtils";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, Suspense } from "react";
@@ -48,7 +47,8 @@ const STEPS = [
   },
 ] as const;
 
-const IDENTITY_DRAFT_STORAGE_KEY = "cloak-identity-verification-draft";
+const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
+  `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
 function preloadImage(src: string) {
   return new Promise<void>((resolve) => {
@@ -110,6 +110,19 @@ function HomeFlowContent() {
       }
 
       setUserId(user.id);
+
+      // Honor an explicit step from the URL before falling back to inferred onboarding.
+      if (
+        requestedAuthStep &&
+        requestedAuthStep !== "EMAIL" &&
+        requestedAuthStep !== "OTP"
+      ) {
+        if (authStep !== requestedAuthStep) {
+          setAuthStep(requestedAuthStep);
+        }
+        setShowSplash(false);
+        return;
+      }
 
       // If we have an explicit authStep, we stay there.
       // This prevents session updates from kicking us out of the onboarding flow.
@@ -396,7 +409,7 @@ function HomeFlowContent() {
       if (response.ok) {
         try {
           window.sessionStorage.setItem(
-            IDENTITY_DRAFT_STORAGE_KEY,
+            getIdentityDraftStorageKey(userId),
             JSON.stringify({
               documentType: data.documentType,
               documentUrls,
@@ -493,6 +506,7 @@ function HomeFlowContent() {
         status={user?.identityVerificationStatus}
         showSkip={false}
         isLoading={isLoading}
+        draftScopeKey={user?.id || userId}
       />
     );
   }
