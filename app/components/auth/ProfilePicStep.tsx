@@ -105,7 +105,7 @@ export default function ProfilePicStep({
               priority
             />
             <span className="text-[13px] font-semibold tracking-wider text-[#14C3CF]">
-              STEP 1/3
+              STEP 2/3
             </span>
           </div>
 

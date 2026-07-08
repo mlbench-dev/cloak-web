@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import { ShieldCheck } from "lucide-react";
 
-const IDENTITY_DRAFT_STORAGE_KEY = "cloak-identity-verification-draft";
+const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
+  `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
 type VerificationFileItem =
   | {
@@ -35,6 +36,8 @@ type IdentityVerificationStepProps = {
   status?: string | null;
   isLoading?: boolean;
   maxFiles?: number;
+  prefillFromSavedVerification?: boolean;
+  draftScopeKey?: string | null;
 };
 
 const DOCUMENT_TYPES = [
@@ -53,6 +56,8 @@ export default function IdentityVerificationStep({
   status,
   isLoading = false,
   maxFiles = 2,
+  prefillFromSavedVerification = true,
+  draftScopeKey = null,
 }: IdentityVerificationStepProps) {
   const [step, setStep] = useState<"upload" | "submitted">("upload");
   const [documentType, setDocumentType] = useState("");
@@ -63,44 +68,112 @@ export default function IdentityVerificationStep({
   const localPreviewUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
+    const storageKey = getIdentityDraftStorageKey(draftScopeKey);
     if (status === "APPROVED" || status === "REJECTED") {
-      window.sessionStorage.removeItem(IDENTITY_DRAFT_STORAGE_KEY);
+      window.sessionStorage.removeItem(storageKey);
       return;
     }
 
-    if (status !== "PENDING") {
-      return;
-    }
+    let isCancelled = false;
 
-    try {
-      const savedDraft = window.sessionStorage.getItem(
-        IDENTITY_DRAFT_STORAGE_KEY,
+    const applyPrefill = (
+      nextDocumentType?: string | null,
+      nextDocumentUrls?: string[] | null,
+    ) => {
+      if (isCancelled) return false;
+
+      setDocumentType(nextDocumentType || "");
+      setFiles(
+        Array.isArray(nextDocumentUrls)
+          ? nextDocumentUrls.slice(0, maxFiles).map((url, index) => ({
+              kind: "uploaded" as const,
+              url,
+              previewUrl: url,
+              name: `Document ${index + 1}`,
+            }))
+          : [],
       );
-      if (!savedDraft) return;
+      return Boolean(
+        nextDocumentType ||
+        (Array.isArray(nextDocumentUrls) && nextDocumentUrls.length),
+      );
+    };
 
-      const parsedDraft = JSON.parse(savedDraft) as {
-        documentType?: string;
-        documentUrls?: string[];
-      };
+    const restorePrefill = async () => {
+      setDocumentType("");
+      setFiles([]);
 
-      if (parsedDraft.documentType) {
-        setDocumentType(parsedDraft.documentType);
+      try {
+        const savedDraft = window.sessionStorage.getItem(storageKey);
+
+        if (savedDraft) {
+          const parsedDraft = JSON.parse(savedDraft) as {
+            documentType?: string;
+            documentUrls?: string[];
+          };
+
+          const hasDraft = applyPrefill(
+            parsedDraft.documentType,
+            parsedDraft.documentUrls,
+          );
+          if (hasDraft) {
+            return;
+          }
+        }
+      } catch (draftError) {
+        console.error("Failed to restore identity draft:", draftError);
       }
 
-      if (Array.isArray(parsedDraft.documentUrls)) {
-        setFiles(
-          parsedDraft.documentUrls.slice(0, maxFiles).map((url, index) => ({
-            kind: "uploaded" as const,
-            url,
-            previewUrl: url,
-            name: `Document ${index + 1}`,
-          })),
+      if (!prefillFromSavedVerification) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/identity-verify", {
+          cache: "no-store",
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          return;
+        }
+
+        const hasServerPrefill = applyPrefill(
+          data?.documentType,
+          Array.isArray(data?.documentUrls) ? data.documentUrls : [],
+        );
+
+        if (hasServerPrefill) {
+          try {
+            window.sessionStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                documentType: data?.documentType || "",
+                documentUrls: Array.isArray(data?.documentUrls)
+                  ? data.documentUrls
+                  : [],
+              }),
+            );
+          } catch (storageError) {
+            console.error(
+              "Failed to persist restored identity draft:",
+              storageError,
+            );
+          }
+        }
+      } catch (serverError) {
+        console.error(
+          "Failed to fetch saved identity verification:",
+          serverError,
         );
       }
-    } catch (draftError) {
-      console.error("Failed to restore identity draft:", draftError);
-    }
-  }, [maxFiles, status]);
+    };
+
+    void restorePrefill();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [draftScopeKey, maxFiles, prefillFromSavedVerification, status]);
 
   useEffect(() => {
     return () => {
@@ -330,7 +403,7 @@ export default function IdentityVerificationStep({
                   height={39}
                 />
                 <span className="text-[13px] font-semibold tracking-wider text-[#14C3CF]">
-                  STEP 2/3
+                  STEP 3/3
                 </span>
               </div>
             )}
@@ -369,7 +442,7 @@ export default function IdentityVerificationStep({
   }
 
   return (
-    <main className="font-sf-pro-display flex flex-col h-full bg-[#F5F5F5] text-[#2D2D2D]">
+    <main className="font-sf-pro-display flex min-h-full flex-col overflow-x-hidden bg-white text-[#2D2D2D]">
       <div className="w-full max-w-[390px] mx-auto px-4 pt-[max(env(safe-area-inset-top),1.25rem)] pb-10 flex flex-col h-full">
         <div className="flex flex-col items-start flex-1 min-h-0">
           {!hideHeader && (
@@ -381,7 +454,7 @@ export default function IdentityVerificationStep({
                 height={39}
               />
               <span className="text-[13px] font-semibold tracking-wider text-[#14C3CF]">
-                STEP 2/3
+                STEP 3/3
               </span>
             </div>
           )}
@@ -391,8 +464,7 @@ export default function IdentityVerificationStep({
               Verify Your Identity
             </h1>
             <p className="max-w-[280px] text-[14px] leading-6 text-[#8F98A0]">
-              Are you a public figure or notable individual? Take a moment to
-              provide us necessary information
+              Are you a public figure or notable individual?
             </p>
           </div>
 
@@ -483,19 +555,24 @@ export default function IdentityVerificationStep({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading || files.length >= maxFiles}
-                className={`w-full h-14 rounded-[18px] border-2 border-dashed flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
+                className={`w-full h-10 rounded-full border-2  flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
                   files.length > 0
-                    ? "border-[#14C3CF] bg-[#14C3CF]/5 text-[#14C3CF]"
-                    : "border-[#A7ADB2] bg-transparent text-[#2D2D2D]"
+                    ? "border-[#00C3D0] bg-[#00C3D0]  text-white"
+                    : "border-[#839297] bg-[#839297] text-white"
                 }`}
               >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   <path
-                    d="M10 4V16M4 10H16"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    d="M18.125 16.875V6.7625C18.125 6.49717 18.0196 6.24293 17.8321 6.05546L12.3321 0.555456C12.1446 0.367991 11.8903 0.262695 11.625 0.262695H2.5V16.875C2.5 18.2557 3.61929 19.375 5 19.375H15.625C17.0057 19.375 18.125 18.2557 18.125 16.875ZM16.875 16.875C16.875 17.5654 16.3154 18.125 15.625 18.125H5C4.30964 18.125 3.75 17.5654 3.75 16.875V1.5127H11.25V7.5H16.875V16.875ZM12.5 2.39645L15.9906 5.8877H12.5V2.39645ZM5.625 6.25H8.125V5H5.625V6.25ZM5.625 10H14.375V8.75H5.625V10ZM5.625 13.75H14.375V12.5H5.625V13.75Z"
+                    fill="currentColor"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
                   />
                 </svg>
                 Add File
@@ -604,10 +681,10 @@ export default function IdentityVerificationStep({
             <button
               onClick={handleSubmit}
               disabled={isLoading}
-              className={`${showSkip ? "flex-[1.5]" : "w-full"} h-14 rounded-full text-[18px] font-medium text-white shadow-lg transition-all ${
+              className={`${showSkip ? "flex-[1.5]" : "w-full"} h-12 rounded-full text-[18px] font-medium text-white shadow-lg transition-all ${
                 documentType && files.length > 0
-                  ? "bg-[#14C3CF] shadow-[0_10px_24px_rgba(20,195,207,0.22)] active:scale-[0.98]"
-                  : "bg-[#A7ADB2] opacity-70 active:scale-[0.98]"
+                  ? "bg-[#00C3D0] shadow-[0_10px_24px_rgba(20,195,207,0.22)] active:scale-[0.98]"
+                  : "bg-[#839297] opacity-70 active:scale-[0.98]"
               }`}
             >
               {isLoading ? (

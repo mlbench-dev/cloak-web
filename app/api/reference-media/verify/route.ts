@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
-const VERIFICATION_API_BASE_URL = process.env.VERIFICATION_API_URL || "http://192.168.0.171:8000";
+const VERIFICATION_API_BASE_URL =
+  process.env.VERIFICATION_API_URL || "http://192.168.0.171:8000";
 const VERIFICATION_API_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/verify`;
 const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/update`;
 const VERIFICATION_API_HEALTH_ENDPOINT = `${VERIFICATION_API_BASE_URL}/health`;
@@ -27,26 +28,39 @@ export async function POST() {
       .toArray();
 
     // Backward compatibility: assign positions to images that don't have them
-    const mediaWithoutPositions = media.filter(m => m.position === undefined || m.position === null);
+    const mediaWithoutPositions = media.filter(
+      (m) => m.position === undefined || m.position === null,
+    );
     if (mediaWithoutPositions.length > 0) {
-      const existingPositions = media.map(m => m.position).filter(p => p !== undefined && p !== null);
+      const existingPositions = media
+        .map((m) => m.position)
+        .filter((p) => p !== undefined && p !== null);
       let nextAvailablePosition = 1;
-      
+
       for (const item of mediaWithoutPositions) {
         // Find next available position
-        while (existingPositions.includes(nextAvailablePosition) || media.some(m => m._id.toString() !== item._id.toString() && m.position === nextAvailablePosition)) {
+        while (
+          existingPositions.includes(nextAvailablePosition) ||
+          media.some(
+            (m) =>
+              m._id.toString() !== item._id.toString() &&
+              m.position === nextAvailablePosition,
+          )
+        ) {
           nextAvailablePosition++;
         }
         if (nextAvailablePosition <= 3) {
-          await db.collection("referenceMedia").updateOne(
-            { _id: item._id },
-            { $set: { position: nextAvailablePosition } }
-          );
+          await db
+            .collection("referenceMedia")
+            .updateOne(
+              { _id: item._id },
+              { $set: { position: nextAvailablePosition } },
+            );
           item.position = nextAvailablePosition;
           nextAvailablePosition++;
         }
       }
-      
+
       // Re-fetch media with updated positions
       media = await db
         .collection("referenceMedia")
@@ -55,56 +69,74 @@ export async function POST() {
         .toArray();
     }
 
-    const hasVerifiedReferenceMedia = media.some((item) => item.verificationStatus === "verified");
+    const hasVerifiedReferenceMedia = media.some(
+      (item) => item.verificationStatus === "verified",
+    );
     const requiresThreeImages = !hasVerifiedReferenceMedia;
-    const pendingMedia = media.filter((item) => item.verificationStatus !== "verified");
-    const mediaForVerification = requiresThreeImages ? media.slice(0, 3) : pendingMedia.slice(-1);
+    const pendingMedia = media.filter(
+      (item) => item.verificationStatus !== "verified",
+    );
+    const mediaForVerification = requiresThreeImages
+      ? media.slice(0, 3)
+      : pendingMedia.slice(-1);
 
     if (!requiresThreeImages && media.length === 0) {
       return NextResponse.json(
-        { error: "At least 1 reference image is required for re-verification." },
-        { status: 400 }
+        {
+          error: "At least 1 reference image is required for re-verification.",
+        },
+        { status: 400 },
       );
     }
 
     if (!requiresThreeImages && mediaForVerification.length === 0) {
       return NextResponse.json(
         { error: "Please upload new protected media before re-verifying." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (requiresThreeImages && media.length < 3) {
       return NextResponse.json(
-        { error: "At least 3 reference images are required for your first verification." },
-        { status: 400 }
+        {
+          error:
+            "At least 3 reference images are required for your first verification.",
+        },
+        { status: 400 },
       );
     }
 
-    const verificationDoc = await db.collection("identityVerifications").findOne(
-      { userId },
-      { sort: { updatedAt: -1 } }
-    );
+    const verificationDoc = await db
+      .collection("identityVerifications")
+      .findOne({ userId }, { sort: { updatedAt: -1 } });
 
-    if (!verificationDoc?.verification_images || verificationDoc.verification_images.length === 0) {
+    if (
+      !verificationDoc?.verification_images ||
+      verificationDoc.verification_images.length === 0
+    ) {
       return NextResponse.json(
         { error: "No identity verification documents found for this user." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const faceUrls = mediaForVerification.map((item) => item.imageUrl).filter(Boolean);
+    const faceUrls = mediaForVerification
+      .map((item) => item.imageUrl)
+      .filter(Boolean);
     if (requiresThreeImages && faceUrls.length !== 3) {
       return NextResponse.json(
-        { error: "Failed to load all 3 protected media images for the first verification." },
-        { status: 400 }
+        {
+          error:
+            "Failed to load all 3 protected media images for the first verification.",
+        },
+        { status: 400 },
       );
     }
 
     if (!requiresThreeImages && faceUrls.length === 0) {
       return NextResponse.json(
         { error: "No protected media images were found for verification." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -127,7 +159,7 @@ export async function POST() {
           needsReferenceMediaVerification: true,
           updatedAt: new Date(),
         },
-      }
+      },
     );
 
     if (verificationDoc._id) {
@@ -138,7 +170,7 @@ export async function POST() {
             status: "PENDING",
             updatedAt: new Date(),
           },
-        }
+        },
       );
     }
 
@@ -150,10 +182,16 @@ export async function POST() {
     });
 
     if (!healthResponse.ok) {
-      console.error("Verification service health check failed:", healthResponse.status);
+      console.error(
+        "Verification service health check failed:",
+        healthResponse.status,
+      );
       return NextResponse.json(
-        { error: "Server not available, try again later from the Protected Media menu." },
-        { status: 502 }
+        {
+          error:
+            "Server not available, try again later from the Protected Media menu.",
+        },
+        { status: 502 },
       );
     }
 
@@ -161,27 +199,28 @@ export async function POST() {
     if (healthJson && String(healthJson.status).toLowerCase() !== "ok") {
       console.error("Verification service unhealthy:", healthJson);
       return NextResponse.json(
-        { error: "Server not available, try again later from the Protected Media menu." },
-        { status: 502 }
+        {
+          error:
+            "Server not available, try again later from the Protected Media menu.",
+        },
+        { status: 502 },
       );
     }
 
-    console.log("[verify] request body:", JSON.stringify(requestBody, null, 2));
-
     const externalResponse = await fetch(
-      requiresThreeImages ? VERIFICATION_API_ENDPOINT : VERIFICATION_API_UPDATE_ENDPOINT,
+      requiresThreeImages
+        ? VERIFICATION_API_ENDPOINT
+        : VERIFICATION_API_UPDATE_ENDPOINT,
       {
-      method: requiresThreeImages ? "POST" : "PATCH",
-      headers: {
-        "Content-Type": "application/json",
+        method: requiresThreeImages ? "POST" : "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
       },
-      body: JSON.stringify(requestBody),
-      }
     );
 
     const externalJson = await externalResponse.json().catch(() => null);
-    console.log("[verify] external response status:", externalResponse.status);
-    console.log("[verify] external response body:", JSON.stringify(externalJson, null, 2));
 
     let identityVerificationStatus: "APPROVED" | "REJECTED" = "REJECTED";
 
@@ -206,7 +245,10 @@ export async function POST() {
 
       if (verifiedFlag === true) {
         identityVerificationStatus = "APPROVED";
-      } else if (normalizedStatus.includes("APPROV") || normalizedStatus.includes("SUCCESS")) {
+      } else if (
+        normalizedStatus.includes("APPROV") ||
+        normalizedStatus.includes("SUCCESS")
+      ) {
         identityVerificationStatus = "APPROVED";
       }
 
@@ -214,11 +256,17 @@ export async function POST() {
         identityVerificationStatus = "REJECTED";
       }
 
-      if (normalizedStatus.includes("REJECT") || normalizedStatus.includes("FAIL")) {
+      if (
+        normalizedStatus.includes("REJECT") ||
+        normalizedStatus.includes("FAIL")
+      ) {
         identityVerificationStatus = "REJECTED";
       }
 
-      if (externalJson?.result === "no_match" || externalJson?.match === false) {
+      if (
+        externalJson?.result === "no_match" ||
+        externalJson?.match === false
+      ) {
         identityVerificationStatus = "REJECTED";
       }
     }
@@ -228,10 +276,11 @@ export async function POST() {
       {
         $set: {
           identityVerificationStatus,
-          needsReferenceMediaVerification: identityVerificationStatus !== "APPROVED",
+          needsReferenceMediaVerification:
+            identityVerificationStatus !== "APPROVED",
           updatedAt: new Date(),
         },
-      }
+      },
     );
 
     if (identityVerificationStatus === "APPROVED") {
@@ -245,7 +294,7 @@ export async function POST() {
             verificationStatus: "verified",
             verifiedAt: new Date(),
           },
-        }
+        },
       );
     }
 
@@ -257,7 +306,7 @@ export async function POST() {
             status: identityVerificationStatus,
             updatedAt: new Date(),
           },
-        }
+        },
       );
     }
 
@@ -268,6 +317,9 @@ export async function POST() {
     });
   } catch (error) {
     console.error("Error verifying protected media:", error);
-    return NextResponse.json({ error: "Verification request failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Verification request failed." },
+      { status: 500 },
+    );
   }
 }

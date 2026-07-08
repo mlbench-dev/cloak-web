@@ -55,7 +55,6 @@ function ReferenceMediaContent() {
     useState(false);
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -208,55 +207,56 @@ function ReferenceMediaContent() {
       }
 
       const refreshedImages = await fetchDbImages();
-      const hasThreeImages = refreshedImages.length >= 3;
-      if (!hasThreeImages) {
+      const requiredCount = 3;
+      const hasRequiredImages = refreshedImages.length >= requiredCount;
+      if (!hasRequiredImages) {
         if (uploadToastId) toast.dismiss(uploadToastId);
         toast.error("Please add 3 reference images before continuing.");
         setUploading(false);
         return;
       }
 
-      const verificationPromise = fetch("/api/reference-media/verify", {
+      const response = await fetch("/api/reference-media/verify", {
         method: "POST",
       });
-
-      void verificationPromise
-        .then(async (response) => {
-          const data = await response.json().catch(() => null);
-          if (!response.ok) {
-            console.error("Verification error:", data);
-            toast.error(
-              data?.error ||
-                "Server not available, try again later from the Protected Media menu.",
-            );
-            return;
-          }
-
-          const status = data?.identityVerificationStatus;
-          if (status) {
-            await updateSession({ identityVerificationStatus: status });
-          }
-
-          if (status === "APPROVED") {
-            toast.success("Identity verified successfully.");
-          } else if (status === "REJECTED") {
-            toast.error(
-              "Verification unsuccessful. Please review your protected media.",
-            );
-          }
-        })
-        .catch((error) => {
-          console.error("Verification request failed:", error);
-          toast.error(
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error("Verification error:", data);
+        toast.error(
+          data?.error ||
             "Server not available, try again later from the Protected Media menu.",
-          );
-        });
+        );
+        return;
+      }
+
+      const verificationStatus = String(
+        data?.identityVerificationStatus || "",
+      ).toUpperCase();
+
+      if (verificationStatus) {
+        await updateSession({ identityVerificationStatus: verificationStatus });
+      }
+
+      if (mode === "onboarding") {
+        toast.success(
+          "Verification process started. You can check the result on Profile tab.",
+        );
+        router.push("/dashboard");
+        return;
+      }
+
+      if (
+        verificationStatus === "APPROVED" ||
+        verificationStatus === "REJECTED"
+      ) {
+        router.replace(`/verification?status=${verificationStatus}`);
+        return;
+      }
 
       toast.success(
         "Verification started. You can check your status from the Verification screen.",
       );
-
-      router.push("/dashboard");
+      router.push("/profile");
     } catch (error) {
       console.error("Verification start failed:", error);
       if (uploadToastId) toast.dismiss(uploadToastId);
@@ -288,11 +288,18 @@ function ReferenceMediaContent() {
   const gridItems = showExtraAddNew
     ? [...allImages, { addNew: true }]
     : allImages;
-  const hasAnyImages = totalImageCount > 0;
 
   const handleHeaderBack = () => {
     if (mode === "onboarding") {
       router.replace("/?authStep=IDENTITY");
+      return;
+    }
+
+    const identityStatus = String(
+      (session?.user as any)?.identityVerificationStatus || "",
+    ).toUpperCase();
+    if (identityStatus === "APPROVED" || !needsReferenceMediaVerification) {
+      router.push("/profile");
       return;
     }
 
@@ -328,9 +335,7 @@ function ReferenceMediaContent() {
         </h1>
         <div className="w-16 text-right">
           {mode === "onboarding" ? (
-            <span className="text-[13px] font-semibold tracking-wider text-[#14C3CF]">
-              STEP 3/3
-            </span>
+            <div className="w-10" />
           ) : (
             <div className="w-10" />
           )}
@@ -492,26 +497,28 @@ function ReferenceMediaContent() {
 
         {/* Bottom Section */}
         <div className="px-0 pb-6 space-y-3 flex-shrink-0 mt-auto">
-          {mode === "onboarding" && (
+          {/* {mode === "onboarding" && (
             <button
               onClick={() => setShowConfirmDialog(true)}
               className="w-full h-14 bg-[#F5F5F5] text-[#8F98A0] rounded-full font-medium text-[15px] active:scale-[0.98] transition-all"
             >
               I will add this later from settings
             </button>
-          )}
+          )} */}
 
           <button
             onClick={handleContinue}
-            disabled={allImages.filter((i) => i).length < 3 || uploading}
+            disabled={totalImageCount < 3 || uploading}
             className={`w-full h-14 rounded-full font-semibold text-lg active:scale-[0.98] transition-all flex items-center justify-center ${
-              allImages.filter((i) => i).length >= 3
+              totalImageCount >= 3
                 ? "bg-[#14C3CF] text-white shadow-lg shadow-[#14C3CF]/20"
                 : "bg-[#E5E5E5] text-[#8F98A0] cursor-not-allowed"
             }`}
           >
             {uploading ? (
               <div className="h-6 w-6 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+            ) : mode === "onboarding" ? (
+              "Submit"
             ) : (
               "Verify Identity"
             )}
@@ -520,7 +527,7 @@ function ReferenceMediaContent() {
       </div>
 
       {/* Confirmation Dialog */}
-      {showConfirmDialog && (
+      {/* {showConfirmDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
             <h3 className="text-xl font-bold mb-3 text-[#111827]">
@@ -548,7 +555,7 @@ function ReferenceMediaContent() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {showUpgradeDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">

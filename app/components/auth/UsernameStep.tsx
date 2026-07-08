@@ -107,7 +107,9 @@ export default function UsernameStep({
               height={39}
               priority
             />
-            <div className="w-16" />
+            <span className="text-[13px] font-semibold tracking-wider text-[#14C3CF]">
+              STEP 1/3
+            </span>
           </div>
 
           <div className="mb-8 space-y-2">

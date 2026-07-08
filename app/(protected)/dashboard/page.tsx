@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from "react";
 import AchievementsSection from "@/app/components/dashboard/AchievementsSection";
@@ -61,7 +61,9 @@ export default function DashboardPage() {
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [achievements, setAchievements] = useState<DashboardAchievement[]>([]);
-  const [recentActivity, setRecentActivity] = useState<DashboardRecentActivity[]>([]);
+  const [recentActivity, setRecentActivity] = useState<
+    DashboardRecentActivity[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,31 +87,39 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full">
-      <div className="h-10 w-10 border-4 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin"></div>
-    </div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="h-10 w-10 border-4 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   // Convert our achievement data to the component format
   const getAchievementIcon = (code: string) => {
     switch (code) {
-      case "FIRST_SIGNAL": return "/images/dashboard/achievements/first-signal.svg";
-      case "ACTIVE_WATCHER": return "/images/dashboard/achievements/active-watcher.svg";
-      case "SCOUT": return "/images/dashboard/achievements/scout.svg";
-      case "SENTINEL": return "/images/dashboard/achievements/sentinal.svg"; // File is named sentinal.svg
-      case "SHARP_EYE": return "/images/dashboard/achievements/sharp-eye.svg";
-      default: return "/images/dashboard/achievements/first-signal.svg";
+      case "FIRST_SIGNAL":
+        return "/images/dashboard/achievements/first-signal.svg";
+      case "ACTIVE_WATCHER":
+        return "/images/dashboard/achievements/active-watcher.svg";
+      case "SCOUT":
+        return "/images/dashboard/achievements/scout.svg";
+      case "SENTINEL":
+        return "/images/dashboard/achievements/sentinal.svg"; // File is named sentinal.svg
+      case "SHARP_EYE":
+        return "/images/dashboard/achievements/sharp-eye.svg";
+      default:
+        return "/images/dashboard/achievements/first-signal.svg";
     }
   };
 
-  const componentAchievements = achievements.map(a => ({
+  const componentAchievements = achievements.map((a) => ({
     name: a.config.name,
     progress: Math.min(100, (a.progress / a.target) * 100),
     color: a.config.iconColor,
     imageSrc: getAchievementIcon(a.code),
   }));
 
-  const componentRecentActivity = recentActivity.map(a => {
+  const componentRecentActivity = recentActivity.map((a) => {
     const date = new Date(a.createdAt);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -162,7 +172,9 @@ export default function DashboardPage() {
         ]}
         pointsToNextLevel={stats?.pointsToNextLevel || 0}
         currentPoints={stats?.totalPoints || 0}
-        nextLevelPoints={(stats?.totalPoints || 0) + (stats?.pointsToNextLevel || 0)}
+        nextLevelPoints={
+          (stats?.totalPoints || 0) + (stats?.pointsToNextLevel || 0)
+        }
         levelProgress={stats?.levelProgress || 0}
         profileImage={user?.profileImage}
         image={user?.image}
