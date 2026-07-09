@@ -1,4 +1,6 @@
 import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -11,7 +13,8 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendOTPEmail(email: string, otp: string) {
-  const appUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const logoPath = path.join(process.cwd(), "public/images/logo/cloakLogo.png"); // use a PNG, not SVG
+
   const mailOptions = {
     from: `"Cloak" <${process.env.SMTP_USER}>`,
     to: email,
@@ -29,13 +32,11 @@ export async function sendOTPEmail(email: string, otp: string) {
           <tr>
             <td align="center" style="padding: 40px 20px;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 500px; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
-                <!-- Header with Logo -->
                 <tr>
                   <td style="padding: 30px 40px 10px; text-align: center;">
-                    <img src="${appUrl}/images/logo/cloakLogo.svg" alt="Cloak Logo" width="34" height="39" style="display: inline-block;">
+                    <img src="cid:cloaklogo" alt="Cloak Logo" width="34" height="39" style="display: inline-block;">
                   </td>
                 </tr>
-                <!-- Main Content -->
                 <tr>
                   <td style="padding: 10px 40px 40px;">
                     <h1 style="color: #2D2D2D; font-size: 24px; font-weight: 600; margin: 0 0 20px; line-height: 1.2;">
@@ -47,7 +48,6 @@ export async function sendOTPEmail(email: string, otp: string) {
                     <p style="color: #8F98A0; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
                       Your one-time password (OTP) for Cloak is:
                     </p>
-                    <!-- OTP Box -->
                     <div style="background-color: #FAFEFE; border: 1px solid #E8F3F4; border-radius: 18px; padding: 30px 20px; text-align: center; margin: 0 0 24px;">
                       <p style="color: #2D2D2D; font-size: 40px; font-weight: 600; letter-spacing: 12px; margin: 0;">
                         ${otp}
@@ -58,7 +58,6 @@ export async function sendOTPEmail(email: string, otp: string) {
                     </p>
                   </td>
                 </tr>
-                <!-- Footer -->
                 <tr>
                   <td style="padding: 20px 40px 30px; border-top: 1px solid #E3E3E3;">
                     <p style="color: #8F98A0; font-size: 12px; text-align: center; margin: 0;">
@@ -73,6 +72,13 @@ export async function sendOTPEmail(email: string, otp: string) {
       </body>
       </html>
     `,
+    attachments: [
+      {
+        filename: "cloakLogo.png",
+        path: logoPath,
+        cid: "cloaklogo", // must match the cid: reference in the img src above
+      },
+    ],
   };
 
   try {
