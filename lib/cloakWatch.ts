@@ -13,6 +13,7 @@ export type CloakWatchFeedItem = {
   id: string;
   username: string;
   displayName: string;
+  identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   level: number;
   createdAt: string;
   avatarUrl: string;
@@ -78,11 +79,14 @@ export function mapPostDocToFeedItem(
   post: CloakWatchPostDoc & { _id: ObjectId },
   viewer: ViewerMeta,
   voteCounts?: VoteCountOverride,
+  authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null,
 ): CloakWatchFeedItem {
   return {
     id: post._id.toString(),
     username: post.authorUsername,
     displayName: post.authorDisplayName,
+    identityVerificationStatus:
+      authorVerificationStatus ?? post.authorVerificationStatus ?? null,
     level: post.authorLevel,
     createdAt: post.createdAt.toISOString(),
     avatarUrl: post.authorAvatarUrl,
@@ -237,6 +241,7 @@ export function createPostDocument(input: {
   authorUsername: string;
   authorDisplayName: string;
   authorAvatarUrl: string;
+  authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   authorLevel: number;
   body: string;
   imageUrls: string[];
@@ -247,6 +252,7 @@ export function createPostDocument(input: {
     authorUsername: input.authorUsername,
     authorDisplayName: input.authorDisplayName,
     authorAvatarUrl: input.authorAvatarUrl,
+    authorVerificationStatus: input.authorVerificationStatus ?? null,
     authorLevel: input.authorLevel,
     body: input.body,
     imageUrls: input.imageUrls,

@@ -43,12 +43,17 @@ export async function GET(
 
     const viewerMeta = await getViewerMetaForPosts(db, userId, [post as any]);
     const voteCounts = await getVoteCountsForPosts(db, [post._id]);
+    const author = await db.collection("users").findOne(
+      { _id: post.authorId },
+      { projection: { identityVerificationStatus: 1 } },
+    );
     return NextResponse.json({
       success: true,
       post: mapPostDocToFeedItem(
         post as any,
         viewerMeta.get(post._id.toString())!,
         voteCounts.get(post._id.toString()),
+        author?.identityVerificationStatus ?? null,
       ),
     });
   } catch (error) {

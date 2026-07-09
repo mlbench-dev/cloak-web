@@ -3,15 +3,17 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { ReportDoc, RecentSearchDoc, UserDoc } from "@/models/User";
+import { ReportDoc, RecentSearchDoc } from "@/models/User";
 
 // Helper function to detect platform from link
 function detectPlatform(link: string): string {
   const lowerLink = link.toLowerCase();
   if (lowerLink.includes("tiktok.com")) return "tiktok";
   if (lowerLink.includes("instagram.com")) return "instagram";
-  if (lowerLink.includes("facebook.com") || lowerLink.includes("fb.com")) return "facebook";
-  if (lowerLink.includes("twitter.com") || lowerLink.includes("x.com")) return "twitter";
+  if (lowerLink.includes("facebook.com") || lowerLink.includes("fb.com"))
+    return "facebook";
+  if (lowerLink.includes("twitter.com") || lowerLink.includes("x.com"))
+    return "twitter";
   return "other";
 }
 
@@ -23,18 +25,31 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { targetUserId, sourceLink, platform: providedPlatform, notes } = body;
+    const {
+      targetUserId,
+      sourceLink,
+      platform: providedPlatform,
+      notes,
+    } = body;
 
     if (!targetUserId || !sourceLink) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      );
     }
 
     const db = await getDb();
     const usersCollection = db.collection("users");
 
-    const targetUser = await usersCollection.findOne({ _id: new ObjectId(targetUserId) });
+    const targetUser = await usersCollection.findOne({
+      _id: new ObjectId(targetUserId),
+    });
     if (!targetUser) {
-      return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Target user not found" },
+        { status: 404 },
+      );
     }
 
     const platform = providedPlatform || detectPlatform(sourceLink);
@@ -61,12 +76,12 @@ export async function POST(request: Request) {
       { _id: new ObjectId(session.user.id) },
       {
         $inc: { totalReports: 1 },
-        $set: { updatedAt: new Date() }
-      }
+        $set: { updatedAt: new Date() },
+      },
     );
 
     // Also add to recent searches
-    const recentSearch: RecentSearchDoc = {
+    const recentSearch = {
       userId: new ObjectId(session.user.id),
       targetUserId: new ObjectId(targetUserId),
       targetUser: {
@@ -75,9 +90,10 @@ export async function POST(request: Request) {
         name: targetUser.name,
         image: targetUser.image,
         profileImage: targetUser.profileImage,
+        identityVerificationStatus: targetUser.identityVerificationStatus,
       },
       createdAt: new Date(),
-    };
+    } satisfies RecentSearchDoc;
     // Check if this search already exists for the user
     const existingSearch = await db.collection("recentSearches").findOne({
       userId: new ObjectId(session.user.id),
@@ -87,16 +103,21 @@ export async function POST(request: Request) {
       await db.collection("recentSearches").insertOne(recentSearch);
     } else {
       // Update the timestamp
-      await db.collection("recentSearches").updateOne(
-        { _id: existingSearch._id },
-        { $set: { createdAt: new Date() } }
-      );
+      await db
+        .collection("recentSearches")
+        .updateOne(
+          { _id: existingSearch._id },
+          { $set: { createdAt: new Date() } },
+        );
     }
 
     return NextResponse.json({ success: true, reportId: result.insertedId });
   } catch (error) {
     console.error("Error submitting report:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -115,30 +136,40 @@ export async function GET(request: Request) {
     const db = await getDb();
 
     if (type === "recent-searches") {
-      const searches = await db.collection("recentSearches")
+      const searches = await db
+        .collection("recentSearches")
         .find({ userId })
         .sort({ createdAt: -1 })
         .limit(10)
         .toArray();
 
       // For each search, if targetUser is missing, look it up
-      const enrichedSearches = await Promise.all(searches.map(async (search) => {
-        if (!search.targetUser) {
-          const targetUser = await db.collection("users").findOne({ _id: search.targetUserId });
-          if (targetUser) {
-            search.targetUser = {
-              _id: targetUser._id.toString(),
-              username: targetUser.username,
-              name: targetUser.name,
-              image: targetUser.image,
-              profileImage: targetUser.profileImage,
-            };
+      const enrichedSearches = await Promise.all(
+        searches.map(async (search) => {
+          if (!search.targetUser) {
+            const targetUser = await db
+              .collection("users")
+              .findOne({ _id: search.targetUserId });
+            if (targetUser) {
+              search.targetUser = {
+                _id: targetUser._id.toString(),
+                username: targetUser.username,
+                name: targetUser.name,
+                image: targetUser.image,
+                profileImage: targetUser.profileImage,
+                identityVerificationStatus:
+                  targetUser.identityVerificationStatus,
+              };
+            }
           }
-        }
-        return search;
-      }));
+          return search;
+        }),
+      );
 
-      return NextResponse.json({ success: true, searches: enrichedSearches.filter(s => s.targetUser) });
+      return NextResponse.json({
+        success: true,
+        searches: enrichedSearches.filter((s) => s.targetUser),
+      });
     }
 
     let filter: any = {};
@@ -155,7 +186,8 @@ export async function GET(request: Request) {
       filter.status = status;
     }
 
-    const reports = await db.collection("reports")
+    const reports = await db
+      .collection("reports")
       .aggregate([
         { $match: filter },
         {
@@ -167,6 +199,28 @@ export async function GET(request: Request) {
           },
         },
         { $unwind: "$user" },
+        {
+          $lookup: {
+            from: "users",
+            localField: "reportedBy",
+            foreignField: "_id",
+            as: "reportedByUser",
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "targetUserId",
+            foreignField: "_id",
+            as: "targetUser",
+          },
+        },
+        {
+          $addFields: {
+            reportedByUser: { $arrayElemAt: ["$reportedByUser", 0] },
+            targetUser: { $arrayElemAt: ["$targetUser", 0] },
+          },
+        },
         { $sort: { createdAt: -1 } },
       ])
       .toArray();
@@ -174,7 +228,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, reports });
   } catch (error) {
     console.error("Error fetching reports:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
 
@@ -201,6 +258,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting recent search:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

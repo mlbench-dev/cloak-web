@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 
 type ReportItem = {
   _id: string;
@@ -14,6 +15,7 @@ type ReportItem = {
     name?: string;
     image?: string;
     profileImage?: string;
+    identityVerificationStatus?: string;
   };
   status: string;
   createdAt: string;
@@ -240,9 +242,14 @@ export default function ReportsPage() {
                       })`,
                     }}
                   />
-                  <span className="text-xs text-slate-400">
-                    {report.user.username}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400">
+                      {report.user.username}
+                    </span>
+                    {report.user.identityVerificationStatus === "APPROVED" && (
+                      <VerifiedBadge className="h-3.5 w-3.5 text-[#14C3CF]" />
+                    )}
+                  </div>
                 </div>
               </div>
 

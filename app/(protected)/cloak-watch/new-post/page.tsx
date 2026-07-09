@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { ChevronLeft, ImageIcon, Plus, Trash2 } from "lucide-react";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { PostSharedSuccessToast } from "../_components/PostUI";
 
 type Step = 1 | 2 | 3;
@@ -249,9 +250,15 @@ export default function NewPostPage() {
                 />
               </div>
               <div>
-                <p className="text-[14px] font-semibold text-[#2D2D2D]">
-                  {session?.user?.username || "harry67"}
-                </p>
+                <div className="flex items-center gap-1">
+                  <p className="text-[14px] font-semibold text-[#2D2D2D]">
+                    {session?.user?.username || "harry67"}
+                  </p>
+                  {(session?.user as any)?.identityVerificationStatus ===
+                    "APPROVED" && (
+                    <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                  )}
+                </div>
                 <p className="text-[12px] text-[#98A0A7]">
                   {session?.user?.name || "Harry"}
                 </p>

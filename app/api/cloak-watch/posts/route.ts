@@ -84,11 +84,39 @@ export async function GET(request: Request) {
       db,
       posts.map((post) => post._id),
     );
+    const authorIds = Array.from(
+      new Set(
+        posts
+          .map((post) => post.authorId)
+          .filter(Boolean)
+          .map((authorId) => authorId.toString()),
+      ),
+    )
+      .map((authorId) => safeObjectId(authorId))
+      .filter((authorId): authorId is NonNullable<typeof authorId> =>
+        Boolean(authorId),
+      );
+    const authors = authorIds.length
+      ? await db
+          .collection("users")
+          .find(
+            { _id: { $in: authorIds } },
+            { projection: { identityVerificationStatus: 1 } },
+          )
+          .toArray()
+      : [];
+    const authorStatusMap = new Map(
+      authors.map((author) => [
+        author._id.toString(),
+        author.identityVerificationStatus ?? null,
+      ]),
+    );
     const items = posts.map((post) =>
       mapPostDocToFeedItem(
         post as any,
         viewerMeta.get(post._id.toString())!,
         voteCounts.get(post._id.toString()),
+        authorStatusMap.get(post.authorId?.toString?.() || "") ?? null,
       ),
     );
 
@@ -151,6 +179,7 @@ export async function POST(request: Request) {
       authorUsername: String(username),
       authorDisplayName: String(user.name || username),
       authorAvatarUrl: String(avatarUrl),
+      authorVerificationStatus: user.identityVerificationStatus ?? null,
       authorLevel: Number(user.level || 1),
       body,
       imageUrls: uploadedUrls,
@@ -170,11 +199,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      post: mapPostDocToFeedItem(created as any, {
-        voteValue: 0,
-        isSaved: false,
-        isOwner: true,
-      }),
+      post: mapPostDocToFeedItem(
+        created as any,
+        {
+          voteValue: 0,
+          isSaved: false,
+          isOwner: true,
+        },
+        undefined,
+        user.identityVerificationStatus ?? null,
+      ),
     });
   } catch (error) {
     console.error("Error creating cloak watch post:", error);

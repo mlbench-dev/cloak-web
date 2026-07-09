@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, X, Check, MessageCircle, ChevronLeft } from "lucide-react";
+import { Search, X, MessageCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import Image from "next/image";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 
 type Platform = "tiktok" | "instagram" | "facebook" | "twitter" | "other";
 type User = {
@@ -103,8 +104,22 @@ function detectPlatform(link: string): Platform {
   return "other";
 }
 
+function getValidSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    if (!parsed.hostname) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function SubmitReportPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const [step, setStep] = useState(1); // 1: select target user, 2: enter details
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,6 +131,16 @@ export default function SubmitReportPage() {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [loading, setLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const validSourceUrl = useMemo(
+    () => getValidSourceUrl(sourceLink),
+    [sourceLink],
+  );
+  const hasInvalidSourceLink = sourceLink.trim().length > 0 && !validSourceUrl;
+  const linkCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const linkCheckAbortRef = useRef<AbortController | null>(null);
+  const [isCheckingLink, setIsCheckingLink] = useState(false);
+  const [isReachableLink, setIsReachableLink] = useState<boolean | null>(null);
+  const [linkStatusCode, setLinkStatusCode] = useState<number | null>(null);
 
   // Fetch recent searches on load
   useEffect(() => {
@@ -180,14 +205,82 @@ export default function SubmitReportPage() {
 
   // Detect platform when source link changes
   useEffect(() => {
-    if (sourceLink.trim()) {
-      setPlatform(detectPlatform(sourceLink));
+    if (validSourceUrl) {
+      setPlatform(detectPlatform(validSourceUrl));
     }
-  }, [sourceLink]);
+  }, [validSourceUrl]);
+
+  useEffect(() => {
+    if (linkCheckTimeoutRef.current) {
+      clearTimeout(linkCheckTimeoutRef.current);
+    }
+    if (linkCheckAbortRef.current) {
+      linkCheckAbortRef.current.abort();
+      linkCheckAbortRef.current = null;
+    }
+
+    if (!validSourceUrl) {
+      setIsCheckingLink(false);
+      setIsReachableLink(null);
+      setLinkStatusCode(null);
+      return;
+    }
+
+    setIsCheckingLink(true);
+    setIsReachableLink(null);
+    setLinkStatusCode(null);
+
+    linkCheckTimeoutRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      linkCheckAbortRef.current = controller;
+
+      try {
+        const params = new URLSearchParams({ url: validSourceUrl });
+        const response = await fetch(`/api/link-preview?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => null);
+        setIsReachableLink(Boolean(data?.reachable));
+        setLinkStatusCode(
+          typeof data?.statusCode === "number" ? data.statusCode : null,
+        );
+      } catch {
+        setIsReachableLink(false);
+        setLinkStatusCode(null);
+      } finally {
+        setIsCheckingLink(false);
+      }
+    }, 450);
+
+    return () => {
+      if (linkCheckTimeoutRef.current) {
+        clearTimeout(linkCheckTimeoutRef.current);
+      }
+      if (linkCheckAbortRef.current) {
+        linkCheckAbortRef.current.abort();
+        linkCheckAbortRef.current = null;
+      }
+    };
+  }, [validSourceUrl]);
 
   const handleSubmitReport = async () => {
-    if (!selectedUser || !sourceLink) {
+    if (!selectedUser || !validSourceUrl) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (hasInvalidSourceLink) {
+      toast.error("Please enter a valid link");
+      return;
+    }
+
+    if (isCheckingLink) {
+      toast.error("Please wait while we verify the link");
+      return;
+    }
+
+    if (isReachableLink === false || isReachableLink === null) {
+      toast.error("Please enter a reachable link");
       return;
     }
 
@@ -200,7 +293,7 @@ export default function SubmitReportPage() {
         },
         body: JSON.stringify({
           targetUserId: selectedUser._id,
-          sourceLink,
+          sourceLink: validSourceUrl,
           platform,
           notes: notes.trim() || undefined,
         }),
@@ -320,7 +413,7 @@ export default function SubmitReportPage() {
                                 {search.targetUser
                                   .identityVerificationStatus ===
                                   "APPROVED" && (
-                                  <Check className="h-4 w-4 text-[#14C3CF]" />
+                                  <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                                 )}
                               </div>
                               <p className="text-[#8F98A0] text-sm">
@@ -370,7 +463,7 @@ export default function SubmitReportPage() {
                               {user.username || "User"}
                             </p>
                             {user.identityVerificationStatus === "APPROVED" && (
-                              <Check className="h-4 w-4 text-[#14C3CF]" />
+                              <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                             )}
                           </div>
                           <p className="text-[#8F98A0] text-sm">
@@ -424,7 +517,7 @@ export default function SubmitReportPage() {
                         </p>
                         {selectedUser.identityVerificationStatus ===
                           "APPROVED" && (
-                          <Check className="h-4 w-4 text-[#14C3CF]" />
+                          <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                         )}
                       </div>
                       <p className="text-[#8F98A0] text-sm">
@@ -470,9 +563,38 @@ export default function SubmitReportPage() {
                   placeholder="Paste social media link"
                   value={sourceLink}
                   onChange={(e) => setSourceLink(e.target.value)}
-                  className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-12 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 text-base"
+                  className={`w-full h-14 rounded-2xl px-12 outline-none focus:ring-2 text-base ${
+                    hasInvalidSourceLink
+                      ? "bg-[#FFF5F5] text-[#2D2D2D] focus:ring-[#FF6B6B]/20"
+                      : "bg-[#F5F5F5] focus:ring-[#14C3CF]/20"
+                  }`}
                 />
               </div>
+              {hasInvalidSourceLink && (
+                <p className="-mt-1 text-sm text-[#FF6B6B]">
+                  Please enter a valid link 
+                  
+                </p>
+              )}
+              {!hasInvalidSourceLink && validSourceUrl && (
+                <p
+                  className={`-mt-1 text-sm ${
+                    isCheckingLink
+                      ? "text-[#8F98A0]"
+                      : isReachableLink
+                        ? "text-[#14C3CF]"
+                        : "text-[#FF6B6B]"
+                  }`}
+                >
+                  {isCheckingLink
+                    ? "Checking link..."
+                    : isReachableLink
+                      ? "Link looks reachable."
+                      : `Link is not reachable${
+                          linkStatusCode ? ` (HTTP ${linkStatusCode})` : ""
+                        }.`}
+                </p>
+              )}
             </div>
 
             {/* Select Platform */}
@@ -537,9 +659,18 @@ export default function SubmitReportPage() {
               <button
                 type="button"
                 onClick={handleSubmitReport}
-                disabled={loading || !sourceLink || !selectedUser}
+                disabled={
+                  loading ||
+                  !validSourceUrl ||
+                  !selectedUser ||
+                  isCheckingLink ||
+                  isReachableLink !== true
+                }
                 className={`flex-1 h-14 rounded-full font-semibold text-base active:scale-[0.98] transition-all flex items-center justify-center ${
-                  sourceLink && selectedUser
+                  validSourceUrl &&
+                  selectedUser &&
+                  !isCheckingLink &&
+                  isReachableLink === true
                     ? "bg-[#14C3CF] text-white shadow-sm"
                     : "bg-[#839297] text-[#FFFFFF] cursor-not-allowed"
                 }`}
