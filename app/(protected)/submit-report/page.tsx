@@ -314,6 +314,17 @@ export default function SubmitReportPage() {
     }
   };
 
+  const getSubmitRequirementMessage = () => {
+    if (!selectedUser) return "Please select a target user";
+    if (!sourceLink.trim()) return "Please add a source link";
+    if (hasInvalidSourceLink) return "Please enter a valid link";
+    if (isCheckingLink) return "Please wait while we verify the link";
+    if (isReachableLink !== true) return "Please enter a reachable link";
+    return null;
+  };
+
+  const submitRequirementMessage = getSubmitRequirementMessage();
+
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center h-full">
@@ -572,8 +583,7 @@ export default function SubmitReportPage() {
               </div>
               {hasInvalidSourceLink && (
                 <p className="-mt-1 text-sm text-[#FF6B6B]">
-                  Please enter a valid link 
-                  
+                  Please enter a valid link
                 </p>
               )}
               {!hasInvalidSourceLink && validSourceUrl && (
@@ -658,14 +668,15 @@ export default function SubmitReportPage() {
 
               <button
                 type="button"
-                onClick={handleSubmitReport}
-                disabled={
-                  loading ||
-                  !validSourceUrl ||
-                  !selectedUser ||
-                  isCheckingLink ||
-                  isReachableLink !== true
-                }
+                onClick={() => {
+                  if (loading) return;
+                  if (submitRequirementMessage) {
+                    toast.error(submitRequirementMessage);
+                    return;
+                  }
+                  void handleSubmitReport();
+                }}
+                aria-disabled={Boolean(submitRequirementMessage) || loading}
                 className={`flex-1 h-14 rounded-full font-semibold text-base active:scale-[0.98] transition-all flex items-center justify-center ${
                   validSourceUrl &&
                   selectedUser &&
