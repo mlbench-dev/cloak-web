@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, CheckCircle } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 
 type ReportStatus =
   | "PENDING"
@@ -177,33 +178,30 @@ export default function MyReportsPage() {
             {filteredReports.map((report) => (
               <div
                 key={report._id}
-                className="py-4 flex items-center justify-between"
+                onClick={() => router.push(`/reports/${report._id}?type=sent`)}
+                className="flex cursor-pointer items-center justify-between py-4"
               >
                 <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                      {report.user.image || report.user.profileImage ? (
-                        <img
-                          src={report.user.image || report.user.profileImage}
-                          alt={
-                            report.user.username || report.user.name || "User"
-                          }
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                      )}
-                    </div>
-                    {report.user.identityVerificationStatus === "APPROVED" && (
-                      <div className="absolute -bottom-1 -right-1 h-6 w-6 bg-[#14C3CF] rounded-full flex items-center justify-center border-2 border-white">
-                        <CheckCircle className="h-3 w-3 text-white" />
-                      </div>
+                  <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                    {report.user.image || report.user.profileImage ? (
+                      <img
+                        src={report.user.image || report.user.profileImage}
+                        alt={report.user.username || report.user.name || "User"}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-6 w-6 bg-slate-400 rounded-full" />
                     )}
                   </div>
                   <div>
-                    <p className="text-[#2D2D2D] font-semibold text-base">
-                      {report.user.username}
-                    </p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-[#2D2D2D] font-semibold text-base">
+                        {report.user.username}
+                      </p>
+                      {report.user.identityVerificationStatus === "APPROVED" && (
+                        <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                      )}
+                    </div>
                     <p className="text-[#8F98A0] text-sm">
                       {report.user.name?.trim() || report.user.username}
                     </p>

@@ -15,6 +15,7 @@ export interface CloakWatchPostDoc {
   authorUsername: string;
   authorDisplayName: string;
   authorAvatarUrl: string;
+  authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   authorLevel: number;
   body: string;
   imageUrls: string[];
@@ -57,4 +58,3 @@ export interface CloakWatchReportDoc {
   createdAt: Date;
   updatedAt: Date;
 }
-

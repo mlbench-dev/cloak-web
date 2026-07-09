@@ -81,6 +81,7 @@ export interface RecentSearchDoc {
     name?: string;
     image?: string;
     profileImage?: string;
+    identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED";
   };
   createdAt: Date;
 }

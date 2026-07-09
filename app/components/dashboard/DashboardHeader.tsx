@@ -1,4 +1,4 @@
-import { BadgeCheckIcon } from "@/public/svgIcons";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { Crown, User } from "lucide-react";
 import Image from "next/image";
 
@@ -44,7 +44,7 @@ export default function DashboardHeader({
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
             <h1 className="text-lg leading-none text-slate-900">{username}</h1>
-            {verified && <BadgeCheckIcon className="h-4 w-4 fill-primary text-primary" strokeWidth={1.8} />}
+            {verified && <VerifiedBadge className="h-4 w-4 text-primary" strokeWidth={1.9} />}
             {premium && <Crown className="h-4 w-4 fill-primary text-primary" strokeWidth={1.8} />}
           </div>
           <p className="text-[13px] text-slate-400">{levelLabel}</p>

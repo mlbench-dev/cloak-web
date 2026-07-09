@@ -4,6 +4,7 @@ export type CloakWatchPost = {
   id: string;
   username: string;
   displayName: string;
+  identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   level: number;
   createdAt: string;
   avatarUrl: string;

@@ -23,6 +23,7 @@ import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BadgeCheckIcon } from "@/public/svgIcons";
+import VerifiedBadge from "@/app/components/VerifiedBadge";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
 import { PostCard } from "@/app/(protected)/cloak-watch/_components/PostUI";
 import {
@@ -72,7 +73,10 @@ export default function ProfilePage() {
     user?.username || user?.name?.split(" ")[0].toLowerCase() || "user";
   const email = user?.email || "";
   const profileImage = user?.image || user?.profileImage;
-  const isVerified = user?.isVerified || false;
+  const isVerified =
+    user?.identityVerificationStatus === "APPROVED" ||
+    user?.isVerified ||
+    false;
   const isPremium = user?.role === "VERIFIED_USER" || false;
   const [imageLoading, setImageLoading] = useState(true);
   const [profileStats, setProfileStats] = useState<{
@@ -557,6 +561,25 @@ export default function ProfilePage() {
                       prev.filter((item) => item.id !== postId),
                     )
                   }
+                  onSaveStateChange={(updatedPost, isSaved) => {
+                    if (postsScope !== "saved") return;
+
+                    setProfilePosts((prev) => {
+                      if (!isSaved) {
+                        return prev.filter(
+                          (item) => item.id !== updatedPost.id,
+                        );
+                      }
+
+                      if (prev.some((item) => item.id === updatedPost.id)) {
+                        return prev.map((item) =>
+                          item.id === updatedPost.id ? updatedPost : item,
+                        );
+                      }
+
+                      return [updatedPost, ...prev];
+                    });
+                  }}
                 />
               ))}
             </div>
@@ -733,11 +756,7 @@ export default function ProfilePage() {
                   {username}
                 </h2>
                 {isVerified && (
-                  <BadgeCheckIcon
-                    size={20}
-                    activeColor="#00C3D0"
-                    isActive={true}
-                  />
+                  <VerifiedBadge className="h-5 w-5 text-[#00C3D0]" />
                 )}
                 {isPremium && (
                   <Crown className="h-[18px] w-[18px] fill-[#14C3CF] text-[#14C3CF]" />
