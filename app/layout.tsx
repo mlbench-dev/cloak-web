@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -14,15 +15,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "CLOAK",
-  description: "Your Data is Protected",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
+export function generateMetadata(): Metadata {
+  return {
     title: "CLOAK",
-  },
-};
+    description: "Your Data is Protected",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: "CLOAK",
+    },
+    other: {
+      ...Sentry.getTraceData(),
+    },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -53,4 +59,3 @@ export default function RootLayout({
     </html>
   );
 }
-
