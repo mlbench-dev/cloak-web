@@ -24,7 +24,7 @@ export default function ProtectedLayout({
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/");
+      router.replace("/?authStep=EMAIL");
       return;
     }
 
@@ -41,48 +41,7 @@ export default function ProtectedLayout({
       return;
     }
 
-    const identityVerificationStatus = String(
-      (session?.user as any)?.identityVerificationStatus || "",
-    ).toUpperCase();
-
-    if (!identityVerificationStatus) {
-      setIsGateChecking(false);
-      router.replace("/?authStep=IDENTITY");
-      return;
-    }
-
-    let isCancelled = false;
-
-    const enforceProtectedGate = async () => {
-      try {
-        const mediaRes = await fetch("/api/reference-media", {
-          cache: "no-store",
-        });
-        const mediaData = await mediaRes.json().catch(() => null);
-        const mediaCount = Array.isArray(mediaData?.data)
-          ? mediaData.data.length
-          : 0;
-
-        if (!isCancelled && mediaCount < 3) {
-          setIsGateChecking(false);
-          router.replace("/reference-media?mode=onboarding");
-          return;
-        }
-      } catch (error) {
-        console.error("Failed to enforce protected onboarding gate:", error);
-      }
-
-      if (!isCancelled) {
-        setIsGateChecking(false);
-      }
-    };
-
-    setIsGateChecking(true);
-    void enforceProtectedGate();
-
-    return () => {
-      isCancelled = true;
-    };
+    setIsGateChecking(false);
   }, [status, session, router]);
 
   if (status === "loading" || isGateChecking) {

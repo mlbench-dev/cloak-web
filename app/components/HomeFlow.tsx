@@ -2,7 +2,7 @@
 
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense, useCallback } from "react";
 import toast from "react-hot-toast";
 import IdentityVerificationStep from "./auth/IdentityVerificationStep";
 import OTPVerification from "./auth/OTPVerification";
@@ -91,6 +91,15 @@ function HomeFlowContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const goToAuthStep = useCallback(
+    (nextStep: AuthStep) => {
+      setAuthStep(nextStep);
+      setShowSplash(false);
+      router.replace(`/?authStep=${nextStep}`);
+    },
+    [router],
+  );
+
   // Handle initial authStep from URL (for logout redirect)
   useEffect(() => {
     if (requestedAuthStep) {
@@ -131,18 +140,12 @@ function HomeFlowContent() {
         return;
       }
 
-      // Logic for users arriving at the page (fresh login or page refresh)
+      // Returning users go straight to the dashboard.
       if (user.username) {
-        if (!user.image && !user.profileImage) {
-          setAuthStep("PROFILE_PIC");
-          setShowSplash(false);
-          return;
-        }
-        router.push("/dashboard");
+        router.replace("/dashboard");
         setShowSplash(false);
       } else {
-        setAuthStep("USERNAME");
-        setShowSplash(false);
+        goToAuthStep("USERNAME");
       }
     } else if (status === "loading") {
       // Only show splash on initial load, not during session updates
@@ -150,7 +153,7 @@ function HomeFlowContent() {
         setShowSplash(true);
       }
     }
-  }, [status, session, router, authStep, requestedAuthStep]);
+  }, [status, session, router, authStep, requestedAuthStep, goToAuthStep]);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -241,7 +244,7 @@ function HomeFlowContent() {
       const data = await response.json();
       if (response.ok) {
         setEmail(submittedEmail);
-        setAuthStep("OTP");
+        goToAuthStep("OTP");
         toast.success("OTP sent to your email! Please check your inbox.", {
           id: "otp-sent",
         });
@@ -279,9 +282,9 @@ function HomeFlowContent() {
         });
 
         if (data.user.username) {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         } else {
-          setAuthStep("USERNAME");
+          goToAuthStep("USERNAME");
         }
       } else {
         setError(data.error || "Invalid verification code.");
@@ -306,7 +309,7 @@ function HomeFlowContent() {
       const data = await response.json();
       if (response.ok) {
         // Move to the next step FIRST
-        setAuthStep("PROFILE_PIC");
+        goToAuthStep("PROFILE_PIC");
         // Then update the session in the background
         update({ username });
       } else {
@@ -322,7 +325,7 @@ function HomeFlowContent() {
 
   const handleProfilePicSubmit = async (file: File | null) => {
     if (!file) {
-      setAuthStep("IDENTITY");
+      goToAuthStep("IDENTITY");
       return;
     }
 
@@ -350,7 +353,7 @@ function HomeFlowContent() {
       const data = await response.json();
       if (response.ok) {
         // Move to the next step FIRST
-        setAuthStep("IDENTITY");
+        goToAuthStep("IDENTITY");
         // Then update the session in the background
         update({ image: downloadURL });
       } else {
@@ -424,7 +427,7 @@ function HomeFlowContent() {
           identityVerificationStatus: "PENDING",
           documentType: data.documentType,
         });
-        router.push("/reference-media?mode=onboarding");
+        router.replace("/reference-media?mode=onboarding");
         return false;
       } else {
         setError(resData.error || "Failed to submit identity verification.");
@@ -487,7 +490,7 @@ function HomeFlowContent() {
     return (
       <ProfilePicStep
         onContinue={handleProfilePicSubmit}
-        onSkip={() => setAuthStep("IDENTITY")}
+        onSkip={() => goToAuthStep("IDENTITY")}
         error={error}
       />
     );
@@ -497,11 +500,9 @@ function HomeFlowContent() {
     const user = session?.user as any;
     return (
       <IdentityVerificationStep
-        onSkip={() => router.push("/reference-media?mode=onboarding")}
+        onSkip={() => router.replace("/dashboard")}
         onSubmit={handleIdentitySubmit}
-        onContinueToDashboard={() =>
-          router.push("/reference-media?mode=onboarding")
-        }
+        onContinueToDashboard={() => router.replace("/dashboard")}
         error={error}
         status={user?.identityVerificationStatus}
         showSkip={false}
@@ -518,7 +519,7 @@ function HomeFlowContent() {
       {...currentStep}
       onNext={() => {
         if (currentStepIndex === STEPS.length - 1) {
-          setAuthStep("EMAIL");
+          goToAuthStep("EMAIL");
           return;
         }
 

@@ -497,14 +497,15 @@ function ReferenceMediaContent() {
 
         {/* Bottom Section */}
         <div className="px-0 pb-6 space-y-3 flex-shrink-0 mt-auto">
-          {/* {mode === "onboarding" && (
+          {mode === "onboarding" && (
             <button
-              onClick={() => setShowConfirmDialog(true)}
-              className="w-full h-14 bg-[#F5F5F5] text-[#8F98A0] rounded-full font-medium text-[15px] active:scale-[0.98] transition-all"
+              onClick={() => router.replace("/dashboard")}
+              disabled={uploading}
+              className="w-full h-14 rounded-full border border-[#D9E7E9] bg-white text-[#2D2D2D] font-medium text-[15px] active:scale-[0.98] transition-all disabled:opacity-60"
             >
-              I will add this later from settings
+              I'll pass this time
             </button>
-          )} */}
+          )}
 
           <button
             onClick={handleContinue}
