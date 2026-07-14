@@ -19,9 +19,10 @@ import {
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
+import Cropper from "react-easy-crop";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
@@ -31,6 +32,7 @@ import {
   type CloakWatchPost,
   type CloakWatchPostScope,
 } from "@/app/(protected)/cloak-watch/_lib/posts";
+import { getCroppedImg } from "@/lib/cropImage";
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -41,6 +43,8 @@ type ProfileView =
   | "verification"
   | "verified-status"
   | "posts";
+
+type ProfilePostsScope = Extract<CloakWatchPostScope, "my" | "saved">;
 
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
@@ -57,8 +61,15 @@ export default function ProfilePage() {
   const [pendingProfileImageFile, setPendingProfileImageFile] =
     useState<File | null>(null);
   const [pendingProfileImageUrl, setPendingProfileImageUrl] = useState("");
+  const [profileCropImageSrc, setProfileCropImageSrc] = useState<string | null>(
+    null,
+  );
+  const [profileCrop, setProfileCrop] = useState({ x: 0, y: 0 });
+  const [profileZoom, setProfileZoom] = useState(1);
+  const [profileCroppedAreaPixels, setProfileCroppedAreaPixels] =
+    useState<any>(null);
   const [postsViewTitle, setPostsViewTitle] = useState("");
-  const [postsScope, setPostsScope] = useState<CloakWatchPostScope>("all");
+  const [postsScope, setPostsScope] = useState<ProfilePostsScope>("my");
   const [postsQuery, setPostsQuery] = useState("");
   const [profilePosts, setProfilePosts] = useState<CloakWatchPost[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -106,6 +117,13 @@ export default function ProfilePage() {
     }
   }, [session]);
 
+  const handleProfileCropComplete = useCallback(
+    (_croppedArea: any, croppedAreaPixels: any) => {
+      setProfileCroppedAreaPixels(croppedAreaPixels);
+    },
+    [],
+  );
+
   useEffect(() => {
     const verificationParam = searchParams.get("verification");
     if (verificationParam === "retry" || verificationParam === "document") {
@@ -116,8 +134,29 @@ export default function ProfilePage() {
       setError(null);
       setForceVerificationForm(true);
       setVerificationFormKey((prev) => prev + 1);
+      return;
     }
-  }, [searchParams]);
+
+    const viewParam = searchParams.get("view");
+    const scopeParam = searchParams.get("scope");
+
+    if (viewParam === "edit") {
+      setView("edit");
+      return;
+    }
+
+    if (viewParam === "posts") {
+      const nextScope: ProfilePostsScope =
+        scopeParam === "saved" ? "saved" : "my";
+      setPostsScope(nextScope);
+      setPostsViewTitle(nextScope === "saved" ? "Saved Posts" : "My Posts");
+      setPostsQuery("");
+      setView("posts");
+      return;
+    }
+
+    setView("main");
+  }, [searchParams, user?.id]);
 
   useEffect(() => {
     return () => {
@@ -160,17 +199,44 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (pendingProfileImageUrl) {
-      URL.revokeObjectURL(pendingProfileImageUrl);
-    }
-
-    const localPreviewUrl = URL.createObjectURL(file);
-    setPendingProfileImageFile(file);
-    setPendingProfileImageUrl(localPreviewUrl);
-    setError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfileCropImageSrc(reader.result as string);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
 
     if (e.target) {
       e.target.value = "";
+    }
+  };
+
+  const handleApplyProfileCrop = async () => {
+    if (!profileCropImageSrc || !profileCroppedAreaPixels) return;
+
+    try {
+      const croppedImageBlob = await getCroppedImg(
+        profileCropImageSrc,
+        profileCroppedAreaPixels,
+      );
+      const croppedFile = new File([croppedImageBlob], "profile-picture.jpg", {
+        type: "image/jpeg",
+      });
+
+      if (pendingProfileImageUrl) {
+        URL.revokeObjectURL(pendingProfileImageUrl);
+      }
+
+      const previewUrl = URL.createObjectURL(croppedFile);
+      setPendingProfileImageFile(croppedFile);
+      setPendingProfileImageUrl(previewUrl);
+      setProfileCropImageSrc(null);
+      setProfileCrop({ x: 0, y: 0 });
+      setProfileZoom(1);
+      setProfileCroppedAreaPixels(null);
+    } catch (cropError) {
+      console.error("Failed to crop profile image", cropError);
+      toast.error("Unable to crop image. Please try again.");
     }
   };
 
@@ -254,7 +320,7 @@ export default function ProfilePage() {
         }
         setPendingProfileImageFile(null);
         setPendingProfileImageUrl("");
-        setView("main");
+        router.replace("/profile?view=edit");
       } else {
         const data = await response.json().catch(() => ({}));
         setError(data.error || "Failed to update profile.");
@@ -348,14 +414,9 @@ export default function ProfilePage() {
     }
   };
 
-  const openPostsView = async (
-    title: string,
-    scope: Extract<CloakWatchPostScope, "my" | "saved">,
-  ) => {
+  const openPostsView = async (title: string, scope: ProfilePostsScope) => {
     setPostsViewTitle(title);
-    setPostsScope(scope);
-    setPostsQuery("");
-    setView("posts");
+    router.push(`/profile?view=posts&scope=${scope}`);
   };
 
   useEffect(() => {
@@ -396,16 +457,6 @@ export default function ProfilePage() {
     } else {
       setView("verification");
     }
-  };
-
-  const exitEditView = () => {
-    if (pendingProfileImageUrl) {
-      URL.revokeObjectURL(pendingProfileImageUrl);
-    }
-    setPendingProfileImageFile(null);
-    setPendingProfileImageUrl("");
-    setError(null);
-    setView("main");
   };
 
   if (view === "verified-status") {
@@ -502,7 +553,7 @@ export default function ProfilePage() {
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="shrink-0 bg-white">
           <div className="flex items-center justify-between px-4 py-4">
-            <button onClick={() => setView("main")} className="p-2">
+            <button onClick={() => router.push("/profile")} className="p-2">
               <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
             </button>
             <h1 className="text-lg font-semibold text-[#2D2D2D]">
@@ -592,8 +643,8 @@ export default function ProfilePage() {
   if (view === "edit") {
     return (
       <div className="flex flex-col h-full bg-white">
-        <header className="shrink-0 flex items-center justify-between py-4 px-4 bg-white">
-          <button onClick={exitEditView} className="p-2">
+        <header className="shrink-0 flex items-center justify-between  px-4 bg-white">
+          <button onClick={() => router.push("/profile")} className="p-2">
             <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
           </button>
           <h1 className="text-lg font-semibold">Edit Profile</h1>
@@ -689,12 +740,69 @@ export default function ProfilePage() {
           <div className="pb-6">
             <button
               onClick={handleEditProfile}
-              className="w-full h-14 bg-[#14C3CF] text-white rounded-full font-semibold text-lg shadow-lg shadow-[#14C3CF]/20 active:scale-[0.98] transition-all"
+              disabled={isUploading}
+              className="w-full h-14 bg-[#14C3CF] text-white rounded-full font-semibold text-lg shadow-lg shadow-[#14C3CF]/20 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              Save Changes
+              {isUploading ? (
+                <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                "Save Changes"
+              )}
             </button>
           </div>
         </div>
+
+        {profileCropImageSrc && (
+          <div className="fixed inset-0 z-50 bg-black/80 px-4 py-6">
+            <div className="mx-auto flex h-full max-w-[390px] flex-col rounded-[28px] bg-white p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    setProfileCropImageSrc(null);
+                    setProfileCrop({ x: 0, y: 0 });
+                    setProfileZoom(1);
+                    setProfileCroppedAreaPixels(null);
+                  }}
+                  className="rounded-full bg-[#F5F5F5] px-4 py-2 text-sm font-medium text-[#2D2D2D]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void handleApplyProfileCrop()}
+                  className="rounded-full bg-[#14C3CF] px-4 py-2 text-sm font-medium text-white"
+                >
+                  Apply
+                </button>
+              </div>
+              <div className="relative flex-1 overflow-hidden rounded-[24px] bg-black">
+                <Cropper
+                  image={profileCropImageSrc}
+                  crop={profileCrop}
+                  zoom={profileZoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setProfileCrop}
+                  onCropComplete={handleProfileCropComplete}
+                  onZoomChange={setProfileZoom}
+                />
+              </div>
+              <div className="pt-4">
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.01}
+                  value={profileZoom}
+                  onChange={(e) =>
+                    setProfileZoom(Number.parseFloat(e.target.value))
+                  }
+                  className="w-full accent-[#14C3CF]"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -772,7 +880,7 @@ export default function ProfilePage() {
             <MenuButton
               icon={<Edit3 size={19} className="text-[#14C3CF]" />}
               label="Edit profile"
-              onClick={() => setView("edit")}
+              onClick={() => router.push("/profile?view=edit")}
               showDivider={true}
             />
             <MenuButton

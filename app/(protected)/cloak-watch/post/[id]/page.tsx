@@ -47,7 +47,7 @@ export default function CloakWatchPostDetailPage() {
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={() => router.replace("/cloak-watch")}
+            onClick={() => router.back()}
             className="flex h-10 w-10 items-center justify-center rounded-full"
           >
             <ChevronLeft className="h-6 w-6 text-[#98A0A7]" />
@@ -65,10 +65,7 @@ export default function CloakWatchPostDetailPage() {
             <div className="h-10 w-10 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
           </div>
         ) : post ? (
-          <PostCard
-            post={post}
-            onDeleted={() => router.replace("/cloak-watch")}
-          />
+          <PostCard post={post} onDeleted={() => router.back()} />
         ) : (
           <div className="flex h-full items-center justify-center text-[14px] text-[#98A0A7]">
             Post not found
