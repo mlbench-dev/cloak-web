@@ -1,7 +1,7 @@
+import type { CloakWatchImage } from "@/lib/cloakWatch";
 import { ObjectId } from "mongodb";
 
 export type CloakWatchVoteValue = 1 | -1;
-
 export type CloakWatchReportReason =
   | "Spam or Scams"
   | "Hate Speech"
@@ -18,7 +18,7 @@ export interface CloakWatchPostDoc {
   authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   authorLevel: number;
   body: string;
-  imageUrls: string[];
+  images: CloakWatchImage[];
   upvotesCount: number;
   downvotesCount: number;
   sharesCount: number;

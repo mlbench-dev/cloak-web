@@ -1,13 +1,22 @@
 "use client";
-
+import { CLOAK_WATCH_IMAGE_ASPECT } from "../_lib/posts";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { ChevronLeft, ImageIcon, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ImageIcon,
+  Plus,
+  Trash2,
+  Crop as CropIcon,
+} from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { PostSharedSuccessToast } from "../_components/PostUI";
+import { CropModal } from "./_components/CropModal";
+import { getCroppedImg } from "./_lib/cropImage";
+import type { Area } from "react-easy-crop";
 
 type Step = 1 | 2 | 3;
 
@@ -32,7 +41,9 @@ export default function NewPostPage() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
+  const [cropTargetId, setCropTargetId] = useState<string | null>(null);
+  const cropTargetMedia = media.find((m) => m.id === cropTargetId) ?? null;
+  const [cropQueue, setCropQueue] = useState<string[]>([]);
   useEffect(() => {
     mediaRef.current = media;
   }, [media]);
@@ -82,11 +93,22 @@ export default function NewPostPage() {
       setStep((currentStep) => (currentStep === 3 ? 3 : 2));
       return next;
     });
+
+    // queue the freshly added images and open the crop screen for the first one right away
+    setCropQueue((prev) => [...prev, ...nextItems.map((item) => item.id)]);
+    setCropTargetId((current) => current ?? nextItems[0]?.id ?? null);
+
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
-
+  const advanceCropQueue = (justHandledId: string) => {
+    setCropQueue((prev) => {
+      const next = prev.filter((id) => id !== justHandledId);
+      setCropTargetId(next[0] ?? null);
+      return next;
+    });
+  };
   const deleteActive = () => {
     setMedia((prev) => {
       const target = prev[activeIndex];
@@ -102,7 +124,30 @@ export default function NewPostPage() {
       return next;
     });
   };
+  const handleCropConfirm = async (pixels: Area) => {
+    if (!cropTargetMedia) return;
+    try {
+      const croppedFile = await getCroppedImg(
+        cropTargetMedia.previewUrl,
+        pixels,
+        cropTargetMedia.file.name,
+        cropTargetMedia.file.type || "image/jpeg",
+      );
+      const newPreviewUrl = URL.createObjectURL(croppedFile);
 
+      setMedia((prev) =>
+        prev.map((item) => {
+          if (item.id !== cropTargetMedia.id) return item;
+          URL.revokeObjectURL(item.previewUrl);
+          return { ...item, file: croppedFile, previewUrl: newPreviewUrl };
+        }),
+      );
+    } catch {
+      toast.error("Unable to crop image");
+    } finally {
+      advanceCropQueue(cropTargetMedia.id); // was: setCropTargetId(null)
+    }
+  };
   const handleSubmit = async () => {
     if (media.length === 0) {
       toast.error("Please add at least one image");
@@ -209,7 +254,10 @@ export default function NewPostPage() {
                     key={item.id}
                     className="relative w-full shrink-0 snap-center"
                   >
-                    <div className="relative aspect-square w-full">
+                    <div
+                      className="relative w-full"
+                      style={{ aspectRatio: CLOAK_WATCH_IMAGE_ASPECT }}
+                    >
                       <Image
                         src={item.previewUrl}
                         alt=""
@@ -221,6 +269,16 @@ export default function NewPostPage() {
                   </div>
                 ))}
               </div>
+
+              {/* ADD THIS */}
+              <button
+                type="button"
+                onClick={() => activeMedia && setCropTargetId(activeMedia.id)}
+                className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"
+              >
+                <CropIcon className="h-5 w-5" />
+              </button>
+
               <button
                 type="button"
                 onClick={deleteActive}
@@ -284,7 +342,10 @@ export default function NewPostPage() {
                     className="relative w-full shrink-0 snap-center"
                     style={{ width: "100%" }}
                   >
-                    <div className="relative aspect-square w-full">
+                    <div
+                      className="relative w-full"
+                      style={{ aspectRatio: CLOAK_WATCH_IMAGE_ASPECT }}
+                    >
                       <Image
                         src={m.previewUrl}
                         alt=""
@@ -294,13 +355,23 @@ export default function NewPostPage() {
                       />
                     </div>
                     {idx === activeIndex && (
-                      <button
-                        type="button"
-                        onClick={deleteActive}
-                        className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setCropTargetId(m.id)}
+                          className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"
+                        >
+                          <CropIcon className="h-5 w-5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={deleteActive}
+                          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </>
                     )}
                   </div>
                 ))}
@@ -387,6 +458,14 @@ export default function NewPostPage() {
           <div className="h-4" />
         )}
       </footer>
+      {cropTargetMedia && (
+        <CropModal
+          imageSrc={cropTargetMedia.previewUrl}
+          aspect={CLOAK_WATCH_IMAGE_ASPECT} // was: aspect={1}
+          onCancel={() => advanceCropQueue(cropTargetMedia.id)} // was: () => setCropTargetId(null)
+          onConfirmCrop={handleCropConfirm}
+        />
+      )}
     </div>
   );
 }
