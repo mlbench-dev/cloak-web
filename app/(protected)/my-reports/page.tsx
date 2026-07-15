@@ -174,12 +174,12 @@ export default function MyReportsPage() {
             <p className="text-[#8F98A0] text-base">No reports yet</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filteredReports.map((report) => (
               <div
                 key={report._id}
                 onClick={() => router.push(`/reports/${report._id}?type=sent`)}
-                className="flex cursor-pointer items-center justify-between py-4"
+                className="flex cursor-pointer items-center justify-between rounded-2xl px-3 py-4 bg-[#F7F7F8] hover:bg-[#EDEEF0] active:bg-[#E4E5E8] transition-colors duration-150"
               >
                 <div className="flex items-center space-x-3">
                   <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
@@ -198,7 +198,8 @@ export default function MyReportsPage() {
                       <p className="text-[#2D2D2D] font-semibold text-base">
                         {report.user.username}
                       </p>
-                      {report.user.identityVerificationStatus === "APPROVED" && (
+                      {report.user.identityVerificationStatus ===
+                        "APPROVED" && (
                         <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                       )}
                     </div>
