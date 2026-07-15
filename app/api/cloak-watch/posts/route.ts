@@ -163,7 +163,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const uploadedUrls = await uploadCloakWatchImages(files, session.user.id);
+    const uploadedImages = await uploadCloakWatchImages(files, session.user.id);
     const username =
       user.username ||
       session.user.username ||
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       authorVerificationStatus: user.identityVerificationStatus ?? null,
       authorLevel: Number(user.level || 1),
       body,
-      imageUrls: uploadedUrls,
+      images: uploadedImages,
     });
 
     const result = await db

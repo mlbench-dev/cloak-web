@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import sharp from "sharp";
 import { uploadFileToFirebase } from "@/lib/firebaseUtils";
 import type {
   CloakWatchPostDoc,
@@ -18,7 +19,7 @@ export type CloakWatchFeedItem = {
   createdAt: string;
   avatarUrl: string;
   body: string;
-  images: string[];
+  images: CloakWatchImage[];
   up: number;
   down: number;
   shares: number;
@@ -40,7 +41,10 @@ type VoteCountOverride = {
   up: number;
   down: number;
 };
-
+export type CloakWatchImage = {
+  url: string;
+  thumbUrl: string;
+};
 export const CLOAK_WATCH_POSTS_COLLECTION = "cloakWatchPosts";
 export const CLOAK_WATCH_VOTES_COLLECTION = "cloakWatchPostVotes";
 export const CLOAK_WATCH_SAVES_COLLECTION = "cloakWatchPostSaves";
@@ -91,7 +95,7 @@ export function mapPostDocToFeedItem(
     createdAt: post.createdAt.toISOString(),
     avatarUrl: post.authorAvatarUrl,
     body: post.body,
-    images: post.imageUrls,
+    images: normalizePostImages(post),
     up: voteCounts?.up ?? post.upvotesCount,
     down: voteCounts?.down ?? post.downvotesCount,
     shares: post.sharesCount,
@@ -200,8 +204,11 @@ export async function getViewerMetaForPosts(
   return fallback;
 }
 
-export async function uploadCloakWatchImages(files: File[], userId: string) {
-  const uploadedUrls: string[] = [];
+export async function uploadCloakWatchImages(
+  files: File[],
+  userId: string,
+): Promise<CloakWatchImage[]> {
+  const uploadedImages: CloakWatchImage[] = [];
 
   for (const file of files) {
     const contentType = file.type.toLowerCase();
@@ -213,14 +220,41 @@ export async function uploadCloakWatchImages(files: File[], userId: string) {
     }
 
     const safeName = file.name.replace(/\s+/g, "_");
-    const storagePath = `uploads/cloak_watch/${userId}/${Date.now()}_${safeName}`;
-    const url = await uploadFileToFirebase(file, storagePath);
-    uploadedUrls.push(url);
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // full-size upload (unchanged)
+    const fullPath = `uploads/cloak_watch/${userId}/${Date.now()}_${safeName}`;
+    const url = await uploadFileToFirebase(file, fullPath);
+
+    // generate a tiny, heavily-compressed placeholder (~2-5kb)
+    const thumbBuffer = await sharp(buffer)
+      .resize({ width: 24 }) // tiny — this is what keeps file size down
+      .jpeg({ quality: 30 })
+      .toBuffer();
+
+    const thumbFile = new File(
+      [thumbBuffer],
+      `thumb_${safeName.replace(/\.[^.]+$/, "")}.jpg`,
+      { type: "image/jpeg" },
+    );
+    const thumbPath = `uploads/cloak_watch/${userId}/thumbs/${Date.now()}_thumb_${safeName}`;
+    const thumbUrl = await uploadFileToFirebase(thumbFile, thumbPath);
+
+    uploadedImages.push({ url, thumbUrl });
   }
 
-  return uploadedUrls;
+  return uploadedImages;
 }
-
+function normalizePostImages(post: any): CloakWatchImage[] {
+  if (Array.isArray(post.images) && post.images.length > 0) {
+    return post.images;
+  }
+  // legacy posts stored images as imageUrls: string[]
+  if (Array.isArray(post.imageUrls)) {
+    return post.imageUrls.map((url: string) => ({ url, thumbUrl: url }));
+  }
+  return [];
+}
 export function normalizeReportReason(
   input: string,
 ): CloakWatchReportReason | null {
@@ -244,7 +278,7 @@ export function createPostDocument(input: {
   authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   authorLevel: number;
   body: string;
-  imageUrls: string[];
+  images: CloakWatchImage[]; // was: imageUrls: string[]
 }): CloakWatchPostDoc {
   const now = new Date();
   return {
@@ -255,7 +289,7 @@ export function createPostDocument(input: {
     authorVerificationStatus: input.authorVerificationStatus ?? null,
     authorLevel: input.authorLevel,
     body: input.body,
-    imageUrls: input.imageUrls,
+    images: input.images, // was: imageUrls: input.imageUrls
     upvotesCount: 0,
     downvotesCount: 0,
     sharesCount: 0,

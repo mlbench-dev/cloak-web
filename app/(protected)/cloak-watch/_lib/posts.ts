@@ -1,4 +1,9 @@
 "use client";
+export const CLOAK_WATCH_IMAGE_ASPECT = 1;
+export type CloakWatchImage = {
+  url: string;
+  thumbUrl: string;
+};
 
 export type CloakWatchPost = {
   id: string;
@@ -9,7 +14,7 @@ export type CloakWatchPost = {
   createdAt: string;
   avatarUrl: string;
   body: string;
-  images: string[];
+  images: CloakWatchImage[]; // was: images: string[]
   up: number;
   down: number;
   shares: number;
@@ -60,7 +65,9 @@ export async function fetchPosts(
 }
 
 export async function fetchPostById(id: string) {
-  const res = await fetch(`/api/cloak-watch/posts/${id}`, { cache: "no-store" });
+  const res = await fetch(`/api/cloak-watch/posts/${id}`, {
+    cache: "no-store",
+  });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
     throw new Error(json?.error || "Unable to load post");

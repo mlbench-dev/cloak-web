@@ -1,4 +1,5 @@
 "use client";
+import { CLOAK_WATCH_IMAGE_ASPECT } from "../_lib/posts";
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -29,7 +30,77 @@ const reportReasons: ReportReason[] = [
   "Misleading Information",
   "Other",
 ];
+function useTapVsDrag(onTap: () => void) {
+  const startRef = useRef<{ x: number; y: number } | null>(null);
 
+  const onPointerDown = (e: React.PointerEvent) => {
+    startRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const start = startRef.current;
+    startRef.current = null;
+    if (!start) return;
+    const dx = Math.abs(e.clientX - start.x);
+    const dy = Math.abs(e.clientY - start.y);
+    // Only treat it as a tap if the pointer barely moved —
+    // anything more was a swipe through the carousel, not a click.
+    if (dx < 10 && dy < 10) {
+      onTap();
+    }
+  };
+
+  return { onPointerDown, onPointerUp };
+}
+function ProgressiveImage({
+  src,
+  thumbSrc,
+  alt,
+}: {
+  src: string;
+  thumbSrc?: string;
+  alt: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    const img = new window.Image();
+    img.src = src;
+    if (img.complete) {
+      setLoaded(true);
+    } else {
+      img.onload = () => setLoaded(true);
+    }
+  }, [src]);
+
+  return (
+    <div role="img" aria-label={alt} className="absolute inset-0">
+      {thumbSrc && (
+        <div
+          className={`absolute inset-0 scale-105 blur-md transition-opacity duration-300 ${
+            loaded ? "opacity-0" : "opacity-100"
+          }`}
+          style={{
+            backgroundImage: `url(${thumbSrc})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+      )}
+      <div
+        className={`absolute inset-0 transition-opacity duration-300 ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
+        style={{
+          backgroundImage: `url(${src})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+    </div>
+  );
+}
 export function PostSharedSuccessToast(message: string) {
   toast.custom(
     () => (
@@ -393,6 +464,9 @@ export function PostCard({
   onDeleted?: (postId: string) => void;
   onSaveStateChange?: (post: CloakWatchPost, isSaved: boolean) => void;
 }) {
+  const { onPointerDown, onPointerUp } = useTapVsDrag(() =>
+    onOpenPost?.(localPost),
+  );
   const [localPost, setLocalPost] = useState(post);
   const [hidden, setHidden] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -618,10 +692,15 @@ export function PostCard({
           {localPost.body}
         </p>
 
-        <button
-          type="button"
-          onClick={() => onOpenPost?.(localPost)}
-          className="relative mt-3 block w-full overflow-hidden rounded-[22px] bg-[#EDE7DE] text-left"
+        <div
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") onOpenPost?.(localPost);
+          }}
+          className="relative mt-3 block w-full cursor-pointer overflow-hidden rounded-[22px] bg-[#EDE7DE] text-left"
         >
           <div
             ref={carouselRef}
@@ -634,28 +713,28 @@ export function PostCard({
                 Math.max(0, Math.min(idx, localPost.images.length - 1)),
               );
             }}
+            style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
             className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar"
           >
-            {localPost.images.map((image, idx) => (
+            {(localPost.images ?? []).map((image, idx) => (
               <div
                 key={`${localPost.id}-${idx}`}
-                className="relative aspect-4/3 w-full shrink-0 snap-center"
+                className="relative w-full shrink-0 snap-center"
+                style={{ aspectRatio: CLOAK_WATCH_IMAGE_ASPECT }}
               >
-                <Image
-                  src={image}
+                <ProgressiveImage
+                  src={image.url}
+                  thumbSrc={image.thumbUrl}
                   alt=""
-                  fill
-                  className="object-cover"
-                  unoptimized
                 />
               </div>
             ))}
           </div>
           <CarouselDots
-            total={localPost.images.length}
+            total={localPost.images?.length ?? 0}
             activeIndex={activeImageIndex}
           />
-        </button>
+        </div>
 
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
