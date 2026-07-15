@@ -713,7 +713,11 @@ export function PostCard({
                 Math.max(0, Math.min(idx, localPost.images.length - 1)),
               );
             }}
-            style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
+            style={{
+              touchAction: "pan-x pan-y",
+              WebkitOverflowScrolling: "touch",
+              overflowY: "hidden",
+            }}
             className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar"
           >
             {(localPost.images ?? []).map((image, idx) => (
