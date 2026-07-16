@@ -134,7 +134,7 @@ export default function MyReportsPage() {
       </header> */}
 
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.push("/profile")} className="p-2">
+        <button onClick={() => router.back()} className="p-2">
           <ChevronLeft className="h-6 w-6 text-slate-400" />
         </button>
         <h1 className="text-lg font-semibold text-[#2D2D2D]">My Reports</h1>
@@ -142,13 +142,13 @@ export default function MyReportsPage() {
       </header>
 
       {/* Status filters */}
-      <div className="shrink-0 bg-white  px-4 py-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="shrink-0 bg-white px-4 py-3">
+        <div className="flex flex-nowrap gap-1.5">
           {statusFilters.map((filter) => (
             <button
               key={filter.id}
               onClick={() => setActiveFilter(filter.id)}
-              className={`px-3 py-2.5 rounded-full text-sm font-medium transition-all ${
+              className={`flex-1 whitespace-nowrap px-2 py-2 rounded-full text-xs xs:text-sm font-medium text-center transition-all ${
                 activeFilter === filter.id
                   ? "bg-[#14C3CF] text-white"
                   : "bg-[#F5F5F5] text-[#666666]"
@@ -160,7 +160,7 @@ export default function MyReportsPage() {
         </div>
         <p className="mt-3 text-sm text-[#8F98A0]">
           Showing {getStatusCount(activeFilter)}{" "}
-          {getStatusCount(activeFilter) === 1 ? "result" : "result's"}
+          {getStatusCount(activeFilter) === 1 ? "result" : "results"}
         </p>
       </div>
 
@@ -174,12 +174,12 @@ export default function MyReportsPage() {
             <p className="text-[#8F98A0] text-base">No reports yet</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filteredReports.map((report) => (
               <div
                 key={report._id}
                 onClick={() => router.push(`/reports/${report._id}?type=sent`)}
-                className="flex cursor-pointer items-center justify-between py-4"
+                className="flex cursor-pointer items-center justify-between rounded-2xl px-3 py-4 bg-[#F7F7F8] hover:bg-[#EDEEF0] active:bg-[#E4E5E8] transition-colors duration-150"
               >
                 <div className="flex items-center space-x-3">
                   <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
@@ -198,7 +198,8 @@ export default function MyReportsPage() {
                       <p className="text-[#2D2D2D] font-semibold text-base">
                         {report.user.username}
                       </p>
-                      {report.user.identityVerificationStatus === "APPROVED" && (
+                      {report.user.identityVerificationStatus ===
+                        "APPROVED" && (
                         <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                       )}
                     </div>
