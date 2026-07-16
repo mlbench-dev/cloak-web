@@ -165,7 +165,7 @@ export default function ReportsPage() {
 
       {/* Filters */}
       <div className="border-b border-slate-100 px-4 py-3">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-nowrap gap-1.5">
           {[
             { key: "all", label: "All" },
             { key: "PENDING", label: "Pending" },
@@ -183,7 +183,7 @@ export default function ReportsPage() {
                     | "FALSE_POSITIVE",
                 )
               }
-              className={`px-3 py-2.5 rounded-full text-sm font-medium transition-colors ${
+              className={`flex-1 whitespace-nowrap px-2 py-2 rounded-full text-xs xs:text-sm font-medium text-center transition-colors ${
                 activeFilter === filter.key
                   ? "bg-[#14C3CF] text-white"
                   : "bg-[#F6F6F6] text-[#8F98A0]"
@@ -195,7 +195,7 @@ export default function ReportsPage() {
         </div>
         <p className="mt-3 text-sm text-[#8F98A0]">
           Showing {getFilterCount(activeFilter)}{" "}
-          {getFilterCount(activeFilter) === 1 ? "result" : "result's"}
+          {getFilterCount(activeFilter) === 1 ? "result" : "results"}
         </p>
       </div>
 

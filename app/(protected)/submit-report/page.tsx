@@ -124,6 +124,8 @@ export default function SubmitReportPage() {
   const [step, setStep] = useState(1); // 1: select target user, 2: enter details
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [isClearingSearches, setIsClearingSearches] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [sourceLink, setSourceLink] = useState("");
   const [platform, setPlatform] = useState<Platform>("other");
@@ -185,8 +187,11 @@ export default function SubmitReportPage() {
 
     if (searchQuery.trim().length === 0) {
       setSearchResults([]);
+      setIsSearchingUsers(false);
       return;
     }
+
+    setIsSearchingUsers(true);
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
@@ -194,11 +199,12 @@ export default function SubmitReportPage() {
           `/api/users/search?q=${encodeURIComponent(searchQuery)}`,
         );
         const data = await res.json();
-        if (data.success) {
-          setSearchResults(data.users);
-        }
+        setSearchResults(data.success ? data.users : []);
       } catch (error) {
         console.error("Error searching users:", error);
+        setSearchResults([]);
+      } finally {
+        setIsSearchingUsers(false);
       }
     }, 300);
   }, [searchQuery]);
@@ -209,7 +215,36 @@ export default function SubmitReportPage() {
       setPlatform(detectPlatform(validSourceUrl));
     }
   }, [validSourceUrl]);
+  const clearAllRecentSearches = async () => {
+    if (recentSearches.length === 0 || isClearingSearches) return;
 
+    setIsClearingSearches(true);
+    const previousSearches = recentSearches;
+    setRecentSearches([]); // optimistic clear
+
+    try {
+      const results = await Promise.all(
+        previousSearches.map((search) =>
+          fetch(`/api/reports?searchId=${search._id}`, { method: "DELETE" }),
+        ),
+      );
+
+      const anyFailed = results.some((res) => !res.ok);
+      if (anyFailed) {
+        // Re-fetch from server to reconcile partial failures
+        await fetchRecentSearches();
+        toast.error("Some searches couldn't be cleared");
+      } else {
+        toast.success("Recent searches cleared");
+      }
+    } catch (error) {
+      console.error("Error clearing recent searches:", error);
+      setRecentSearches(previousSearches); // rollback on total failure
+      toast.error("Failed to clear searches");
+    } finally {
+      setIsClearingSearches(false);
+    }
+  };
   useEffect(() => {
     if (linkCheckTimeoutRef.current) {
       clearTimeout(linkCheckTimeoutRef.current);
@@ -374,116 +409,142 @@ export default function SubmitReportPage() {
               </div>
 
               {/* Recent searches - now below input */}
-              {recentSearches.length > 0 && !searchQuery && (
+              {!searchQuery && (
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[#2D2D2D] text-[15px] font-medium">
                       Recent Searches
                     </p>
-                    <button className="text-[#8F98A0] text-sm">
-                      Clear All
-                    </button>
+                    {recentSearches.length > 0 && (
+                      <button
+                        onClick={clearAllRecentSearches}
+                        disabled={isClearingSearches}
+                        className="text-[#8F98A0] text-sm disabled:opacity-50"
+                      >
+                        {isClearingSearches ? "Clearing..." : "Clear All"}
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-3">
-                    {recentSearches
-                      .filter((search) => search.targetUser)
-                      .map((search) => (
-                        <div
-                          key={search._id}
-                          onClick={() => {
-                            setSelectedUser(search.targetUser);
-                            setStep(2);
-                          }}
-                          className="cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                              {search.targetUser?.image ||
-                              search.targetUser?.profileImage ? (
-                                <img
-                                  src={
-                                    search.targetUser.image ||
-                                    search.targetUser.profileImage
-                                  }
-                                  alt={
-                                    search.targetUser.username ||
-                                    search.targetUser.name ||
-                                    "User"
-                                  }
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                              )}
-                            </div>
-                            <div>
-                              <div className="flex items-center space-x-1">
-                                <p className="text-[#2D2D2D] font-semibold text-base">
-                                  {search.targetUser.username || "User"}
-                                </p>
-                                {search.targetUser
-                                  .identityVerificationStatus ===
-                                  "APPROVED" && (
-                                  <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+
+                  {recentSearches.length > 0 ? (
+                    <div className="space-y-3">
+                      {recentSearches
+                        .filter((search) => search.targetUser)
+                        .map((search) => (
+                          <div
+                            key={search._id}
+                            onClick={() => {
+                              setSelectedUser(search.targetUser);
+                              setStep(2);
+                            }}
+                            className="cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                                {search.targetUser?.image ||
+                                search.targetUser?.profileImage ? (
+                                  <img
+                                    src={
+                                      search.targetUser.image ||
+                                      search.targetUser.profileImage
+                                    }
+                                    alt={
+                                      search.targetUser.username ||
+                                      search.targetUser.name ||
+                                      "User"
+                                    }
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-6 w-6 bg-slate-400 rounded-full" />
                                 )}
                               </div>
-                              <p className="text-[#8F98A0] text-sm">
-                                {search.targetUser.name || ""}
-                              </p>
+                              <div>
+                                <div className="flex items-center space-x-1">
+                                  <p className="text-[#2D2D2D] font-semibold text-base">
+                                    {search.targetUser.username || "User"}
+                                  </p>
+                                  {search.targetUser
+                                    .identityVerificationStatus ===
+                                    "APPROVED" && (
+                                    <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                                  )}
+                                </div>
+                                <p className="text-[#8F98A0] text-sm">
+                                  {search.targetUser.name || ""}
+                                </p>
+                              </div>
                             </div>
+                            <button
+                              onClick={(e) => deleteRecentSearch(search._id, e)}
+                              className="p-2 hover:bg-slate-100 rounded-full"
+                            >
+                              <X className="h-5 w-5 text-slate-400" />
+                            </button>
                           </div>
-                          <button
-                            onClick={(e) => deleteRecentSearch(search._id, e)}
-                            className="p-2 hover:bg-slate-100 rounded-full"
-                          >
-                            <X className="h-5 w-5 text-slate-400" />
-                          </button>
-                        </div>
-                      ))}
-                  </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <p className="text-[#8F98A0] text-sm">
+                        You have no recent searches
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Search results */}
-              {searchResults.length > 0 && (
+              {searchQuery.trim().length > 0 && (
                 <div className="space-y-2">
-                  {searchResults.map((user) => (
-                    <div
-                      key={user._id}
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setStep(2);
-                      }}
-                      className="p-4 bg-[#F5F5F5] rounded-2xl cursor-pointer hover:bg-[#EBEBEB] transition-colors flex items-center"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                          {user.image || user.profileImage ? (
-                            <img
-                              src={user.image || user.profileImage}
-                              alt={user.username || user.name || "User"}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                          )}
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-1">
-                            <p className="text-[#2D2D2D] font-semibold text-base">
-                              {user.username || "User"}
-                            </p>
-                            {user.identityVerificationStatus === "APPROVED" && (
-                              <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                  {isSearchingUsers ? (
+                    <div className="flex items-center justify-center py-10">
+                      <div className="h-6 w-6 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map((user) => (
+                      <div
+                        key={user._id}
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setStep(2);
+                        }}
+                        className="p-4 bg-[#F5F5F5] rounded-2xl cursor-pointer hover:bg-[#EBEBEB] transition-colors flex items-center"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                            {user.image || user.profileImage ? (
+                              <img
+                                src={user.image || user.profileImage}
+                                alt={user.username || user.name || "User"}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-6 w-6 bg-slate-400 rounded-full" />
                             )}
                           </div>
-                          <p className="text-[#8F98A0] text-sm">
-                            {user.name || ""}
-                          </p>
+                          <div>
+                            <div className="flex items-center space-x-1">
+                              <p className="text-[#2D2D2D] font-semibold text-base">
+                                {user.username || "User"}
+                              </p>
+                              {user.identityVerificationStatus ===
+                                "APPROVED" && (
+                                <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                              )}
+                            </div>
+                            <p className="text-[#8F98A0] text-sm">
+                              {user.name || ""}
+                            </p>
+                          </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <p className="text-[#8F98A0] text-sm">User not found</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
