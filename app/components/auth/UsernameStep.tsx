@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { debounce } from "lodash";
+const MAX_USERNAME_LENGTH = 20;
 
 type UsernameStepProps = {
   onContinue: (username: string) => void;
@@ -25,7 +26,7 @@ export default function UsernameStep({
 
   const checkAvailability = useCallback(
     debounce(async (val: string) => {
-      if (val.length < 3) {
+      if (val.length < 3 || val.length > MAX_USERNAME_LENGTH) {
         setIsValid(false);
         setIsTaken(false);
         return;
@@ -66,9 +67,12 @@ export default function UsernameStep({
   }, [username, initialBase]);
 
   const handleUsernameChange = (value: string) => {
-    const cleaned = value.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+    const cleaned = value
+      .replace(/[^a-zA-Z0-9_]/g, "")
+      .toLowerCase()
+      .slice(0, MAX_USERNAME_LENGTH);
     setUsername(cleaned);
-    if (cleaned.length >= 3) {
+    if (cleaned.length >= 3 && cleaned.length <= MAX_USERNAME_LENGTH) {
       checkAvailability(cleaned);
     } else {
       setIsValid(false);
@@ -124,12 +128,17 @@ export default function UsernameStep({
 
           <div className="w-full space-y-8">
             <div className="space-y-2.5">
-              <label
-                htmlFor="username"
-                className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]"
-              >
-                Username
-              </label>
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="username"
+                  className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]"
+                >
+                  Username
+                </label>
+                <span className="text-[12px] text-[#8F98A0]">
+                  {username.length}/{MAX_USERNAME_LENGTH}
+                </span>
+              </div>
               <div className="relative">
                 <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[16px] font-bold text-[#2D2D2D]">
                   @
@@ -140,6 +149,7 @@ export default function UsernameStep({
                   placeholder="Enter a username"
                   value={username}
                   onChange={(e) => handleUsernameChange(e.target.value)}
+                  maxLength={MAX_USERNAME_LENGTH}
                   className={`h-14 w-full rounded-[18px] border bg-[#ECECEC] pl-10 pr-12 text-[16px] text-[#2D2D2D] outline-none transition-all 2xl:h-16 2xl:text-[18px] ${
                     isTaken
                       ? "border-[#FF3B30] bg-white"

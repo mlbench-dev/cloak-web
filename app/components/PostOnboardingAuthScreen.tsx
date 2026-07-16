@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type PostOnboardingAuthScreenProps = {
   onEmailSubmit?: (email: string) => void;
@@ -11,9 +11,18 @@ type PostOnboardingAuthScreenProps = {
   isLoading?: boolean;
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 function GoogleMark() {
   return (
-    <svg width="20" height="20" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 18 18"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
       <path
         d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.718v2.258h2.908c1.702-1.566 2.684-3.874 2.684-6.616Z"
         fill="#4285F4"
@@ -41,10 +50,22 @@ export default function PostOnboardingAuthScreen({
   isLoading,
 }: PostOnboardingAuthScreenProps) {
   const [email, setEmail] = useState("");
+  const [touched, setTouched] = useState(false);
+
+  const trimmedEmail = email.trim();
+  const isValidEmail = useMemo(
+    () => EMAIL_REGEX.test(trimmedEmail),
+    [trimmedEmail],
+  );
+  const showFormatError = touched && trimmedEmail.length > 0 && !isValidEmail;
 
   const handleSubmit = () => {
     if (isLoading) return;
-    onEmailSubmit?.(email.trim());
+    if (!isValidEmail) {
+      setTouched(true);
+      return;
+    }
+    onEmailSubmit?.(trimmedEmail);
   };
 
   const handleGoogleSignIn = async () => {
@@ -83,13 +104,20 @@ export default function PostOnboardingAuthScreen({
             {error && (
               <div className="animate-in fade-in slide-in-from-top-4 duration-300">
                 <div className="flex items-center gap-2 rounded-2xl bg-white p-4 shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-[#FF3B30]/10">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#FF3B30] text-[#FF3B30] text-[12px] font-bold">!</div>
-                  <p className="text-[13px] font-medium text-[#2D2D2D]">{error}</p>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#FF3B30] text-[#FF3B30] text-[12px] font-bold">
+                    !
+                  </div>
+                  <p className="text-[13px] font-medium text-[#2D2D2D]">
+                    {error}
+                  </p>
                 </div>
               </div>
             )}
             <div className="space-y-2.5">
-              <label htmlFor="email" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
+              <label
+                htmlFor="email"
+                className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]"
+              >
                 Email
               </label>
               <input
@@ -97,17 +125,25 @@ export default function PostOnboardingAuthScreen({
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="Enter your email"
+                placeholder="email@service.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="h-14 w-full rounded-[18px] border border-transparent bg-[#ECECEC] px-5 text-[16px] text-[#2D2D2D] outline-none placeholder:text-[#A7ADB2] focus:border-[#14C3CF] 2xl:h-16 2xl:text-[18px]"
+                onBlur={() => setTouched(true)}
+                className={`h-14 w-full rounded-[18px] border bg-[#ECECEC] px-5 text-[16px] text-[#2D2D2D] outline-none placeholder:text-[#A7ADB2] focus:border-[#14C3CF] 2xl:h-16 2xl:text-[18px] ${
+                  showFormatError ? "border-[#FF3B30]" : "border-transparent"
+                }`}
               />
+              {showFormatError && (
+                <p className="text-[13px] text-[#FF3B30]">
+                  Enter a valid email like email@service.com
+                </p>
+              )}
             </div>
 
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isLoading || !email.includes("@")}
+              disabled={isLoading || !isValidEmail}
               className="flex h-14 w-full items-center justify-center rounded-full bg-[#14C3CF] text-[18px] font-medium text-white shadow-[0_10px_24px_rgba(20,195,207,0.22)] disabled:opacity-50 2xl:h-16 2xl:text-[20px]"
             >
               {isLoading ? (
@@ -119,7 +155,9 @@ export default function PostOnboardingAuthScreen({
 
             <div className="flex items-center gap-4">
               <div className="h-px flex-1 bg-[#E3E3E3]" />
-              <span className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#949CA2] 2xl:text-[13px]">OR</span>
+              <span className="text-[12px] font-medium uppercase tracking-[0.12em] text-[#949CA2] 2xl:text-[13px]">
+                OR
+              </span>
               <div className="h-px flex-1 bg-[#E3E3E3]" />
             </div>
 
