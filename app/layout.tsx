@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import MobileOnly from "./components/MobileOnly";
 import { Providers } from "./components/Providers";
+import ViewportHeightSetter from "./components/ViewportHeightSetter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,13 +37,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#0D9488",
+  viewportFit: "cover", // ← new: makes env(safe-area-inset-*) actually resolve
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="en"
@@ -50,9 +50,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="min-h-full bg-[#00BCD4]">
+        <ViewportHeightSetter />
         <Providers>
           <MobileOnly>
-            <div className="app-mobile-screen mx-auto w-full max-w-[430px]">{children}</div>
+            <div
+              className="app-mobile-screen mx-auto h-screen w-full max-w-[430px]"
+              style={{ height: "var(--app-height)" }}
+            >
+              {children}
+            </div>
           </MobileOnly>
         </Providers>
       </body>
