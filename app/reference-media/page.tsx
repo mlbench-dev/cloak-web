@@ -37,6 +37,7 @@ const getVerificationStatusClass = (status?: string) => {
 };
 
 function ReferenceMediaContent() {
+
   const {
     data: session,
     status: authStatus,
@@ -325,7 +326,10 @@ function ReferenceMediaContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white font-sf-pro-display">
+    <div
+      className="flex flex-col bg-white font-sf-pro-display"
+      style={{ height: "var(--app-height, 100dvh)" }}
+    >
       <header className="flex items-center justify-between py-4 px-4 bg-white z-10 flex-shrink-0">
         <button onClick={handleHeaderBack} className="p-2">
           <ChevronLeft className="h-6 w-6 text-slate-400" />
@@ -496,7 +500,13 @@ function ReferenceMediaContent() {
         <div className="flex-1" />
 
         {/* Bottom Section */}
-        <div className="px-0 pb-6 space-y-3 flex-shrink-0 mt-auto">
+        <div
+          className="px-0 pb-6 space-y-3 flex-shrink-0 mt-auto"
+          style={{
+            paddingBottom:
+              "max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))",
+          }}
+        >
           {mode === "onboarding" && (
             <button
               onClick={() => router.replace("/dashboard")}
