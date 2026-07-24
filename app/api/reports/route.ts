@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { ReportDoc, RecentSearchDoc } from "@/models/User";
-
-// Helper function to detect platform from link
-function detectPlatform(link: string): string {
-  const lowerLink = link.toLowerCase();
-  if (lowerLink.includes("tiktok.com")) return "tiktok";
-  if (lowerLink.includes("instagram.com")) return "instagram";
-  if (lowerLink.includes("facebook.com") || lowerLink.includes("fb.com"))
-    return "facebook";
-  if (lowerLink.includes("twitter.com") || lowerLink.includes("x.com"))
-    return "twitter";
-  return "other";
-}
+import {
+  computeAndStoreAiConfidence,
+  detectPlatform,
+} from "@/lib/reportAiConfidence";
 
 function buildRecentSearchDoc(
   sessionUserId: string,
@@ -72,12 +65,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const {
-      targetUserId,
-      sourceLink,
-      platform: providedPlatform,
-      notes,
-    } = body;
+    const { targetUserId, sourceLink, platform: providedPlatform, notes } =
+      body;
 
     if (!targetUserId || !sourceLink) {
       return NextResponse.json(
@@ -101,9 +90,6 @@ export async function POST(request: Request) {
 
     const platform = providedPlatform || detectPlatform(sourceLink);
 
-    // Generate fake AI confidence for now (70-95%)
-    const aiConfidence = Math.floor(Math.random() * 26) + 70;
-
     const report: ReportDoc = {
       reportedBy: new ObjectId(session.user.id),
       targetUserId: new ObjectId(targetUserId),
@@ -111,14 +97,18 @@ export async function POST(request: Request) {
       platform,
       notes,
       status: "PENDING",
-      aiConfidence,
+      aiConfidence: 0,
+      aiConfidenceStatus: "pending",
+      aiConfidenceAttempts: 0,
+      aiConfidenceMessage:
+        "We're checking this report now — check back in a moment.",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await db.collection("reports").insertOne(report);
+    const reportId = result.insertedId;
 
-    // Update submitter's total reports
     await usersCollection.updateOne(
       { _id: new ObjectId(session.user.id) },
       {
@@ -129,7 +119,9 @@ export async function POST(request: Request) {
 
     await upsertRecentSearch(db, session.user.id, targetUser);
 
-    return NextResponse.json({ success: true, reportId: result.insertedId });
+    after(() => computeAndStoreAiConfidence(reportId));
+
+    return NextResponse.json({ success: true, reportId });
   } catch (error) {
     console.error("Error submitting report:", error);
     return NextResponse.json(
@@ -196,7 +188,7 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type"); // "sent" | "received" | "recent-searches"
+    const type = searchParams.get("type");
     const status = searchParams.get("status");
     const userId = new ObjectId(session.user.id);
 
@@ -210,7 +202,6 @@ export async function GET(request: Request) {
         .limit(10)
         .toArray();
 
-      // For each search, if targetUser is missing, look it up
       const enrichedSearches = await Promise.all(
         searches.map(async (search) => {
           if (!search.targetUser) {
@@ -239,7 +230,11 @@ export async function GET(request: Request) {
       });
     }
 
-    let filter: any = {};
+    const filter: {
+      reportedBy?: ObjectId;
+      targetUserId?: ObjectId;
+      status?: string;
+    } = {};
     if (type === "sent") {
       filter.reportedBy = userId;
     } else if (type === "received") {
@@ -248,7 +243,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
 
-    // Add status filter if provided
     if (status && status !== "all") {
       filter.status = status;
     }

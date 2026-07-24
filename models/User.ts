@@ -1,15 +1,25 @@
 import { ObjectId } from "mongodb";
 
 export type UserRole = "USER" | "VERIFIED_USER";
-export type ReportStatus = "PENDING" | "VERIFIED" | "REJECTED" | "FALSE_POSITIVE";
-export type AchievementCode = 
-  | "FIRST_SIGNAL" 
-  | "ACTIVE_WATCHER" 
-  | "SCOUT" 
-  | "SENTINEL" 
-  | "SHARP_EYE" 
-  | "TRUTH_SEEKER" 
-  | "ELITE_DETECTOR" 
+export type ReportStatus =
+  | "PENDING"
+  | "VERIFIED"
+  | "REJECTED"
+  | "FALSE_POSITIVE";
+export type AiConfidenceStatus =
+  | "awaiting_verification" // new
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed";
+export type AchievementCode =
+  | "FIRST_SIGNAL"
+  | "ACTIVE_WATCHER"
+  | "SCOUT"
+  | "SENTINEL"
+  | "SHARP_EYE"
+  | "TRUTH_SEEKER"
+  | "ELITE_DETECTOR"
   | "CLOAK_GUARDIAN";
 
 export interface UserDoc {
@@ -23,11 +33,11 @@ export interface UserDoc {
   role: UserRole;
   isVerified: boolean;
   identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED";
-  points: number; // User's total points
-  level: number; // Current level (starts at 1)
-  totalReports: number; // Total reports submitted by this user
-  verifiedReports: number; // Number of reports that were verified/approved
-  accuracyPercentage: number; // (verifiedReports / totalReports) * 100
+  points: number;
+  level: number;
+  totalReports: number;
+  verifiedReports: number;
+  accuracyPercentage: number;
   achievements: {
     code: AchievementCode;
     unlockedAt: Date | null;
@@ -58,14 +68,21 @@ export interface IdentityVerificationDoc {
 
 export interface ReportDoc {
   _id?: ObjectId;
-  reportedBy: ObjectId; // User who submitted the report
-  targetUserId: ObjectId; // User being reported
+  reportedBy: ObjectId;
+  targetUserId: ObjectId;
   sourceLink: string;
-  platform: string; // "tiktok" | "instagram" | "facebook" | "twitter" | "other"
+  platform: string;
   notes?: string;
   status: ReportStatus;
-  aiConfidence: number; // AI confidence percentage (0-100)
-  verifiedBy?: ObjectId; // User who verified the report
+  aiConfidence: number;
+  aiConfidenceSource?: "api" | "fallback";
+  aiConfidenceMessage?: string;
+  // Queue/retry tracking — added so AI confidence can be computed in the
+  // background and retried automatically instead of blocking submission.
+  aiConfidenceStatus?: AiConfidenceStatus;
+  aiConfidenceAttempts?: number;
+  aiConfidenceLastAttemptAt?: Date;
+  verifiedBy?: ObjectId;
   verifiedAt?: Date;
   createdAt: Date;
   updatedAt: Date;

@@ -30,6 +30,8 @@ type ReportDetails = {
   notes?: string;
   status: string;
   aiConfidence: number;
+  aiConfidenceMessage?: string;
+  aiConfidenceSource?: "api" | "fallback";
   createdAt?: string;
   user?: ReportUser;
 };
@@ -222,24 +224,15 @@ export default function ReportDetailsPage({
 
     const fetchReport = async () => {
       try {
-        const fetchByType = async (type: "sent" | "received") => {
-          const res = await fetch(`/api/reports?type=${type}`);
-          const data = await res.json().catch(() => null);
-          if (data?.success) {
-            const found = data.reports.find((item: any) => item._id === id);
-            if (found) {
-              setReport(found);
-              setReportViewType(type);
-              return true;
-            }
-          }
-          return false;
-        };
+        const res = await fetch(`/api/reports/${id}?type=${initialViewType}`);
+        const data = await res.json().catch(() => null);
 
-        const foundInRequested = await fetchByType(initialViewType);
-        if (!foundInRequested) {
-          await fetchByType(initialViewType === "sent" ? "received" : "sent");
+        if (!res.ok || !data?.success || !data?.report) {
+          throw new Error(data?.error || "Failed to fetch report");
         }
+
+        setReport(data.report);
+        setReportViewType(data.viewType || initialViewType);
       } catch (error) {
         console.error("Failed to fetch report:", error);
       } finally {
@@ -252,7 +245,6 @@ export default function ReportDetailsPage({
 
   useEffect(() => {
     if (!report?.sourceLink) {
-      setPreview(null);
       return;
     }
 
@@ -323,15 +315,17 @@ export default function ReportDetailsPage({
   const personSectionTitle =
     reportViewType === "sent" ? "Target User" : "Reported By";
 
-  const sourceLinkLabel = useMemo(() => {
-    if (!report?.sourceLink) return "";
+  const sourceLinkLabel = report?.sourceLink
+    ? (() => {
     try {
       const parsed = new URL(report.sourceLink);
       return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname}${parsed.search}`;
     } catch {
       return report.sourceLink;
     }
-  }, [report?.sourceLink]);
+      })()
+    : "";
+  const activePreview = report?.sourceLink ? preview : null;
 
   const statusMeta = getStatusMeta(report?.status || "");
 
@@ -471,12 +465,12 @@ export default function ReportDetailsPage({
               <div className="flex h-[260px] items-center justify-center">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
               </div>
-            ) : preview?.image ? (
+            ) : activePreview?.image ? (
               <div className="flex h-[260px] items-center justify-center bg-[#F1F1F1]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={preview.image}
-                  alt={preview.title || "Link preview"}
+                  src={activePreview.image}
+                  alt={activePreview.title || "Link preview"}
                   className="h-full w-auto max-w-full object-contain"
                 />
               </div>
@@ -484,10 +478,10 @@ export default function ReportDetailsPage({
               <div className="flex h-[260px] flex-col items-center justify-center px-6 text-center">
                 <FileSearch className="h-10 w-10 text-[#B0B5BB]" />
                 <p className="mt-4 text-[16px] font-medium text-[#2D2D2D]">
-                  {preview?.title || "Preview unavailable"}
+                  {activePreview?.title || "Preview unavailable"}
                 </p>
                 <p className="mt-2 text-[14px] text-[#99A0A7]">
-                  {preview?.domain || sourceLinkLabel}
+                  {activePreview?.domain || sourceLinkLabel}
                 </p>
               </div>
             )}
@@ -512,6 +506,11 @@ export default function ReportDetailsPage({
               style={{ width: `${report.aiConfidence}%` }}
             />
           </div>
+          {report.aiConfidenceMessage ? (
+            <p className="mt-3 text-[13px] leading-6 text-[#4F5A61]">
+              {report.aiConfidenceMessage}
+            </p>
+          ) : null}
         </section>
 
         {report.status === "PENDING" && reportViewType !== "sent" && (
