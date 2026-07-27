@@ -138,6 +138,12 @@ export default function SubmitReportPage() {
     [sourceLink],
   );
   const hasInvalidSourceLink = sourceLink.trim().length > 0 && !validSourceUrl;
+  const detectedPlatform = useMemo(() => {
+    if (!validSourceUrl) return null;
+    return detectPlatform(validSourceUrl);
+  }, [validSourceUrl]);
+  const isPlatformLocked =
+    detectedPlatform !== null && detectedPlatform !== "other";
   const linkCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const linkCheckAbortRef = useRef<AbortController | null>(null);
   const [isCheckingLink, setIsCheckingLink] = useState(false);
@@ -160,6 +166,42 @@ export default function SubmitReportPage() {
       }
     } catch (error) {
       console.error("Error fetching recent searches:", error);
+    }
+  };
+
+  const upsertRecentSearchState = (search: RecentSearch) => {
+    setRecentSearches((prev) => {
+      const next = [search, ...prev.filter((item) => item._id !== search._id)];
+      return next.slice(0, 10);
+    });
+  };
+
+  const saveRecentSearch = async (user: User) => {
+    try {
+      const res = await fetch("/api/reports", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          targetUserId: user._id,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.search) {
+        upsertRecentSearchState(data.search);
+      }
+    } catch (error) {
+      console.error("Error saving recent search:", error);
+    }
+  };
+
+  const handleSelectUser = async (user: User, persistRecentSearch = false) => {
+    setSelectedUser(user);
+    setStep(2);
+
+    if (persistRecentSearch) {
+      await saveRecentSearch(user);
     }
   };
 
@@ -211,10 +253,10 @@ export default function SubmitReportPage() {
 
   // Detect platform when source link changes
   useEffect(() => {
-    if (validSourceUrl) {
-      setPlatform(detectPlatform(validSourceUrl));
+    if (detectedPlatform) {
+      setPlatform(detectedPlatform);
     }
-  }, [validSourceUrl]);
+  }, [detectedPlatform]);
   const clearAllRecentSearches = async () => {
     if (recentSearches.length === 0 || isClearingSearches) return;
 
@@ -433,10 +475,9 @@ export default function SubmitReportPage() {
                         .map((search) => (
                           <div
                             key={search._id}
-                            onClick={() => {
-                              setSelectedUser(search.targetUser);
-                              setStep(2);
-                            }}
+                            onClick={() =>
+                              void handleSelectUser(search.targetUser, false)
+                            }
                             className="cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between"
                           >
                             <div className="flex items-center space-x-3">
@@ -505,10 +546,7 @@ export default function SubmitReportPage() {
                     searchResults.map((user) => (
                       <div
                         key={user._id}
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setStep(2);
-                        }}
+                        onClick={() => void handleSelectUser(user, true)}
                         className="p-4 bg-[#F5F5F5] rounded-2xl cursor-pointer hover:bg-[#EBEBEB] transition-colors flex items-center"
                       >
                         <div className="flex items-center space-x-3">
@@ -674,29 +712,38 @@ export default function SubmitReportPage() {
                 Select Platform
               </p>
               <div className="flex flex-wrap gap-3">
-                {platforms.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPlatform(p.id as Platform)}
-                    className={`flex items-center space-x-2 px-5 py-3 rounded-2xl border-2 transition-all ${
-                      platform === p.id
-                        ? "border-[#14C3CF] bg-[#14C3CF]/10"
-                        : "border-slate-200 bg-[#F5F5F5]"
-                    }`}
-                    style={{
-                      color: platform === p.id ? "#14C3CF" : "#2D2D2D",
-                    }}
-                  >
-                    <div
-                      className={
-                        platform === p.id ? "text-[#14C3CF]" : "text-slate-400"
-                      }
+                {platforms.map((p) => {
+                  const isDisabled =
+                    isPlatformLocked && detectedPlatform !== p.id;
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => setPlatform(p.id as Platform)}
+                      className={`flex items-center space-x-2 px-5 py-3 rounded-2xl border-2 transition-all ${
+                        platform === p.id
+                          ? "border-[#14C3CF] bg-[#14C3CF]/10"
+                          : "border-slate-200 bg-[#F5F5F5]"
+                      } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+                      style={{
+                        color: platform === p.id ? "#14C3CF" : "#2D2D2D",
+                      }}
                     >
-                      {p.icon}
-                    </div>
-                    <span className="text-sm font-medium">{p.label}</span>
-                  </button>
-                ))}
+                      <div
+                        className={
+                          platform === p.id
+                            ? "text-[#14C3CF]"
+                            : "text-slate-400"
+                        }
+                      >
+                        {p.icon}
+                      </div>
+                      <span className="text-sm font-medium">{p.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

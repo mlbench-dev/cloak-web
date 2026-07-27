@@ -17,6 +17,53 @@ function detectPlatform(link: string): string {
   return "other";
 }
 
+function buildRecentSearchDoc(
+  sessionUserId: string,
+  targetUser: any,
+): RecentSearchDoc {
+  return {
+    userId: new ObjectId(sessionUserId),
+    targetUserId: targetUser._id,
+    targetUser: {
+      _id: targetUser._id.toString(),
+      username: targetUser.username,
+      name: targetUser.name,
+      image: targetUser.image,
+      profileImage: targetUser.profileImage,
+      identityVerificationStatus: targetUser.identityVerificationStatus,
+    },
+    createdAt: new Date(),
+  };
+}
+
+async function upsertRecentSearch(
+  db: Awaited<ReturnType<typeof getDb>>,
+  sessionUserId: string,
+  targetUser: any,
+) {
+  const recentSearch = buildRecentSearchDoc(sessionUserId, targetUser);
+  const recentSearches = db.collection("recentSearches");
+  const existingSearch = await recentSearches.findOne({
+    userId: new ObjectId(sessionUserId),
+    targetUserId: targetUser._id,
+  });
+
+  if (!existingSearch) {
+    await recentSearches.insertOne(recentSearch);
+    return;
+  }
+
+  await recentSearches.updateOne(
+    { _id: existingSearch._id },
+    {
+      $set: {
+        createdAt: new Date(),
+        targetUser: recentSearch.targetUser,
+      },
+    },
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -80,40 +127,60 @@ export async function POST(request: Request) {
       },
     );
 
-    // Also add to recent searches
-    const recentSearch = {
-      userId: new ObjectId(session.user.id),
-      targetUserId: new ObjectId(targetUserId),
-      targetUser: {
-        _id: targetUser._id.toString(),
-        username: targetUser.username,
-        name: targetUser.name,
-        image: targetUser.image,
-        profileImage: targetUser.profileImage,
-        identityVerificationStatus: targetUser.identityVerificationStatus,
-      },
-      createdAt: new Date(),
-    } satisfies RecentSearchDoc;
-    // Check if this search already exists for the user
-    const existingSearch = await db.collection("recentSearches").findOne({
-      userId: new ObjectId(session.user.id),
-      targetUserId: new ObjectId(targetUserId),
-    });
-    if (!existingSearch) {
-      await db.collection("recentSearches").insertOne(recentSearch);
-    } else {
-      // Update the timestamp
-      await db
-        .collection("recentSearches")
-        .updateOne(
-          { _id: existingSearch._id },
-          { $set: { createdAt: new Date() } },
-        );
-    }
+    await upsertRecentSearch(db, session.user.id, targetUser);
 
     return NextResponse.json({ success: true, reportId: result.insertedId });
   } catch (error) {
     console.error("Error submitting report:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const targetUserId = String(body?.targetUserId || "").trim();
+
+    if (!targetUserId) {
+      return NextResponse.json(
+        { error: "Missing target user" },
+        { status: 400 },
+      );
+    }
+
+    const db = await getDb();
+    const targetUser = await db.collection("users").findOne({
+      _id: new ObjectId(targetUserId),
+    });
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: "Target user not found" },
+        { status: 404 },
+      );
+    }
+
+    await upsertRecentSearch(db, session.user.id, targetUser);
+
+    const savedSearch = await db.collection("recentSearches").findOne({
+      userId: new ObjectId(session.user.id),
+      targetUserId: targetUser._id,
+    });
+
+    return NextResponse.json({
+      success: true,
+      search: savedSearch,
+    });
+  } catch (error) {
+    console.error("Error saving recent search:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
