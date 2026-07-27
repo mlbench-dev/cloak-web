@@ -275,12 +275,41 @@ export default function ProfilePage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode,
-            width: { ideal: 960 },
+            width: { ideal: 1280 },
             height: { ideal: 1280 },
-            aspectRatio: { ideal: 3 / 4 },
           },
           audio: false,
         });
+
+        const videoTrack = stream.getVideoTracks()[0] as MediaStreamTrack & {
+          getCapabilities?: () => {
+            zoom?: { min?: number; max?: number };
+          };
+          applyConstraints?: (
+            constraints: MediaTrackConstraints,
+          ) => Promise<void>;
+        };
+
+        try {
+          const capabilities: {
+            zoom?: { min?: number; max?: number };
+          } | null =
+            typeof videoTrack?.getCapabilities === "function"
+              ? (videoTrack.getCapabilities() as any)
+              : null;
+
+          if (
+            capabilities?.zoom &&
+            typeof capabilities.zoom.min === "number" &&
+            typeof videoTrack?.applyConstraints === "function"
+          ) {
+            await videoTrack.applyConstraints({
+              advanced: [{ zoom: capabilities.zoom.min }] as any,
+            });
+          }
+        } catch (zoomError) {
+          console.error("Failed to reduce profile camera zoom", zoomError);
+        }
 
         profileCameraStreamRef.current = stream;
         const videos = [
