@@ -3,12 +3,14 @@
 import {
   Crown,
   Edit3,
+  ChevronLeft,
   ChevronRight,
   LogOut,
   Trash2,
   ShieldCheck,
   FileText,
   Camera,
+  Upload,
   Bookmark,
   User as UserIcon,
   X,
@@ -86,6 +88,7 @@ export default function ProfilePage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const profileCameraVideoRef = useRef<HTMLVideoElement>(null);
+  const profileCameraBackdropVideoRef = useRef<HTMLVideoElement>(null);
   const profileCameraStreamRef = useRef<MediaStream | null>(null);
 
   // No explicit session refresh needed on profile mount.
@@ -182,9 +185,14 @@ export default function ProfilePage() {
       ?.getTracks()
       .forEach((track) => track.stop());
     profileCameraStreamRef.current = null;
-    if (profileCameraVideoRef.current) {
-      profileCameraVideoRef.current.srcObject = null;
-    }
+    [
+      profileCameraVideoRef.current,
+      profileCameraBackdropVideoRef.current,
+    ].forEach((video) => {
+      if (video) {
+        video.srcObject = null;
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -267,18 +275,25 @@ export default function ProfilePage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode,
-            width: { ideal: 1280 },
+            width: { ideal: 960 },
             height: { ideal: 1280 },
+            aspectRatio: { ideal: 3 / 4 },
           },
           audio: false,
         });
 
         profileCameraStreamRef.current = stream;
-        const video = profileCameraVideoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          await video.play().catch(() => {});
-        }
+        const videos = [
+          profileCameraVideoRef.current,
+          profileCameraBackdropVideoRef.current,
+        ];
+        await Promise.all(
+          videos.map(async (video) => {
+            if (!video) return;
+            video.srcObject = stream;
+            await video.play().catch(() => {});
+          }),
+        );
       } catch (cameraError) {
         console.error("Failed to start profile camera", cameraError);
         setProfileCameraError(
@@ -333,7 +348,12 @@ export default function ProfilePage() {
       return;
     }
 
-    // Draw the raw camera frame without mirroring so saved images stay natural.
+    // Some front cameras return a mirrored frame. Flip it back before saving
+    // so the uploaded image matches the user's real orientation.
+    if (profileCameraFacingMode === "user") {
+      context.translate(canvas.width, 0);
+      context.scale(-1, 1);
+    }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const blob = await new Promise<Blob | null>((resolve) => {
@@ -985,71 +1005,113 @@ export default function ProfilePage() {
         )}
 
         {showCameraCaptureModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 px-4 py-6">
-            <div className="mx-auto flex h-full max-w-[420px] flex-col rounded-[28px] bg-[#111111] p-4 text-white">
-              <div className="mb-4 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={closeCameraCaptureModal}
-                  className="rounded-full bg-white/10 p-2"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-                <h3 className="text-[17px] font-semibold">Take Photo</h3>
-                <button
-                  type="button"
-                  onClick={() => void switchProfileCamera()}
-                  className="rounded-full bg-white/10 p-2"
-                  disabled={isStartingCamera}
-                >
-                  <RefreshCw className="h-5 w-5" />
-                </button>
+          <div className="fixed inset-0 z-50 overflow-hidden bg-[#0E0A08] text-white">
+            {!profileCameraError && (
+              <div className="absolute inset-0 overflow-hidden">
+                <video
+                  ref={profileCameraBackdropVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className={`h-full w-full scale-[1.05] object-cover blur-[10px] brightness-[0.45] ${
+                    profileCameraFacingMode === "user" ? "scale-x-[-1]" : ""
+                  }`}
+                />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12),rgba(0,0,0,0.2)_22%,rgba(0,0,0,0.24)_78%,rgba(0,0,0,0.34))]" />
+
+            <div className="relative flex h-full min-h-0 flex-col px-5 pb-[max(env(safe-area-inset-bottom),1.1rem)] pt-[max(env(safe-area-inset-top),0.9rem)]">
+              <header className="relative flex h-12 items-center justify-between pt-1">
+                <div className="flex w-20 justify-start">
+                  <button
+                    type="button"
+                    onClick={closeCameraCaptureModal}
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-black/15 text-white transition active:scale-95"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <h3 className="absolute inset-x-0 mx-auto text-center text-[17px] font-semibold tracking-wide text-white pointer-events-none">
+                  Take Photo
+                </h3>
+
+                <div className="flex w-20 justify-end">
+                  <p className="text-right text-[15px] font-semibold text-[#00D0E6]">
+                    Profile
+                  </p>
+                </div>
+              </header>
+
+              <div className="relative flex min-h-0 flex-1 items-center justify-center py-4">
+                <div className="relative aspect-[3/4] h-full w-auto max-h-full max-w-[min(100%,430px)] overflow-hidden rounded-[40px] border-4 border-white bg-transparent shadow-[0_24px_60px_rgba(0,0,0,0.4)]">
+                  {profileCameraError ? (
+                    <div className="flex h-full flex-col items-center justify-center bg-[#1A1715] px-8 text-center">
+                      <Camera className="h-10 w-10 text-white/75" />
+                      <p className="mt-4 text-[15px] font-medium text-white">
+                        Camera unavailable
+                      </p>
+                      <p className="mt-2 text-sm text-white/70">
+                        {profileCameraError}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <video
+                        ref={profileCameraVideoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className={`h-full w-full bg-black object-cover ${
+                          profileCameraFacingMode === "user"
+                            ? "scale-x-[-1]"
+                            : ""
+                        }`}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/10" />
+                    </>
+                  )}
+
+                  {isStartingCamera && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/25 border-t-white" />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="relative flex-1 overflow-hidden rounded-[24px] bg-black">
-                {profileCameraError ? (
-                  <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                    <Camera className="h-12 w-12 text-white/70" />
-                    <p className="mt-4 text-[15px] leading-6 text-white/90">
-                      {profileCameraError}
-                    </p>
-                  </div>
-                ) : (
-                  <video
-                    ref={profileCameraVideoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="h-full w-full object-cover"
-                  />
-                )}
+              <div className="mx-auto mt-3 w-full max-w-[350px] rounded-[36px] border border-white/10 bg-[#1E1B19]/50 p-3.5 shadow-[0_24px_48px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCameraCaptureModal();
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex h-12 w-12 items-center justify-center justify-self-start rounded-full border border-white/5 bg-white/10 text-white transition active:scale-95"
+                  >
+                    <Upload className="h-5 w-5" />
+                  </button>
 
-                {isStartingCamera && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/25 border-t-white" />
-                  </div>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleCaptureProfilePhoto()}
+                    disabled={Boolean(profileCameraError) || isStartingCamera}
+                    className="relative mx-3 flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-white bg-white/5 transition active:scale-95 disabled:opacity-30"
+                  >
+                    <div className="h-[60px] w-[60px] rounded-full bg-white shadow-[0_4px_12px_rgba(0,0,0,0.3)]" />
+                  </button>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeCameraCaptureModal();
-                    fileInputRef.current?.click();
-                  }}
-                  className="flex h-14 items-center justify-center rounded-full bg-white/10 text-[15px] font-medium text-white"
-                >
-                  Upload File
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCaptureProfilePhoto()}
-                  disabled={Boolean(profileCameraError) || isStartingCamera}
-                  className="flex h-14 items-center justify-center rounded-full bg-[#14C3CF] text-[15px] font-medium text-white disabled:opacity-50"
-                >
-                  Capture Photo
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void switchProfileCamera()}
+                    disabled={isStartingCamera}
+                    className="flex h-12 w-12 items-center justify-center justify-self-end rounded-full border border-white/5 bg-white/10 text-white transition active:scale-95 disabled:opacity-40"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
