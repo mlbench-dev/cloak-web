@@ -12,6 +12,7 @@ import {
   Bookmark,
   User as UserIcon,
   X,
+  RefreshCw,
   Trophy,
   Flag,
   Shield,
@@ -68,6 +69,15 @@ export default function ProfilePage() {
   const [profileZoom, setProfileZoom] = useState(1);
   const [profileCroppedAreaPixels, setProfileCroppedAreaPixels] =
     useState<any>(null);
+  const [showPhotoSourceModal, setShowPhotoSourceModal] = useState(false);
+  const [showCameraCaptureModal, setShowCameraCaptureModal] = useState(false);
+  const [profileCameraFacingMode, setProfileCameraFacingMode] = useState<
+    "user" | "environment"
+  >("user");
+  const [profileCameraError, setProfileCameraError] = useState<string | null>(
+    null,
+  );
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [postsViewTitle, setPostsViewTitle] = useState("");
   const [postsScope, setPostsScope] = useState<ProfilePostsScope>("my");
   const [postsQuery, setPostsQuery] = useState("");
@@ -75,7 +85,8 @@ export default function ProfilePage() {
   const [postsLoading, setPostsLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const profileCameraVideoRef = useRef<HTMLVideoElement>(null);
+  const profileCameraStreamRef = useRef<MediaStream | null>(null);
 
   // No explicit session refresh needed on profile mount.
   // useSession() already loads the current session, and extra update() calls can trigger repeated auth requests.
@@ -166,6 +177,22 @@ export default function ProfilePage() {
     };
   }, [pendingProfileImageUrl]);
 
+  const stopProfileCameraStream = useCallback(() => {
+    profileCameraStreamRef.current
+      ?.getTracks()
+      .forEach((track) => track.stop());
+    profileCameraStreamRef.current = null;
+    if (profileCameraVideoRef.current) {
+      profileCameraVideoRef.current.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopProfileCameraStream();
+    };
+  }, [stopProfileCameraStream]);
+
   useEffect(() => {
     const fetchProfileStats = async () => {
       setStatsLoading(true);
@@ -199,16 +226,131 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfileCropImageSrc(reader.result as string);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
+    applyProfileImageFile(file);
 
     if (e.target) {
       e.target.value = "";
     }
+  };
+
+  const applyProfileImageFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setProfileCropImageSrc(reader.result as string);
+        setError(null);
+      };
+      reader.readAsDataURL(file);
+    },
+    [setError],
+  );
+
+  const startProfileCamera = useCallback(
+    async (facingMode: "user" | "environment") => {
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.mediaDevices?.getUserMedia
+      ) {
+        setProfileCameraError(
+          "Camera is not supported on this device. Please upload a photo instead.",
+        );
+        setShowCameraCaptureModal(true);
+        return;
+      }
+
+      setIsStartingCamera(true);
+      setProfileCameraError(null);
+      setShowCameraCaptureModal(true);
+
+      try {
+        stopProfileCameraStream();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 1280 },
+          },
+          audio: false,
+        });
+
+        profileCameraStreamRef.current = stream;
+        const video = profileCameraVideoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+        }
+      } catch (cameraError) {
+        console.error("Failed to start profile camera", cameraError);
+        setProfileCameraError(
+          "Allow camera access or upload a photo from your device.",
+        );
+      } finally {
+        setIsStartingCamera(false);
+      }
+    },
+    [stopProfileCameraStream],
+  );
+
+  const openPhotoSourceModal = () => {
+    setShowPhotoSourceModal(true);
+    setProfileCameraError(null);
+  };
+
+  const openCameraCapture = async (facingMode: "user" | "environment") => {
+    setShowPhotoSourceModal(false);
+    setProfileCameraFacingMode(facingMode);
+    await startProfileCamera(facingMode);
+  };
+
+  const closeCameraCaptureModal = useCallback(() => {
+    stopProfileCameraStream();
+    setShowCameraCaptureModal(false);
+    setProfileCameraError(null);
+    setIsStartingCamera(false);
+  }, [stopProfileCameraStream]);
+
+  const switchProfileCamera = async () => {
+    const nextFacingMode =
+      profileCameraFacingMode === "user" ? "environment" : "user";
+    setProfileCameraFacingMode(nextFacingMode);
+    await startProfileCamera(nextFacingMode);
+  };
+
+  const handleCaptureProfilePhoto = async () => {
+    const video = profileCameraVideoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+      toast.error("Camera is not ready yet. Please try again.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      toast.error("Unable to capture photo. Please try again.");
+      return;
+    }
+
+    // Draw the raw camera frame without mirroring so saved images stay natural.
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", 0.95);
+    });
+
+    if (!blob) {
+      toast.error("Unable to capture photo. Please try again.");
+      return;
+    }
+
+    const file = new File([blob], "profile-camera.jpg", {
+      type: "image/jpeg",
+    });
+
+    closeCameraCaptureModal();
+    applyProfileImageFile(file);
   };
 
   const handleApplyProfileCrop = async () => {
@@ -315,6 +457,7 @@ export default function ProfilePage() {
           name: editData.displayName,
           image: nextImage,
         });
+        toast.success("Profile updated successfully.");
         if (pendingProfileImageUrl) {
           URL.revokeObjectURL(pendingProfileImageUrl);
         }
@@ -655,7 +798,7 @@ export default function ProfilePage() {
           <div className="flex flex-col items-center space-y-4">
             <div className="relative">
               <div
-                onClick={() => fileInputRef.current?.click()}
+                onClick={openPhotoSourceModal}
                 className="relative h-32 w-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-sm cursor-pointer active:scale-95 transition-transform bg-gray-200 flex items-center justify-center"
               >
                 {imageLoading && !profileImage && (
@@ -678,19 +821,11 @@ export default function ProfilePage() {
                 className="hidden"
                 onChange={handleProfileImageUpload}
               />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="user"
-                className="hidden"
-                onChange={handleProfileImageUpload}
-              />
               <button
                 disabled={isUploading}
                 onClick={(e) => {
                   e.stopPropagation();
-                  cameraInputRef.current?.click();
+                  openPhotoSourceModal();
                 }}
                 className="absolute bottom-1 right-1 h-8 w-8 bg-[#14C3CF] rounded-full flex items-center justify-center border-2 border-white disabled:opacity-50 active:scale-90 transition-all"
               >
@@ -799,6 +934,122 @@ export default function ProfilePage() {
                   }
                   className="w-full accent-[#14C3CF]"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPhotoSourceModal && (
+          <div className="fixed inset-0 z-50 flex items-end bg-black/45 p-4">
+            <div className="mx-auto w-full max-w-[420px] rounded-[28px] bg-white p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-[18px] font-semibold text-[#2D2D2D]">
+                  Change profile photo
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoSourceModal(false)}
+                  className="rounded-full p-2 text-[#8F98A0]"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => void openCameraCapture("user")}
+                  className="flex h-14 w-full items-center justify-center rounded-full bg-[#14C3CF] text-[16px] font-medium text-white"
+                >
+                  Take Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPhotoSourceModal(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex h-14 w-full items-center justify-center rounded-full bg-[#F5F5F5] text-[16px] font-medium text-[#2D2D2D]"
+                >
+                  Upload From Device
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoSourceModal(false)}
+                  className="flex h-14 w-full items-center justify-center rounded-full bg-white text-[16px] font-medium text-[#8F98A0]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCameraCaptureModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 px-4 py-6">
+            <div className="mx-auto flex h-full max-w-[420px] flex-col rounded-[28px] bg-[#111111] p-4 text-white">
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={closeCameraCaptureModal}
+                  className="rounded-full bg-white/10 p-2"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <h3 className="text-[17px] font-semibold">Take Photo</h3>
+                <button
+                  type="button"
+                  onClick={() => void switchProfileCamera()}
+                  className="rounded-full bg-white/10 p-2"
+                  disabled={isStartingCamera}
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="relative flex-1 overflow-hidden rounded-[24px] bg-black">
+                {profileCameraError ? (
+                  <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                    <Camera className="h-12 w-12 text-white/70" />
+                    <p className="mt-4 text-[15px] leading-6 text-white/90">
+                      {profileCameraError}
+                    </p>
+                  </div>
+                ) : (
+                  <video
+                    ref={profileCameraVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
+                )}
+
+                {isStartingCamera && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/25 border-t-white" />
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCameraCaptureModal();
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex h-14 items-center justify-center rounded-full bg-white/10 text-[15px] font-medium text-white"
+                >
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCaptureProfilePhoto()}
+                  disabled={Boolean(profileCameraError) || isStartingCamera}
+                  className="flex h-14 items-center justify-center rounded-full bg-[#14C3CF] text-[15px] font-medium text-white disabled:opacity-50"
+                >
+                  Capture Photo
+                </button>
               </div>
             </div>
           </div>
