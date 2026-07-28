@@ -581,13 +581,18 @@ export default function ProfilePage() {
           console.error("Failed to persist identity draft:", storageError);
         }
 
-        // Update the session status
-        await update({
+        router.replace("/reference-media?mode=profile");
+        // Refresh the session in the background so navigation is immediate.
+        void update({
           identityVerificationStatus: "PENDING",
           documentType: data.documentType,
+        }).catch((sessionError) => {
+          console.error(
+            "Failed to refresh session after identity submit",
+            sessionError,
+          );
         });
-        router.push("/reference-media?mode=profile");
-        return true;
+        return false;
       } else {
         const resData = await response.json();
         setError(resData.error || "Failed to submit identity verification.");
@@ -610,6 +615,10 @@ export default function ProfilePage() {
     setPostsViewTitle(title);
     router.push(`/profile?view=posts&scope=${scope}`);
   };
+
+  useEffect(() => {
+    router.prefetch("/reference-media?mode=profile");
+  }, [router]);
 
   useEffect(() => {
     if (view !== "posts" || (postsScope !== "my" && postsScope !== "saved")) {
@@ -637,7 +646,7 @@ export default function ProfilePage() {
     return () => clearTimeout(timeout);
   }, [view, postsScope, postsQuery, postsViewTitle]);
 
-  const handleVerificationClick = () => {
+  const handleVerificationClick = async () => {
     if (user?.identityVerificationStatus === "APPROVED") {
       router.push("/verification?status=APPROVED");
     } else if (user?.identityVerificationStatus === "REJECTED") {
@@ -645,6 +654,17 @@ export default function ProfilePage() {
     } else if (isVerified) {
       router.push("/verification?status=APPROVED");
     } else if (user?.identityVerificationStatus === "PENDING") {
+      try {
+        const response = await fetch("/api/auth/identity-verify");
+        const data = await response.json().catch(() => null);
+        if (response.ok && data?.verificationInProgress) {
+          router.push("/verification?status=PENDING");
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load verification progress", error);
+      }
+
       setView("verified-status");
     } else {
       setView("verification");

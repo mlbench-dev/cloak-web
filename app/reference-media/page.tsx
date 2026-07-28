@@ -37,7 +37,6 @@ const getVerificationStatusClass = (status?: string) => {
 };
 
 function ReferenceMediaContent() {
-
   const {
     data: session,
     status: authStatus,
@@ -51,7 +50,8 @@ function ReferenceMediaContent() {
   const [localImages, setLocalImages] = useState<LocalImage[]>([]);
   const [dbImages, setDbImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isStartingVerification, setIsStartingVerification] = useState(false);
   const [needsReferenceMediaVerification, setNeedsReferenceMediaVerification] =
     useState(false);
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
@@ -166,7 +166,7 @@ function ReferenceMediaContent() {
       return;
     }
 
-    setUploading(true);
+    setIsUploadingImages(true);
     const toastId = toast.loading("Uploading protected images...");
     try {
       await handleUploadLocalImages(newLocalImages);
@@ -186,12 +186,14 @@ function ReferenceMediaContent() {
         },
       );
     } finally {
-      setUploading(false);
+      setIsUploadingImages(false);
     }
   };
 
   const handleContinue = async () => {
-    setUploading(true);
+    if (isUploadingImages || isStartingVerification) return;
+
+    let startedVerification = false;
     const uploadToastId =
       localImages.length > 0
         ? toast.loading("Uploading protected images...")
@@ -199,12 +201,14 @@ function ReferenceMediaContent() {
 
     try {
       if (localImages.length > 0) {
+        setIsUploadingImages(true);
         await handleUploadLocalImages(localImages);
         setLocalImages([]);
         setShowVerificationMessage(true);
         toast.success("Protected images uploaded.", {
           id: uploadToastId || undefined,
         });
+        setIsUploadingImages(false);
       }
 
       const refreshedImages = await fetchDbImages();
@@ -213,57 +217,55 @@ function ReferenceMediaContent() {
       if (!hasRequiredImages) {
         if (uploadToastId) toast.dismiss(uploadToastId);
         toast.error("Please add 3 reference images before continuing.");
-        setUploading(false);
         return;
       }
 
-      const response = await fetch("/api/reference-media/verify", {
-        method: "POST",
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        console.error("Verification error:", data);
-        toast.error(
-          data?.error ||
-            "Server not available, try again later from the Protected Media menu.",
-        );
-        return;
-      }
+      startedVerification = true;
+      setIsStartingVerification(true);
+      await updateSession({ identityVerificationStatus: "PENDING" });
 
-      const verificationStatus = String(
-        data?.identityVerificationStatus || "",
-      ).toUpperCase();
+      void (async () => {
+        try {
+          const response = await fetch("/api/reference-media/verify", {
+            method: "POST",
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            console.error("Verification error:", data);
+            toast.error(
+              data?.error ||
+                "Server not available, try again later from the Protected Media menu.",
+            );
+            return;
+          }
 
-      if (verificationStatus) {
-        await updateSession({ identityVerificationStatus: verificationStatus });
-      }
+          const verificationStatus = String(
+            data?.identityVerificationStatus || "",
+          ).toUpperCase();
 
-      if (mode === "onboarding") {
-        toast.success(
-          "Verification process started. You can check the result on Profile tab.",
-        );
-        router.push("/dashboard");
-        return;
-      }
-
-      if (
-        verificationStatus === "APPROVED" ||
-        verificationStatus === "REJECTED"
-      ) {
-        router.replace(`/verification?status=${verificationStatus}`);
-        return;
-      }
+          if (verificationStatus) {
+            await updateSession({
+              identityVerificationStatus: verificationStatus,
+            });
+          }
+        } catch (error) {
+          console.error("Verification start failed:", error);
+          toast.error("Unable to start verification. Please try again.");
+        }
+      })();
 
       toast.success(
-        "Verification started. You can check your status from the Verification screen.",
+        "We will verify your identity ASAP. Please check your Profile after some time.",
       );
-      router.push("/profile");
+      router.push("/dashboard");
     } catch (error) {
       console.error("Verification start failed:", error);
       if (uploadToastId) toast.dismiss(uploadToastId);
       toast.error("Unable to start verification. Please try again.");
     } finally {
-      setUploading(false);
+      if (!startedVerification) {
+        setIsUploadingImages(false);
+      }
     }
   };
 
@@ -317,7 +319,7 @@ function ReferenceMediaContent() {
         dbImages={dbImages.map((img) => img.imageUrl)}
         localImages={localImages}
         onClose={() => setView("MAIN")}
-        isSaving={uploading}
+        isSaving={isUploadingImages}
         onComplete={(newLocalImages) => {
           void handleCaptureComplete(newLocalImages);
         }}
@@ -415,7 +417,7 @@ function ReferenceMediaContent() {
                             : "cursor-pointer opacity-70"
                         }`}
                       >
-                        {uploading ? (
+                        {isUploadingImages ? (
                           <div className="h-8 w-8 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
                         ) : (
                           <>
@@ -473,7 +475,7 @@ function ReferenceMediaContent() {
                         onClick={() => setView("CAPTURE")}
                         className="h-full w-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-[#14C3CF] hover:bg-[#14C3CF]/5 transition-all"
                       >
-                        {uploading ? (
+                        {isUploadingImages ? (
                           <div className="h-8 w-8 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
                         ) : (
                           <>
@@ -510,7 +512,7 @@ function ReferenceMediaContent() {
           {mode === "onboarding" && (
             <button
               onClick={() => router.replace("/dashboard")}
-              disabled={uploading}
+              disabled={isUploadingImages || isStartingVerification}
               className="w-full h-14 rounded-full border border-[#D9E7E9] bg-white text-[#2D2D2D] font-medium text-[15px] active:scale-[0.98] transition-all disabled:opacity-60"
             >
               I'll pass this time
@@ -519,14 +521,16 @@ function ReferenceMediaContent() {
 
           <button
             onClick={handleContinue}
-            disabled={totalImageCount < 3 || uploading}
+            disabled={
+              totalImageCount < 3 || isUploadingImages || isStartingVerification
+            }
             className={`w-full h-14 rounded-full font-semibold text-lg active:scale-[0.98] transition-all flex items-center justify-center ${
               totalImageCount >= 3
                 ? "bg-[#14C3CF] text-white shadow-lg shadow-[#14C3CF]/20"
                 : "bg-[#E5E5E5] text-[#8F98A0] cursor-not-allowed"
             }`}
           >
-            {uploading ? (
+            {isUploadingImages ? (
               <div className="h-6 w-6 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto" />
             ) : mode === "onboarding" ? (
               "Submit"

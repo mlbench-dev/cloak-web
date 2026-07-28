@@ -6,7 +6,43 @@ import { useRouter } from "next/navigation";
 
 type VerificationStatusScreenProps = {
   status: "APPROVED" | "REJECTED";
+  failureReason?: string | null;
+  verificationResult?: {
+    average_similarity?: number;
+    threshold?: number;
+    scores?: Record<string, number>;
+    detail?: string;
+    status?: string;
+    verified?: boolean;
+  } | null;
+  verificationHistory?: Array<{
+    status?: string | null;
+    reason?: string | null;
+  }>;
 };
+
+function getFriendlyScoreLabel(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized === "face1_vs_id") return "Protected photo 1 match";
+  if (normalized === "face2_vs_id") return "Protected photo 2 match";
+  if (normalized === "face3_vs_id") return "Protected photo 3 match";
+  if (normalized === "face1") return "Protected photo 1";
+  if (normalized === "face2") return "Protected photo 2";
+  if (normalized === "face3") return "Protected photo 3";
+  if (normalized === "id_card") return "Identity document";
+  return label.replaceAll("_", " ");
+}
+
+function formatVerificationReason(reason: string) {
+  return reason
+    .replace(/\bface1_vs_id\b/gi, "Protected photo 1 match")
+    .replace(/\bface2_vs_id\b/gi, "Protected photo 2 match")
+    .replace(/\bface3_vs_id\b/gi, "Protected photo 3 match")
+    .replace(/\bface1\b/gi, "protected photo 1")
+    .replace(/\bface2\b/gi, "protected photo 2")
+    .replace(/\bface3\b/gi, "protected photo 3")
+    .replace(/\bid_card\b/gi, "identity document");
+}
 
 function ShieldStatusIcon({ status }: { status: "APPROVED" | "REJECTED" }) {
   const isApproved = status === "APPROVED";
@@ -95,9 +131,22 @@ function BenefitRow({ icon, text }: { icon: ReactNode; text: string }) {
 
 export default function VerificationStatusScreen({
   status,
+  failureReason,
+  verificationResult,
+  verificationHistory,
 }: VerificationStatusScreenProps) {
   const router = useRouter();
   const isApproved = status === "APPROVED";
+  const scoreEntries = Object.entries(verificationResult?.scores ?? {}).filter(
+    ([, value]) => typeof value === "number" && !Number.isNaN(value),
+  );
+  const hasScoreMismatch =
+    typeof verificationResult?.average_similarity === "number" &&
+    typeof verificationResult?.threshold === "number";
+  const showActualReason = Boolean(failureReason) || hasScoreMismatch;
+  const recentHistory = (verificationHistory ?? []).filter(
+    (entry) => entry?.status || entry?.reason,
+  );
 
   return (
     <main className="min-h-full bg-white font-sf-pro-display text-[#111111]">
@@ -211,14 +260,62 @@ export default function VerificationStatusScreen({
             <>
               <section className="mt-10 rounded-[30px] border border-[#F3ECEC] bg-[#FFFCFC] px-5 py-5 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                 <h3 className="text-[17px] font-semibold leading-6 text-[#F04B43]">
-                  Possible reasons
+                  {showActualReason
+                    ? "Verification result"
+                    : "Possible reasons"}
                 </h3>
-                <ul className="mt-4 list-disc space-y-4 pl-5 text-[16px] leading-7 text-[#272727] marker:text-[#272727]">
-                  <li>The document image is blurry or unclear</li>
-                  <li>Information couldn&apos;t be read properly</li>
-                  <li>The document may be expired</li>
-                  <li>The document doesn&apos;t match your account details</li>
-                </ul>
+                {showActualReason ? (
+                  <div className="mt-4 space-y-4 text-left">
+                    {failureReason ? (
+                      <p className="text-[16px] leading-7 text-[#272727]">
+                        {formatVerificationReason(failureReason)}
+                      </p>
+                    ) : null}
+                    {hasScoreMismatch ? (
+                      <div className="rounded-[20px] bg-white/90 px-4 py-4">
+                        <div className="flex items-center justify-between text-[15px] leading-6 text-[#272727]">
+                          <span>Average similarity</span>
+                          <span className="font-semibold">
+                            {(
+                              verificationResult?.average_similarity! * 100
+                            ).toFixed(2)}
+                            %
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-[15px] leading-6 text-[#272727]">
+                          <span>Required threshold</span>
+                          <span className="font-semibold">
+                            {(verificationResult?.threshold! * 100).toFixed(2)}%
+                          </span>
+                        </div>
+                        {scoreEntries.length > 0 ? (
+                          <div className="mt-4 space-y-2 border-t border-[#F0E2E2] pt-3">
+                            {scoreEntries.map(([label, value]) => (
+                              <div
+                                key={label}
+                                className="flex items-center justify-between text-[14px] leading-6 text-[#6B7280]"
+                              >
+                                <span>{getFriendlyScoreLabel(label)}</span>
+                                <span className="font-medium text-[#272727]">
+                                  {(value * 100).toFixed(2)}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <ul className="mt-4 list-disc space-y-4 pl-5 text-[16px] leading-7 text-[#272727] marker:text-[#272727]">
+                    <li>The document image is blurry or unclear</li>
+                    <li>Information couldn&apos;t be read properly</li>
+                    <li>The document may be expired</li>
+                    <li>
+                      The document doesn&apos;t match your account details
+                    </li>
+                  </ul>
+                )}
               </section>
 
               <section className="mt-7 rounded-[22px] border border-[#EBF1F2] bg-[#FCFEFE] px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
@@ -237,6 +334,39 @@ export default function VerificationStatusScreen({
                   </div>
                 </div>
               </section>
+
+              {recentHistory.length > 0 ? (
+                <section className="mt-7 rounded-[22px] border border-[#EBF1F2] bg-[#FCFEFE] px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                  <h3 className="text-[17px] font-semibold leading-6 text-[#272727]">
+                    Recent verification results
+                  </h3>
+                  <div className="mt-4 space-y-3">
+                    {recentHistory.map((entry, index) => (
+                      <div
+                        key={`${entry.status || "unknown"}-${entry.reason || "no-reason"}-${index}`}
+                        className="rounded-[18px] bg-white px-4 py-3"
+                      >
+                        <p
+                          className={`text-[14px] font-semibold ${
+                            String(entry.status).toUpperCase() === "APPROVED"
+                              ? "text-[#16C2CE]"
+                              : "text-[#F04B43]"
+                          }`}
+                        >
+                          {String(entry.status).toUpperCase() === "APPROVED"
+                            ? "Approved"
+                            : "Rejected"}
+                        </p>
+                        {entry.reason ? (
+                          <p className="mt-1 text-[14px] leading-6 text-[#5F6670]">
+                            {formatVerificationReason(entry.reason)}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               <div className="mt-auto space-y-4 pt-10">
                 <button
