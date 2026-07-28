@@ -27,6 +27,19 @@ export async function GET() {
         ? verification.verification_images
         : [],
       status: verification?.status || null,
+      verificationInProgress: Boolean(verification?.verificationInProgress),
+      verificationResult: verification?.verificationResult || null,
+      verificationFailureReason:
+        verification?.verificationFailureReason || null,
+      verificationHistory: Array.isArray(verification?.verificationHistory)
+        ? verification.verificationHistory
+            .slice(-5)
+            .reverse()
+            .map((entry) => ({
+              status: entry?.status || null,
+              reason: entry?.reason || null,
+            }))
+        : [],
     });
   } catch (error) {
     console.error("Error fetching identity verification:", error);
@@ -72,6 +85,7 @@ export async function POST(request: Request) {
             documentType,
             verification_images: documentUrls,
             status: "PENDING",
+            verificationInProgress: false,
             updatedAt: new Date(),
           },
         },
@@ -83,6 +97,7 @@ export async function POST(request: Request) {
         documentType,
         verification_images: documentUrls,
         status: "PENDING",
+        verificationInProgress: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       });

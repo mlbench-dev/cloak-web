@@ -10,6 +10,48 @@ const VERIFICATION_API_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verificat
 const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/update`;
 const VERIFICATION_API_HEALTH_ENDPOINT = `${VERIFICATION_API_BASE_URL}/health`;
 
+function toPercent(value: unknown) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function getVerificationFailureReason(externalJson: any) {
+  const detail = String(
+    externalJson?.detail || externalJson?.message || "",
+  ).trim();
+  if (detail) {
+    return detail;
+  }
+
+  const verifiedFlag = externalJson?.verified;
+  const normalizedStatus = String(externalJson?.status || "").toUpperCase();
+  const averageSimilarity = toPercent(externalJson?.average_similarity);
+  const threshold = toPercent(externalJson?.threshold);
+
+  if (verifiedFlag === false || normalizedStatus.includes("UNVERIFIED")) {
+    if (averageSimilarity && threshold) {
+      return `Face match similarity was ${averageSimilarity}, which is below the required ${threshold} threshold.`;
+    }
+    return "The submitted protected media did not match the identity document closely enough.";
+  }
+
+  return null;
+}
+
+function getVerificationHistoryEntry(
+  status: "APPROVED" | "REJECTED",
+  externalJson: any,
+) {
+  return {
+    status,
+    reason:
+      status === "REJECTED" ? getVerificationFailureReason(externalJson) : null,
+    createdAt: new Date(),
+  };
+}
+
 export async function POST() {
   try {
     const session = await getServerSession(authOptions);
@@ -168,6 +210,9 @@ export async function POST() {
         {
           $set: {
             status: "PENDING",
+            verificationInProgress: true,
+            verificationResult: null,
+            verificationFailureReason: null,
             updatedAt: new Date(),
           },
         },
@@ -182,6 +227,17 @@ export async function POST() {
     });
 
     if (!healthResponse.ok) {
+      if (verificationDoc._id) {
+        await db.collection("identityVerifications").updateOne(
+          { _id: verificationDoc._id },
+          {
+            $set: {
+              verificationInProgress: false,
+              updatedAt: new Date(),
+            },
+          },
+        );
+      }
       console.error(
         "Verification service health check failed:",
         healthResponse.status,
@@ -197,6 +253,17 @@ export async function POST() {
 
     const healthJson = await healthResponse.json().catch(() => null);
     if (healthJson && String(healthJson.status).toLowerCase() !== "ok") {
+      if (verificationDoc._id) {
+        await db.collection("identityVerifications").updateOne(
+          { _id: verificationDoc._id },
+          {
+            $set: {
+              verificationInProgress: false,
+              updatedAt: new Date(),
+            },
+          },
+        );
+      }
       console.error("Verification service unhealthy:", healthJson);
       return NextResponse.json(
         {
@@ -299,15 +366,31 @@ export async function POST() {
     }
 
     if (verificationDoc._id) {
-      await db.collection("identityVerifications").updateOne(
-        { _id: verificationDoc._id },
-        {
+      const verificationFailureReason =
+        identityVerificationStatus === "REJECTED"
+          ? getVerificationFailureReason(externalJson)
+          : null;
+      const historyEntry = getVerificationHistoryEntry(
+        identityVerificationStatus,
+        externalJson,
+      );
+      await db
+        .collection("identityVerifications")
+        .updateOne({ _id: verificationDoc._id }, {
           $set: {
             status: identityVerificationStatus,
+            verificationInProgress: false,
+            verificationResult: externalJson,
+            verificationFailureReason,
             updatedAt: new Date(),
           },
-        },
-      );
+          $push: {
+            verificationHistory: {
+              $each: [historyEntry],
+              $slice: -5,
+            },
+          },
+        } as any);
     }
 
     return NextResponse.json({
