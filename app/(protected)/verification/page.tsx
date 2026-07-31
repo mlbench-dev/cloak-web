@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ChevronLeft } from "lucide-react";
@@ -59,12 +59,13 @@ export default function VerificationPage() {
     }
   }, [router, status, queryStatus, sessionStatus]);
 
+  const hasFetchedVerificationDetails = useRef(false);
+
   useEffect(() => {
-    if (status !== "authenticated") {
+    if (status !== "authenticated" || hasFetchedVerificationDetails.current) {
       return;
     }
-
-    let cancelled = false;
+    hasFetchedVerificationDetails.current = true;
 
     const loadVerificationDetails = async () => {
       try {
@@ -73,27 +74,21 @@ export default function VerificationPage() {
           return;
         }
         const data = await response.json().catch(() => null);
-        if (!cancelled) {
-          setVerificationDetails({
-            status: data?.status ?? null,
-            verificationInProgress: Boolean(data?.verificationInProgress),
-            verificationFailureReason: data?.verificationFailureReason ?? null,
-            verificationResult: data?.verificationResult ?? null,
-            verificationHistory: Array.isArray(data?.verificationHistory)
-              ? data.verificationHistory
-              : [],
-          });
-        }
+        setVerificationDetails({
+          status: data?.status ?? null,
+          verificationInProgress: Boolean(data?.verificationInProgress),
+          verificationFailureReason: data?.verificationFailureReason ?? null,
+          verificationResult: data?.verificationResult ?? null,
+          verificationHistory: Array.isArray(data?.verificationHistory)
+            ? data.verificationHistory
+            : [],
+        });
       } catch {
         // Ignore non-critical fetch failures and keep the generic message.
       }
     };
 
     void loadVerificationDetails();
-
-    return () => {
-      cancelled = true;
-    };
   }, [status]);
 
   const effectiveStatus = useMemo(() => {

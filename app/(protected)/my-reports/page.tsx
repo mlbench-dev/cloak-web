@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -45,9 +45,11 @@ export default function MyReportsPage() {
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [allReports, setAllReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
+  const hasFetchedReports = useRef(false);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" && !hasFetchedReports.current) {
+      hasFetchedReports.current = true;
       fetchReports();
     }
   }, [status]);

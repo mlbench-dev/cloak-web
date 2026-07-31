@@ -19,37 +19,77 @@ export async function GET(request: Request) {
     const usersCollection = db.collection("users");
     const reportsCollection = db.collection("reports");
 
-    // Get user
-    let user = await usersCollection.findOne({ _id: userId });
+    // These three don't depend on each other's results, so fetch them
+    // concurrently instead of paying for 3 sequential DB round trips.
+    const [user, reportStatsRows, recentReports] = await Promise.all([
+      usersCollection.findOne({ _id: userId }),
+      // Calculate actual stats from reports collection via a single grouped
+      // aggregate instead of loading every report document into memory.
+      reportsCollection
+        .aggregate([
+          { $match: { reportedBy: userId } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              verified: {
+                $sum: { $cond: [{ $eq: ["$status", "VERIFIED"] }, 1, 0] },
+              },
+            },
+          },
+        ])
+        .toArray(),
+      // Get recent activity (last 5 reports received)
+      reportsCollection
+        .aggregate([
+          { $match: { targetUserId: userId } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "reportedBy",
+              foreignField: "_id",
+              as: "reportedByUser",
+            },
+          },
+          { $unwind: "$reportedByUser" },
+          { $sort: { createdAt: -1 } },
+          { $limit: 5 },
+        ])
+        .toArray(),
+    ]);
+
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Calculate actual stats from reports collection
-    const sentReports = await db.collection("reports").find({ reportedBy: userId }).toArray();
-    const actualTotalReports = sentReports.length;
-    const actualVerifiedReports = sentReports.filter(r => r.status === "VERIFIED").length;
-    const actualAccuracyPercentage = actualTotalReports > 0 
-      ? Math.round((actualVerifiedReports / actualTotalReports) * 100) 
+    const reportStats = reportStatsRows[0];
+    const actualTotalReports = reportStats?.total ?? 0;
+    const actualVerifiedReports = reportStats?.verified ?? 0;
+    const actualAccuracyPercentage = actualTotalReports > 0
+      ? Math.round((actualVerifiedReports / actualTotalReports) * 100)
       : 0;
 
-    // Update user's stats in DB to make sure they're in sync
-    await usersCollection.updateOne(
-      { _id: userId },
-      {
-        $set: {
-          totalReports: actualTotalReports,
-          verifiedReports: actualVerifiedReports,
-          accuracyPercentage: actualAccuracyPercentage,
-          updatedAt: new Date()
-        }
-      }
-    );
-
-    // Refresh user object after update
-    user = await usersCollection.findOne({ _id: userId });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // Only write back when the cached stats are actually stale, instead of
+    // writing to the DB on every dashboard load.
+    if (
+      user.totalReports !== actualTotalReports ||
+      user.verifiedReports !== actualVerifiedReports ||
+      user.accuracyPercentage !== actualAccuracyPercentage
+    ) {
+      await usersCollection.updateOne(
+        { _id: userId },
+        {
+          $set: {
+            totalReports: actualTotalReports,
+            verifiedReports: actualVerifiedReports,
+            accuracyPercentage: actualAccuracyPercentage,
+            updatedAt: new Date(),
+          },
+        },
+      );
+      user.totalReports = actualTotalReports;
+      user.verifiedReports = actualVerifiedReports;
+      user.accuracyPercentage = actualAccuracyPercentage;
     }
 
     // Ensure user has achievements and progress is up-to-date
@@ -60,24 +100,6 @@ export async function GET(request: Request) {
     } as UserDoc;
     const { updatedAchievements } = await checkAchievements(userDoc);
     userAchievements = updatedAchievements;
-
-    // Get recent activity (last 5 reports received)
-    const recentReports = await reportsCollection
-      .aggregate([
-        { $match: { targetUserId: userId } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "reportedBy",
-            foreignField: "_id",
-            as: "reportedByUser",
-          },
-        },
-        { $unwind: "$reportedByUser" },
-        { $sort: { createdAt: -1 } },
-        { $limit: 5 },
-      ])
-      .toArray();
 
     // Calculate level info
     const levelInfo = calculateLevel(user.points);

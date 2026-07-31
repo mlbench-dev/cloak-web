@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ExternalLink, FileSearch } from "lucide-react";
 import Image from "next/image";
@@ -32,7 +32,6 @@ type ReportDetails = {
   aiConfidence: number;
   createdAt?: string;
   user?: ReportUser;
-  reportedByUser?: ReportUser;
 };
 
 type ResultModalStatus = "VERIFIED" | "FALSE_POSITIVE" | null;
@@ -87,7 +86,7 @@ function DecisionResultModal({
   const avatarUrl =
     reporter?.profileImage ||
     reporter?.image ||
-    `https://i.pravatar.cc/160?u=${encodeURIComponent(reporter?.username || "user")}`;
+    "/images/placeholder_avatar.png";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/20">
@@ -213,8 +212,14 @@ export default function ReportDetailsPage({
   const [reportViewType, setReportViewType] = useState<"sent" | "received">(
     initialViewType,
   );
+  const fetchedReportKeyRef = useRef<string | null>(null);
+  const fetchedPreviewUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const key = `${id}:${initialViewType}`;
+    if (fetchedReportKeyRef.current === key) return;
+    fetchedReportKeyRef.current = key;
+
     const fetchReport = async () => {
       try {
         const fetchByType = async (type: "sent" | "received") => {
@@ -250,6 +255,9 @@ export default function ReportDetailsPage({
       setPreview(null);
       return;
     }
+
+    if (fetchedPreviewUrlRef.current === report.sourceLink) return;
+    fetchedPreviewUrlRef.current = report.sourceLink;
 
     const fetchPreview = async () => {
       setPreviewLoading(true);
@@ -308,21 +316,10 @@ export default function ReportDetailsPage({
   };
 
   const getAvatarUrl = (user?: ReportUser) =>
-    user?.profileImage ||
-    user?.image ||
-    `https://i.pravatar.cc/160?u=${encodeURIComponent(user?.username || "user")}`;
+    user?.profileImage || user?.image || "/images/placeholder_avatar.png";
 
-  const reportedBy = useMemo(
-    () => report?.reportedByUser || report?.user || null,
-    [report],
-  );
-  const detailUser = useMemo(
-    () =>
-      reportViewType === "sent"
-        ? report?.user || null
-        : report?.reportedByUser || report?.user || null,
-    [report, reportViewType],
-  );
+  const reportedBy = useMemo(() => report?.user || null, [report]);
+  const detailUser = useMemo(() => report?.user || null, [report]);
   const personSectionTitle =
     reportViewType === "sent" ? "Target User" : "Reported By";
 

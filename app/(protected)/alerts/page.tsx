@@ -1,7 +1,7 @@
 "use client";
 
 import { Crown, Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type AlertFilter = "All" | "Community" | "Rewards" | "System";
 
@@ -127,9 +127,16 @@ export default function AlertsPage() {
   const [activeFilter, setActiveFilter] = useState<AlertFilter>("All");
   const [items, setItems] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Tracks which filter's request is the one allowed to apply its result.
+  // Comparing against this at apply-time (rather than a cleanup-driven
+  // "cancelled" flag) means a request never gets silently orphaned if the
+  // effect re-runs before it resolves.
+  const activeFilterRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const requestFilter = activeFilter;
+    activeFilterRequestRef.current = requestFilter;
+    const isStale = () => activeFilterRequestRef.current !== requestFilter;
 
     const fetchAlerts = async () => {
       setLoading(true);
@@ -144,7 +151,7 @@ export default function AlertsPage() {
         );
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.success) {
-          if (!cancelled) {
+          if (!isStale()) {
             setItems([]);
           }
           return;
@@ -163,25 +170,21 @@ export default function AlertsPage() {
           badgeTone: item.badgeTone,
         }));
 
-        if (!cancelled) {
+        if (!isStale()) {
           setItems(nextItems);
         }
       } catch {
-        if (!cancelled) {
+        if (!isStale()) {
           setItems([]);
         }
       } finally {
-        if (!cancelled) {
+        if (!isStale()) {
           setLoading(false);
         }
       }
     };
 
     void fetchAlerts();
-
-    return () => {
-      cancelled = true;
-    };
   }, [activeFilter]);
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { PostCard } from "../../_components/PostUI";
@@ -11,34 +11,37 @@ export default function CloakWatchPostDetailPage() {
   const params = useParams<{ id: string }>();
   const [post, setPost] = useState<CloakWatchPost | null>(null);
   const [loading, setLoading] = useState(true);
+  // Tracks which post id's request is allowed to apply its result, checked
+  // at apply-time instead of via a cleanup-driven "cancelled" flag — that
+  // way a request can never get silently orphaned if the effect re-runs
+  // before it resolves.
+  const activePostIdRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!params?.id) return;
-    let cancelled = false;
+    const requestId = params.id;
+    activePostIdRequestRef.current = requestId;
+    const isStale = () => activePostIdRequestRef.current !== requestId;
 
     const loadPost = async () => {
       try {
         setLoading(true);
-        const nextPost = await fetchPostById(params.id);
-        if (!cancelled) {
+        const nextPost = await fetchPostById(requestId);
+        if (!isStale()) {
           setPost(nextPost);
         }
       } catch {
-        if (!cancelled) {
+        if (!isStale()) {
           setPost(null);
         }
       } finally {
-        if (!cancelled) {
+        if (!isStale()) {
           setLoading(false);
         }
       }
     };
 
     void loadPost();
-
-    return () => {
-      cancelled = true;
-    };
   }, [params?.id]);
 
   return (

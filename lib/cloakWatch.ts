@@ -59,41 +59,66 @@ export function safeObjectId(value?: string | null) {
   }
 }
 
-export async function ensureCloakWatchIndexes(db: any) {
-  await Promise.all([
-    db
-      .collection(CLOAK_WATCH_POSTS_COLLECTION)
-      .createIndex({ createdAt: -1, isDeleted: 1 }),
-    db
-      .collection(CLOAK_WATCH_POSTS_COLLECTION)
-      .createIndex({ authorId: 1, createdAt: -1 }),
-    db
-      .collection(CLOAK_WATCH_VOTES_COLLECTION)
-      .createIndex({ postId: 1, userId: 1 }, { unique: true }),
-    db
-      .collection(CLOAK_WATCH_SAVES_COLLECTION)
-      .createIndex({ postId: 1, userId: 1 }, { unique: true }),
-    db
-      .collection(CLOAK_WATCH_REPORTS_COLLECTION)
-      .createIndex({ postId: 1, userId: 1 }, { unique: true }),
-  ]);
+// createIndex is idempotent but still costs a DB round trip per call, and
+// this used to run on every cloak-watch request. Cache the promise so index
+// creation only happens once per server process instead of once per request.
+let indexesEnsuredPromise: Promise<void> | null = null;
+
+export function ensureCloakWatchIndexes(db: any) {
+  if (!indexesEnsuredPromise) {
+    indexesEnsuredPromise = Promise.all([
+      db
+        .collection(CLOAK_WATCH_POSTS_COLLECTION)
+        .createIndex({ createdAt: -1, isDeleted: 1 }),
+      db
+        .collection(CLOAK_WATCH_POSTS_COLLECTION)
+        .createIndex({ authorId: 1, createdAt: -1 }),
+      db
+        .collection(CLOAK_WATCH_VOTES_COLLECTION)
+        .createIndex({ postId: 1, userId: 1 }, { unique: true }),
+      db
+        .collection(CLOAK_WATCH_SAVES_COLLECTION)
+        .createIndex({ postId: 1, userId: 1 }, { unique: true }),
+      db
+        .collection(CLOAK_WATCH_REPORTS_COLLECTION)
+        .createIndex({ postId: 1, userId: 1 }, { unique: true }),
+    ])
+      .then(() => undefined)
+      .catch((err) => {
+        // Allow the next request to retry if index creation failed.
+        indexesEnsuredPromise = null;
+        throw err;
+      });
+  }
+  return indexesEnsuredPromise;
 }
+
+export type CloakWatchAuthorOverride = {
+  username?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  verificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+};
 
 export function mapPostDocToFeedItem(
   post: CloakWatchPostDoc & { _id: ObjectId },
   viewer: ViewerMeta,
   voteCounts?: VoteCountOverride,
-  authorVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null,
+  // Posts store the author's username/avatar as a snapshot at creation
+  // time. Pass the author's *current* profile data here so posts reflect
+  // profile edits instead of showing whatever avatar was live when the
+  // post was made.
+  authorOverride?: CloakWatchAuthorOverride,
 ): CloakWatchFeedItem {
   return {
     id: post._id.toString(),
-    username: post.authorUsername,
-    displayName: post.authorDisplayName,
+    username: authorOverride?.username || post.authorUsername,
+    displayName: authorOverride?.displayName || post.authorDisplayName,
     identityVerificationStatus:
-      authorVerificationStatus ?? post.authorVerificationStatus ?? null,
+      authorOverride?.verificationStatus ?? post.authorVerificationStatus ?? null,
     level: post.authorLevel,
     createdAt: post.createdAt.toISOString(),
-    avatarUrl: post.authorAvatarUrl,
+    avatarUrl: authorOverride?.avatarUrl || post.authorAvatarUrl,
     body: post.body,
     images: normalizePostImages(post),
     up: voteCounts?.up ?? post.upvotesCount,
@@ -208,42 +233,69 @@ export async function uploadCloakWatchImages(
   files: File[],
   userId: string,
 ): Promise<CloakWatchImage[]> {
-  const uploadedImages: CloakWatchImage[] = [];
+  // Uploads for different files are independent — run them concurrently
+  // instead of one at a time.
+  return Promise.all(files.map((file) => uploadSingleCloakWatchImage(file, userId)));
+}
 
-  for (const file of files) {
-    const contentType = file.type.toLowerCase();
-    if (!contentType.startsWith("image/")) {
-      throw new Error("Only image uploads are supported.");
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error("Each image must be 10 MB or smaller.");
-    }
-
-    const safeName = file.name.replace(/\s+/g, "_");
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    // full-size upload (unchanged)
-    const fullPath = `uploads/cloak_watch/${userId}/${Date.now()}_${safeName}`;
-    const url = await uploadFileToFirebase(file, fullPath);
-
-    // generate a tiny, heavily-compressed placeholder (~2-5kb)
-    const thumbBuffer = await sharp(buffer)
-      .resize({ width: 24 }) // tiny — this is what keeps file size down
-      .jpeg({ quality: 30 })
-      .toBuffer();
-
-    const thumbFile = new File(
-      [thumbBuffer],
-      `thumb_${safeName.replace(/\.[^.]+$/, "")}.jpg`,
-      { type: "image/jpeg" },
-    );
-    const thumbPath = `uploads/cloak_watch/${userId}/thumbs/${Date.now()}_thumb_${safeName}`;
-    const thumbUrl = await uploadFileToFirebase(thumbFile, thumbPath);
-
-    uploadedImages.push({ url, thumbUrl });
+async function uploadSingleCloakWatchImage(
+  file: File,
+  userId: string,
+): Promise<CloakWatchImage> {
+  const contentType = file.type.toLowerCase();
+  if (!contentType.startsWith("image/")) {
+    throw new Error("Only image uploads are supported.");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("Each image must be 10 MB or smaller.");
   }
 
-  return uploadedImages;
+  const safeName = file.name.replace(/\s+/g, "_");
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Downscale to a size that's still plenty sharp for full-screen mobile
+  // viewing. Phone cameras often produce 4000px+ originals — uploading
+  // those unmodified is several times slower for no visible benefit.
+  const fullBuffer = await sharp(buffer)
+    .rotate()
+    .resize({
+      width: 1600,
+      height: 1600,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  const fullFile = new File(
+    [fullBuffer],
+    safeName.replace(/\.[^.]+$/, ".jpg"),
+    { type: "image/jpeg" },
+  );
+
+  // generate a tiny, heavily-compressed placeholder (~2-5kb)
+  const thumbBuffer = await sharp(buffer)
+    .resize({ width: 24 }) // tiny — this is what keeps file size down
+    .jpeg({ quality: 30 })
+    .toBuffer();
+
+  const thumbFile = new File(
+    [thumbBuffer],
+    `thumb_${safeName.replace(/\.[^.]+$/, "")}.jpg`,
+    { type: "image/jpeg" },
+  );
+
+  const timestamp = Date.now();
+  const fullPath = `uploads/cloak_watch/${userId}/${timestamp}_${safeName}`;
+  const thumbPath = `uploads/cloak_watch/${userId}/thumbs/${timestamp}_thumb_${safeName}`;
+
+  // The full-size and thumbnail uploads are independent — run them
+  // concurrently instead of sequentially.
+  const [url, thumbUrl] = await Promise.all([
+    uploadFileToFirebase(fullFile, fullPath),
+    uploadFileToFirebase(thumbFile, thumbPath),
+  ]);
+
+  return { url, thumbUrl };
 }
 function normalizePostImages(post: any): CloakWatchImage[] {
   if (Array.isArray(post.images) && post.images.length > 0) {

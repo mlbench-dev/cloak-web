@@ -41,19 +41,36 @@ export async function GET(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    const viewerMeta = await getViewerMetaForPosts(db, userId, [post as any]);
-    const voteCounts = await getVoteCountsForPosts(db, [post._id]);
-    const author = await db.collection("users").findOne(
-      { _id: post.authorId },
-      { projection: { identityVerificationStatus: 1 } },
-    );
+    const [viewerMeta, voteCounts, author] = await Promise.all([
+      getViewerMetaForPosts(db, userId, [post as any]),
+      getVoteCountsForPosts(db, [post._id]),
+      db.collection("users").findOne(
+        { _id: post.authorId },
+        {
+          projection: {
+            identityVerificationStatus: 1,
+            username: 1,
+            name: 1,
+            image: 1,
+            profileImage: 1,
+          },
+        },
+      ),
+    ]);
     return NextResponse.json({
       success: true,
       post: mapPostDocToFeedItem(
         post as any,
         viewerMeta.get(post._id.toString())!,
         voteCounts.get(post._id.toString()),
-        author?.identityVerificationStatus ?? null,
+        author
+          ? {
+              username: author.username ?? null,
+              displayName: author.name ?? null,
+              avatarUrl: author.image || author.profileImage || null,
+              verificationStatus: author.identityVerificationStatus ?? null,
+            }
+          : undefined,
       ),
     });
   } catch (error) {

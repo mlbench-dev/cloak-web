@@ -79,11 +79,6 @@ export async function GET(request: Request) {
         .toArray();
     }
 
-    const viewerMeta = await getViewerMetaForPosts(db, userId, posts as any);
-    const voteCounts = await getVoteCountsForPosts(
-      db,
-      posts.map((post) => post._id),
-    );
     const authorIds = Array.from(
       new Set(
         posts
@@ -96,19 +91,43 @@ export async function GET(request: Request) {
       .filter((authorId): authorId is NonNullable<typeof authorId> =>
         Boolean(authorId),
       );
-    const authors = authorIds.length
-      ? await db
-          .collection("users")
-          .find(
-            { _id: { $in: authorIds } },
-            { projection: { identityVerificationStatus: 1 } },
-          )
-          .toArray()
-      : [];
-    const authorStatusMap = new Map(
+
+    // These three only depend on `posts`/`authorIds`, not on each other —
+    // fetch them concurrently instead of one round trip at a time.
+    const [viewerMeta, voteCounts, authors] = await Promise.all([
+      getViewerMetaForPosts(db, userId, posts as any),
+      getVoteCountsForPosts(
+        db,
+        posts.map((post) => post._id),
+      ),
+      authorIds.length
+        ? db
+            .collection("users")
+            .find(
+              { _id: { $in: authorIds } },
+              {
+                projection: {
+                  identityVerificationStatus: 1,
+                  username: 1,
+                  name: 1,
+                  image: 1,
+                  profileImage: 1,
+                },
+              },
+            )
+            .toArray()
+        : Promise.resolve([]),
+    ]);
+
+    const authorInfoMap = new Map(
       authors.map((author) => [
         author._id.toString(),
-        author.identityVerificationStatus ?? null,
+        {
+          username: author.username ?? null,
+          displayName: author.name ?? null,
+          avatarUrl: author.image || author.profileImage || null,
+          verificationStatus: author.identityVerificationStatus ?? null,
+        },
       ]),
     );
     const items = posts.map((post) =>
@@ -116,7 +135,7 @@ export async function GET(request: Request) {
         post as any,
         viewerMeta.get(post._id.toString())!,
         voteCounts.get(post._id.toString()),
-        authorStatusMap.get(post.authorId?.toString?.() || "") ?? null,
+        authorInfoMap.get(post.authorId?.toString?.() || ""),
       ),
     );
 
@@ -170,9 +189,7 @@ export async function POST(request: Request) {
       user.email?.split("@")?.[0] ||
       "cloak-user";
     const avatarUrl =
-      user.image ||
-      user.profileImage ||
-      `https://i.pravatar.cc/160?u=${encodeURIComponent(String(username))}`;
+      user.image || user.profileImage || "/images/placeholder_avatar.png";
 
     const postDoc = createPostDocument({
       authorId: userId,
@@ -189,13 +206,9 @@ export async function POST(request: Request) {
       .collection(CLOAK_WATCH_POSTS_COLLECTION)
       .insertOne(postDoc);
 
-    const created = await db
-      .collection(CLOAK_WATCH_POSTS_COLLECTION)
-      .findOne({ _id: result.insertedId });
-
-    if (!created) {
-      return NextResponse.json({ error: "Post not found" }, { status: 500 });
-    }
+    // We already have the full document we just inserted in memory —
+    // re-fetching it is a redundant round trip.
+    const created = { ...postDoc, _id: result.insertedId };
 
     return NextResponse.json({
       success: true,
@@ -207,7 +220,12 @@ export async function POST(request: Request) {
           isOwner: true,
         },
         undefined,
-        user.identityVerificationStatus ?? null,
+        {
+          username: created.authorUsername,
+          displayName: created.authorDisplayName,
+          avatarUrl: created.authorAvatarUrl,
+          verificationStatus: user.identityVerificationStatus ?? null,
+        },
       ),
     });
   } catch (error) {

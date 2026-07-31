@@ -299,7 +299,7 @@ export default function NewPostPage() {
                   src={
                     session?.user?.image ||
                     (session?.user as any)?.profileImage ||
-                    "https://i.pravatar.cc/160?img=12"
+                    "/images/placeholder_avatar.png"
                   }
                   alt={session?.user?.username || "user"}
                   fill
