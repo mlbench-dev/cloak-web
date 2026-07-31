@@ -253,6 +253,10 @@ export async function GET(request: Request) {
       filter.status = status;
     }
 
+    // Only the "other party" needs a lookup: for "sent" reports that's the
+    // target user, for "received" reports that's the reporter. A lookup on
+    // the caller's own user document would just be redundant since the
+    // caller already has that data client-side.
     const reports = await db
       .collection("reports")
       .aggregate([
@@ -266,28 +270,6 @@ export async function GET(request: Request) {
           },
         },
         { $unwind: "$user" },
-        {
-          $lookup: {
-            from: "users",
-            localField: "reportedBy",
-            foreignField: "_id",
-            as: "reportedByUser",
-          },
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "targetUserId",
-            foreignField: "_id",
-            as: "targetUser",
-          },
-        },
-        {
-          $addFields: {
-            reportedByUser: { $arrayElemAt: ["$reportedByUser", 0] },
-            targetUser: { $arrayElemAt: ["$targetUser", 0] },
-          },
-        },
         { $sort: { createdAt: -1 } },
       ])
       .toArray();

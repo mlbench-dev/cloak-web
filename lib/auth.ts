@@ -4,6 +4,12 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { ObjectId } from "mongodb";
 
+// How often the jwt() callback is allowed to re-query Mongo for fresh user
+// data. This callback runs on every session check (client session fetch AND
+// every getServerSession() call in API routes), so without a throttle every
+// request in the app pays for an extra DB round trip.
+const JWT_DB_REFRESH_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -132,17 +138,34 @@ export const authOptions: NextAuthOptions = {
         token.image = (user as any).image || user.image;
         token.name = (user as any).name || user.name;
         token.onboardingStartedAt = new Date(); // Track when onboarding started
+        token.dbRefreshedAt = Date.now();
       }
 
-      // If there's an id, fetch fresh user data from DB (to ensure session is up to date
-      if (token.id) {
+      if (trigger === "update") {
+        if (session?.username) token.username = session.username;
+        if (session?.image) token.image = session.image;
+        if (session?.name) token.name = session.name;
+        if (session?.identityVerificationStatus)
+          token.identityVerificationStatus = session.identityVerificationStatus;
+        if (session?.documentType) token.documentType = session.documentType;
+      }
+
+      // Every session check (client session fetch or getServerSession() in an
+      // API route) re-runs this callback, so re-querying Mongo unconditionally
+      // here means every request in the app pays for an extra DB round trip.
+      // Only refresh from the DB periodically instead of on every check.
+      const lastRefreshed = (token.dbRefreshedAt as number | undefined) || 0;
+      const needsDbRefresh =
+        token.id && Date.now() - lastRefreshed > JWT_DB_REFRESH_INTERVAL_MS;
+
+      if (needsDbRefresh) {
         try {
           const client = await clientPromise;
           const db = client.db();
           const userId = token.id;
           const userFromDb = await db
             .collection("users")
-            .findOne({ _id: new ObjectId(userId) });
+            .findOne({ _id: new ObjectId(userId as string) });
           if (userFromDb) {
             token.username = userFromDb.username || token.username;
             token.isVerified = userFromDb.isVerified || false;
@@ -155,19 +178,12 @@ export const authOptions: NextAuthOptions = {
             token.name = userFromDb.name || token.name;
             token.email = userFromDb.email || token.email;
           }
+          token.dbRefreshedAt = Date.now();
         } catch (err) {
           console.error("Error fetching fresh user data for JWT:", err);
         }
       }
 
-      if (trigger === "update") {
-        if (session?.username) token.username = session.username;
-        if (session?.image) token.image = session.image;
-        if (session?.name) token.name = session.name;
-        if (session?.identityVerificationStatus)
-          token.identityVerificationStatus = session.identityVerificationStatus;
-        if (session?.documentType) token.documentType = session.documentType;
-      }
       return token;
     },
     async session({ session, token }) {

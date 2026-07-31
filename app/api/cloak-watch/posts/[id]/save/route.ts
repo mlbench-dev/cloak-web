@@ -67,14 +67,10 @@ export async function POST(
       { $inc: { savesCount: countDelta }, $set: { updatedAt: new Date() } },
     );
 
-    const updatedPost = await db.collection(CLOAK_WATCH_POSTS_COLLECTION).findOne({
-      _id: postId,
-    });
-
     return NextResponse.json({
       success: true,
       isSaved,
-      saves: updatedPost?.savesCount || 0,
+      saves: Math.max(0, (post.savesCount || 0) + countDelta),
     });
   } catch (error) {
     console.error("Error saving cloak watch post:", error);

@@ -56,11 +56,12 @@ function ActivityAvatar({
 
   return (
     <div
-      className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-slate-500"
+      className="flex h-5 w-5 items-center justify-center rounded-full  text-slate-500"
       aria-label="Default profile avatar"
       role="img"
     >
-      <User className="h-3.5 w-3.5" strokeWidth={2} />
+      <img src="/images/placeholder_avatar.png" className="h-4 w-4" />
+      {/* <User className="h-3.5 w-3.5" strokeWidth={2} /> */}
     </div>
   );
 }

@@ -5,6 +5,35 @@ import { authOptions } from "@/lib/auth";
 const DIRECT_IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i;
 const REACHABILITY_TIMEOUT_MS = 6000;
 
+// Link metadata (title/image/description) rarely changes minute to minute,
+// and the same URLs get requested repeatedly (recent searches, report
+// details, etc.), so cache results in memory instead of re-fetching the
+// external page every time.
+const PREVIEW_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PREVIEW_CACHE_MAX_ENTRIES = 300;
+const previewCache = new Map<
+  string,
+  { expiresAt: number; body: Record<string, unknown> }
+>();
+
+function getCachedPreview(key: string) {
+  const cached = previewCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt < Date.now()) {
+    previewCache.delete(key);
+    return null;
+  }
+  return cached.body;
+}
+
+function setCachedPreview(key: string, body: Record<string, unknown>) {
+  if (previewCache.size >= PREVIEW_CACHE_MAX_ENTRIES) {
+    const oldestKey = previewCache.keys().next().value;
+    if (oldestKey) previewCache.delete(oldestKey);
+  }
+  previewCache.set(key, { expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS, body });
+}
+
 function readMetaTag(html: string, key: string) {
   const patterns = [
     new RegExp(
@@ -112,6 +141,12 @@ export async function GET(request: Request) {
     }
 
     const normalizedUrl = new URL(url);
+    const cacheKey = normalizedUrl.toString();
+    const cached = getCachedPreview(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     const preview = {
       url: normalizedUrl.toString(),
       domain: normalizedUrl.hostname.replace(/^www\./, ""),
@@ -199,7 +234,13 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, preview, reachable, statusCode, finalUrl });
+    const responseBody = { success: true, preview, reachable, statusCode, finalUrl };
+    // Only cache reachable/successful lookups — a transient failure
+    // shouldn't get stuck in the cache for 15 minutes.
+    if (reachable) {
+      setCachedPreview(cacheKey, responseBody);
+    }
+    return NextResponse.json(responseBody);
   } catch (error) {
     console.error("Error fetching link preview:", error);
     return NextResponse.json({

@@ -35,5 +35,6 @@ declare module "next-auth/jwt" {
     role?: string;
     onboardingStartedAt?: string | Date;
     sessionExpired?: boolean;
+    dbRefreshedAt?: number;
   }
 }

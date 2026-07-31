@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AchievementsSection from "@/app/components/dashboard/AchievementsSection";
 import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import RecentActivitySection from "@/app/components/dashboard/RecentActivitySection";
@@ -65,8 +65,12 @@ export default function DashboardPage() {
     DashboardRecentActivity[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const hasFetchedDashboard = useRef(false);
 
   useEffect(() => {
+    if (hasFetchedDashboard.current) return;
+    hasFetchedDashboard.current = true;
+
     const fetchDashboard = async () => {
       try {
         const res = await fetch("/api/user/dashboard");

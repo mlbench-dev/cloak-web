@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
@@ -28,6 +28,7 @@ export default function ReportsPage() {
   >("all");
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasFetchedReports = useRef(false);
 
   const fetchReports = async () => {
     try {
@@ -48,10 +49,10 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    if (reports.length === 0) {
-      fetchReports();
-    }
-  }, [activeFilter]);
+    if (hasFetchedReports.current) return;
+    hasFetchedReports.current = true;
+    fetchReports();
+  }, []);
 
   const filteredReports =
     activeFilter === "all"
@@ -236,9 +237,7 @@ export default function ReportsPage() {
                       backgroundImage: `url(${
                         report.user.profileImage ||
                         report.user.image ||
-                        `https://i.pravatar.cc/100?u=${encodeURIComponent(
-                          report.user.username,
-                        )}`
+                        "/images/placeholder_avatar.png"
                       })`,
                     }}
                   />

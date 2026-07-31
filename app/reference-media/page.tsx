@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
@@ -58,6 +58,7 @@ function ReferenceMediaContent() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const hasFetchedDbImages = useRef(false);
 
   useEffect(() => {
     if (authStatus === "unauthenticated") {
@@ -66,7 +67,8 @@ function ReferenceMediaContent() {
   }, [authStatus, router]);
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
+    if (authStatus === "authenticated" && !hasFetchedDbImages.current) {
+      hasFetchedDbImages.current = true;
       fetchDbImages();
     }
   }, [authStatus]);

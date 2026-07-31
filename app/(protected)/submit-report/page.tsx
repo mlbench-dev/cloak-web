@@ -151,8 +151,10 @@ export default function SubmitReportPage() {
   const [linkStatusCode, setLinkStatusCode] = useState<number | null>(null);
 
   // Fetch recent searches on load
+  const hasFetchedRecentSearches = useRef(false);
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" && !hasFetchedRecentSearches.current) {
+      hasFetchedRecentSearches.current = true;
       fetchRecentSearches();
     }
   }, [status]);

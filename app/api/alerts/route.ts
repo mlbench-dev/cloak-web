@@ -29,14 +29,10 @@ function safeObjectId(value: string) {
   }
 }
 
-function pickAvatarUrl(user: any): string | undefined {
-  return (
-    user?.profileImage ||
-    user?.image ||
-    (user?.username
-      ? `https://i.pravatar.cc/160?u=${encodeURIComponent(String(user.username))}`
-      : undefined)
-  );
+function pickAvatarUrl(user: any): string {
+  const PLACEHOLDER_AVATAR = "/images/placeholder_avatar.png";
+
+  return user?.profileImage || user?.image || PLACEHOLDER_AVATAR;
 }
 
 function normalizeFilter(value: string | null) {
@@ -65,10 +61,48 @@ export async function GET(request: Request) {
     const db = await getDb();
     const usersCollection = db.collection("users");
 
-    const user = await usersCollection.findOne(
-      { _id: userId },
-      { projection: { role: 1, username: 1, image: 1, profileImage: 1 } }
-    );
+    // None of these three depend on each other's results — fetch them
+    // concurrently instead of one round trip at a time.
+    const [user, receivedReports, verifiedSentReports] = await Promise.all([
+      usersCollection.findOne(
+        { _id: userId },
+        { projection: { role: 1, username: 1, image: 1, profileImage: 1 } },
+      ),
+      db
+        .collection("reports")
+        .aggregate([
+          { $match: { targetUserId: userId } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "reportedBy",
+              foreignField: "_id",
+              as: "reportedByUser",
+            },
+          },
+          { $unwind: "$reportedByUser" },
+          { $sort: { createdAt: -1 } },
+          { $limit: 25 },
+        ])
+        .toArray(),
+      db
+        .collection("reports")
+        .aggregate([
+          { $match: { reportedBy: userId, status: "VERIFIED" } },
+          {
+            $lookup: {
+              from: "users",
+              localField: "targetUserId",
+              foreignField: "_id",
+              as: "targetUser",
+            },
+          },
+          { $unwind: "$targetUser" },
+          { $sort: { verifiedAt: -1, updatedAt: -1, createdAt: -1 } },
+          { $limit: 25 },
+        ])
+        .toArray(),
+    ]);
 
     const now = Date.now();
     const systemAlerts: ApiAlertItem[] = [];
@@ -93,86 +127,65 @@ export async function GET(request: Request) {
       });
     }
 
-    const receivedReports = await db
-      .collection("reports")
-      .aggregate([
-        { $match: { targetUserId: userId } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "reportedBy",
-            foreignField: "_id",
-            as: "reportedByUser",
-          },
-        },
-        { $unwind: "$reportedByUser" },
-        { $sort: { createdAt: -1 } },
-        { $limit: 25 },
-      ])
-      .toArray();
+    const communityAlerts: ApiAlertItem[] = receivedReports.map(
+      (report: any) => {
+        const aiConfidence = Number(report.aiConfidence || 0);
+        const showBadge = aiConfidence >= 85;
 
-    const communityAlerts: ApiAlertItem[] = receivedReports.map((report: any) => {
-      const aiConfidence = Number(report.aiConfidence || 0);
-      const showBadge = aiConfidence >= 85;
+        return {
+          id: `community-${String(report._id)}`,
+          title: "Match Found",
+          description: "You were detected in a community post",
+          createdAt: new Date(
+            report.createdAt || report.updatedAt || Date.now(),
+          ).toISOString(),
+          filter: "Community",
+          avatarType: "image",
+          avatarUrl: pickAvatarUrl(report.reportedByUser),
+          badgeLabel: showBadge ? "AI Detection" : undefined,
+          badgeTone: showBadge ? "cyan" : undefined,
+        };
+      },
+    );
 
-      return {
-        id: `community-${String(report._id)}`,
-        title: "Match Found",
-        description: "You were detected in a community post",
-        createdAt: new Date(report.createdAt || report.updatedAt || Date.now()).toISOString(),
-        filter: "Community",
-        avatarType: "image",
-        avatarUrl: pickAvatarUrl(report.reportedByUser),
-        badgeLabel: showBadge ? "AI Detection" : undefined,
-        badgeTone: showBadge ? "cyan" : undefined,
-      };
-    });
+    const rewardsAlerts: ApiAlertItem[] = verifiedSentReports.map(
+      (report: any) => {
+        const targetUsername = String(report.targetUser?.username || "user");
+        const createdAt =
+          report.verifiedAt ||
+          report.updatedAt ||
+          report.createdAt ||
+          Date.now();
 
-    const verifiedSentReports = await db
-      .collection("reports")
-      .aggregate([
-        { $match: { reportedBy: userId, status: "VERIFIED" } },
-        {
-          $lookup: {
-            from: "users",
-            localField: "targetUserId",
-            foreignField: "_id",
-            as: "targetUser",
-          },
-        },
-        { $unwind: "$targetUser" },
-        { $sort: { verifiedAt: -1, updatedAt: -1, createdAt: -1 } },
-        { $limit: 25 },
-      ])
-      .toArray();
-
-    const rewardsAlerts: ApiAlertItem[] = verifiedSentReports.map((report: any) => {
-      const targetUsername = String(report.targetUser?.username || "user");
-      const createdAt = report.verifiedAt || report.updatedAt || report.createdAt || Date.now();
-
-      return {
-        id: `rewards-${String(report._id)}`,
-        title: `Report verified for @${targetUsername}`,
-        description: `+${POINTS_CONFIG.REPORT_VERIFICATION} points have been added`,
-        createdAt: new Date(createdAt).toISOString(),
-        filter: "Rewards",
-        avatarType: "image",
-        avatarUrl: pickAvatarUrl(report.targetUser),
-      };
-    });
+        return {
+          id: `rewards-${String(report._id)}`,
+          title: `Report verified for @${targetUsername}`,
+          description: `+${POINTS_CONFIG.REPORT_VERIFICATION} points have been added`,
+          createdAt: new Date(createdAt).toISOString(),
+          filter: "Rewards",
+          avatarType: "image",
+          avatarUrl: pickAvatarUrl(report.targetUser),
+        };
+      },
+    );
 
     const merged = [...systemAlerts, ...communityAlerts, ...rewardsAlerts]
       .filter((item) => {
         if (filterParam === "All") return true;
         return item.filter === filterParam;
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
       .slice(0, 50);
 
     return NextResponse.json({ success: true, alerts: merged });
   } catch (error) {
     console.error("Error fetching alerts:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }
-
