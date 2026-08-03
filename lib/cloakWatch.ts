@@ -252,8 +252,12 @@ async function uploadSingleCloakWatchImage(
   userId: string,
 ): Promise<CloakWatchImage> {
   const contentType = file.type.toLowerCase();
-  if (!contentType.startsWith("image/")) {
-    throw new Error("Only image uploads are supported.");
+  // HEIC/HEIF and other formats browsers can't decode make it through the
+  // client-side accept filter if someone bypasses the picker (drag-drop,
+  // scripted upload, etc.) — reject them here too rather than letting sharp
+  // throw a cryptic error later.
+  if (!["image/png", "image/jpeg"].includes(contentType)) {
+    throw new Error("Only PNG or JPEG images are supported.");
   }
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("Each image must be 5 MB or smaller.");
