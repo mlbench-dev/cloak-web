@@ -53,6 +53,12 @@ function getVerificationHistoryEntry(
 }
 
 export async function POST() {
+  // Hoisted so the catch block can reset a stuck "verification in progress"
+  // flag if something throws after we've already flipped it to true —
+  // otherwise the user is left staring at an infinite "verifying" spinner
+  // with no way to retry (see identityVerifications.verificationInProgress).
+  let verificationDocId: ObjectId | null = null;
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -151,6 +157,7 @@ export async function POST() {
     const verificationDoc = await db
       .collection("identityVerifications")
       .findOne({ userId }, { sort: { updatedAt: -1 } });
+    verificationDocId = verificationDoc?._id ?? null;
 
     if (
       !verificationDoc?.verification_images ||
@@ -400,8 +407,37 @@ export async function POST() {
     });
   } catch (error) {
     console.error("Error verifying protected media:", error);
+
+    // We may have already marked verification as "in progress" before this
+    // blew up (e.g. the verification service was unreachable). Clear that
+    // flag so the user isn't stuck on an infinite "verifying" spinner with
+    // no way to retry — they'll land back on the "Verification is Pending"
+    // screen, which offers an "Upload Media" retry action.
+    if (verificationDocId) {
+      try {
+        const client = await clientPromise;
+        const db = client.db();
+        await db.collection("identityVerifications").updateOne(
+          { _id: verificationDocId },
+          {
+            $set: {
+              verificationInProgress: false,
+              verificationFailureReason:
+                "Verification could not be completed. Please try again.",
+              updatedAt: new Date(),
+            },
+          },
+        );
+      } catch (resetError) {
+        console.error(
+          "Failed to reset verificationInProgress after error:",
+          resetError,
+        );
+      }
+    }
+
     return NextResponse.json(
-      { error: "Verification request failed." },
+      { error: "Verification request failed. Please try again." },
       { status: 500 },
     );
   }

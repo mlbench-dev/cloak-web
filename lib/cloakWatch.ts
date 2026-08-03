@@ -176,6 +176,15 @@ export async function getVoteCountsForPosts(
   return counts;
 }
 
+export async function getSavesCountForPost(
+  db: any,
+  postId: ObjectId,
+): Promise<number> {
+  return db
+    .collection(CLOAK_WATCH_SAVES_COLLECTION)
+    .countDocuments({ postId, active: true });
+}
+
 export async function getViewerMetaForPosts(
   db: any,
   userId: ObjectId | null,
@@ -246,37 +255,55 @@ async function uploadSingleCloakWatchImage(
   if (!contentType.startsWith("image/")) {
     throw new Error("Only image uploads are supported.");
   }
-  if (file.size > 10 * 1024 * 1024) {
-    throw new Error("Each image must be 10 MB or smaller.");
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Each image must be 5 MB or smaller.");
   }
 
   const safeName = file.name.replace(/\s+/g, "_");
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  // Downscale to a size that's still plenty sharp for full-screen mobile
-  // viewing. Phone cameras often produce 4000px+ originals — uploading
-  // those unmodified is several times slower for no visible benefit.
-  const fullBuffer = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: 1600,
-      height: 1600,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .jpeg({ quality: 85 })
-    .toBuffer();
+  let fullBuffer;
+  let thumbBuffer;
+  try {
+    // Downscale to a size that's still plenty sharp for full-screen mobile
+    // viewing. Phone cameras often produce 4000px+ originals — uploading
+    // those unmodified is several times slower for no visible benefit.
+    fullBuffer = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: 1600,
+        height: 1600,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+
+    // generate a tiny, heavily-compressed placeholder (~2-5kb)
+    thumbBuffer = await sharp(buffer)
+      .resize({ width: 24 }) // tiny — this is what keeps file size down
+      .jpeg({ quality: 30 })
+      .toBuffer();
+  } catch (error) {
+    // libheif/libvips reject some HEIC/HEIF files outright (e.g. "Security
+    // limit exceeded: Number of references in iref box... exceeds the
+    // security limits of 16 references") when a file's internal item-
+    // reference box is unusually large — some camera apps pack many
+    // auxiliary derivations (depth maps, portrait data, multiple
+    // thumbnails) into one HEIC container, which trips that hardening
+    // limit. That raw message means nothing to a user, so surface a
+    // friendly, actionable one instead.
+    console.error("Error processing uploaded image with sharp:", error);
+    throw new Error(
+      "We couldn't process that image — it may be corrupted or in an unsupported format. Please try a different photo (JPEG or PNG works best).",
+    );
+  }
+
   const fullFile = new File(
     [fullBuffer],
     safeName.replace(/\.[^.]+$/, ".jpg"),
     { type: "image/jpeg" },
   );
-
-  // generate a tiny, heavily-compressed placeholder (~2-5kb)
-  const thumbBuffer = await sharp(buffer)
-    .resize({ width: 24 }) // tiny — this is what keeps file size down
-    .jpeg({ quality: 30 })
-    .toBuffer();
 
   const thumbFile = new File(
     [thumbBuffer],

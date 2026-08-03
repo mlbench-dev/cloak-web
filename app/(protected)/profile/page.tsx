@@ -40,6 +40,8 @@ import { getCroppedImg } from "@/lib/cropImage";
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
+const MAX_DISPLAY_NAME_LENGTH = 30;
+
 type ProfileView =
   | "main"
   | "edit"
@@ -674,39 +676,53 @@ export default function ProfilePage() {
   if (view === "verified-status") {
     const isPending = user?.identityVerificationStatus === "PENDING";
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4 px-6 text-center">
-        <div
-          className={`h-20 w-20 ${isPending ? "bg-[#00C3D0]/10" : "bg-[#00C3D0]/10"} rounded-full flex items-center justify-center`}
-        >
-          {isPending ? (
-            <ShieldCheck size={40} className="text-[#00C3D0]" />
-          ) : (
-            <BadgeCheckIcon size={40} activeColor="#00C3D0" isActive={true} />
-          )}
+      <div className="flex h-full flex-col">
+        <header className="flex items-center justify-between px-4 bg-white z-10">
+          <button
+            onClick={() => {
+              router.push("/profile");
+            }}
+            className="p-2"
+          >
+            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
+          </button>
+          <h1 className="text-lg font-semibold text-[#2D2D2D]">Verification</h1>
+          <div className="w-10" />
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center space-y-4 px-6 text-center">
+          <div
+            className={`h-20 w-20 ${isPending ? "bg-[#00C3D0]/10" : "bg-[#00C3D0]/10"} rounded-full flex items-center justify-center`}
+          >
+            {isPending ? (
+              <ShieldCheck size={40} className="text-[#00C3D0]" />
+            ) : (
+              <BadgeCheckIcon size={40} activeColor="#00C3D0" isActive={true} />
+            )}
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            {isPending ? "Your Verification is Pending " : "Already Verified"}
+          </h2>
+          <p className="text-slate-500">
+            {isPending
+              ? "Upload your protected Document & images  to verify your identity."
+              : "Your identity has been verified. You now have a verification badge on your profile!"}
+          </p>
+          <button
+            onClick={() => {
+              if (isPending) {
+                setError(null);
+                setForceVerificationForm(true);
+                setVerificationFormKey((prev) => prev + 1);
+                setView("verification");
+                return;
+              }
+              setView("main");
+            }}
+            className={`mt-4 px-8 py-3 ${isPending ? "bg-[#00C3D0]" : "bg-[#00C3D0]"} text-white rounded-full font-medium shadow-lg shadow-[#00C3D0]/20 active:scale-[0.98] transition-all`}
+          >
+            {isPending ? "Upload Media" : "Go Back"}
+          </button>
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">
-          {isPending ? "Your Verification is Pending " : "Already Verified"}
-        </h2>
-        <p className="text-slate-500">
-          {isPending
-            ? "Upload your protected Document & images  to verify your identity."
-            : "Your identity has been verified. You now have a verification badge on your profile!"}
-        </p>
-        <button
-          onClick={() => {
-            if (isPending) {
-              setError(null);
-              setForceVerificationForm(true);
-              setVerificationFormKey((prev) => prev + 1);
-              setView("verification");
-              return;
-            }
-            setView("main");
-          }}
-          className={`mt-4 px-8 py-3 ${isPending ? "bg-[#00C3D0]" : "bg-[#00C3D0]"} text-white rounded-full font-medium shadow-lg shadow-[#00C3D0]/20 active:scale-[0.98] transition-all`}
-        >
-          {isPending ? "Upload Media" : "Go Back"}
-        </button>
       </div>
     );
   }
@@ -923,10 +939,20 @@ export default function ProfilePage() {
                 type="text"
                 value={editData.displayName}
                 onChange={(e) =>
-                  setEditData({ ...editData, displayName: e.target.value })
+                  setEditData({
+                    ...editData,
+                    displayName: e.target.value.slice(
+                      0,
+                      MAX_DISPLAY_NAME_LENGTH,
+                    ),
+                  })
                 }
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
                 className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20"
               />
+              <p className="ml-1 text-right text-xs text-slate-400">
+                {editData.displayName.length}/{MAX_DISPLAY_NAME_LENGTH}
+              </p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-500 ml-1">

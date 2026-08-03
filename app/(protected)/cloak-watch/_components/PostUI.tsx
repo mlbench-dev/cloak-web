@@ -111,7 +111,7 @@ export function PostSharedSuccessToast(message: string) {
         <span className="text-[16px] font-medium">{message}</span>
       </div>
     ),
-    { duration: 2200 },
+    { duration: 1500 },
   );
 }
 
@@ -139,7 +139,7 @@ function BottomSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end bg-black/20"
+      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/20"
       onClick={onClose}
     >
       <div
@@ -476,11 +476,55 @@ export function PostCard({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const carouselRef = useRef<HTMLDivElement>(null);
 
+  // A burst of clicks (up to hundreds under abuse) would otherwise fire one
+  // network request each — this is what caused the intermittent vote/save
+  // failures under rapid clicking. The UI still updates instantly on every
+  // click; only the actual network call is coalesced to one request per
+  // pause, carrying the final state.
+  const VOTE_SAVE_DEBOUNCE_MS = 400;
+
+  const voteConfirmedRef = useRef({
+    up: post.up,
+    down: post.down,
+    viewerVote: post.viewerVote,
+  });
+  const pendingViewerVoteRef = useRef<1 | -1 | 0>(post.viewerVote);
+  const voteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voteDispatchIdRef = useRef(0);
+
+  const saveConfirmedRef = useRef({
+    isSaved: post.isSaved,
+    saves: post.saves,
+  });
+  const pendingIsSavedRef = useRef(post.isSaved);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveDispatchIdRef = useRef(0);
+
+  const shareCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const [isShareCoolingDown, setIsShareCoolingDown] = useState(false);
+
   useEffect(() => {
     setLocalPost(post);
     setHidden(false);
     setActiveImageIndex(0);
+    voteConfirmedRef.current = {
+      up: post.up,
+      down: post.down,
+      viewerVote: post.viewerVote,
+    };
+    saveConfirmedRef.current = { isSaved: post.isSaved, saves: post.saves };
   }, [post]);
+
+  useEffect(() => {
+    return () => {
+      if (voteTimerRef.current) clearTimeout(voteTimerRef.current);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (shareCooldownTimerRef.current)
+        clearTimeout(shareCooldownTimerRef.current);
+    };
+  }, []);
 
   const time = useMemo(
     () => formatTimeAgo(localPost.createdAt),
@@ -491,16 +535,10 @@ export function PostCard({
     return null;
   }
 
-  const voteRequestIdRef = useRef(0);
-
   const handleVote = (value: 1 | -1) => {
-    const requestId = ++voteRequestIdRef.current;
-    let prevSnapshot: CloakWatchPost | null = null;
-
     // 1. Optimistically update — mirrors the server's toggle logic exactly
+    let nextViewerVote: 1 | -1 | 0 = 0;
     setLocalPost((prev) => {
-      prevSnapshot = prev; // capture the real "before" state for rollback
-
       let { up, down, viewerVote } = prev;
 
       if (viewerVote === value) {
@@ -525,51 +563,55 @@ export function PostCard({
         }
       }
 
+      nextViewerVote = viewerVote;
       return { ...prev, up, down, viewerVote };
     });
 
-    // 2. Fire the request in the background
-    fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => null);
-        if (!response.ok || !data?.success) {
-          throw new Error(data?.error || "Unable to update vote");
-        }
-        // Only reconcile if no newer click has happened since
-        if (voteRequestIdRef.current === requestId) {
-          setLocalPost((prev) => ({
-            ...prev,
+    pendingViewerVoteRef.current = nextViewerVote;
+
+    // 2. Debounce the actual network call — only the final state after the
+    // click burst settles gets sent, as a single idempotent request.
+    if (voteTimerRef.current) clearTimeout(voteTimerRef.current);
+    voteTimerRef.current = setTimeout(() => {
+      const dispatchId = ++voteDispatchIdRef.current;
+      const target = pendingViewerVoteRef.current;
+
+      fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: target }),
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok || !data?.success) {
+            throw new Error(data?.error || "Unable to update vote");
+          }
+          voteConfirmedRef.current = {
             up: data.up,
             down: data.down,
             viewerVote: data.viewerVote,
-          }));
-        }
-      })
-      .catch((error) => {
-        if (voteRequestIdRef.current === requestId && prevSnapshot) {
-          setLocalPost(prevSnapshot); // roll back only this click's change
-        }
-        toast.error(
-          error instanceof Error ? error.message : "Unable to update vote",
-        );
-      });
+          };
+          // Only apply if no newer click has queued another request since
+          if (voteDispatchIdRef.current === dispatchId) {
+            setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
+          }
+        })
+        .catch((error) => {
+          if (voteDispatchIdRef.current === dispatchId) {
+            setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
+          }
+          toast.error(
+            error instanceof Error ? error.message : "Unable to update vote",
+          );
+        });
+    }, VOTE_SAVE_DEBOUNCE_MS);
   };
 
-  const saveRequestIdRef = useRef(0);
-
   const handleToggleSave = () => {
-    const requestId = ++saveRequestIdRef.current;
-    let prevSnapshot: CloakWatchPost | null = null;
-    let nextIsSaved: boolean | null = null;
-    let optimisticPost: CloakWatchPost | null = null;
-
     // 1. Optimistically flip save state
+    let nextIsSaved = false;
+    let optimisticPost: CloakWatchPost | null = null;
     setLocalPost((prev) => {
-      prevSnapshot = prev;
       nextIsSaved = !prev.isSaved;
       optimisticPost = {
         ...prev,
@@ -578,39 +620,58 @@ export function PostCard({
       };
       return optimisticPost;
     });
-    if (optimisticPost && nextIsSaved !== null) {
+    if (optimisticPost) {
       onSaveStateChange?.(optimisticPost, nextIsSaved);
     }
+    pendingIsSavedRef.current = nextIsSaved;
 
-    // 2. Fire request in background
-    fetch(`/api/cloak-watch/posts/${post.id}/save`, {
-      method: "POST",
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => null);
-        if (!response.ok || !data?.success) {
-          throw new Error(data?.error || "Unable to save post");
-        }
-        if (saveRequestIdRef.current === requestId) {
-          setLocalPost((prev) => ({
-            ...prev,
+    // 2. Debounce the actual network call — same reasoning as votes above.
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const dispatchId = ++saveDispatchIdRef.current;
+      const target = pendingIsSavedRef.current;
+
+      fetch(`/api/cloak-watch/posts/${post.id}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isSaved: target }),
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok || !data?.success) {
+            throw new Error(data?.error || "Unable to save post");
+          }
+          saveConfirmedRef.current = {
             isSaved: data.isSaved,
             saves: data.saves,
-          }));
-        }
-      })
-      .catch((error) => {
-        if (saveRequestIdRef.current === requestId && prevSnapshot) {
-          setLocalPost(prevSnapshot);
-          onSaveStateChange?.(prevSnapshot, prevSnapshot.isSaved);
-        }
-        toast.error(
-          error instanceof Error ? error.message : "Unable to save post",
-        );
-      });
+          };
+          if (saveDispatchIdRef.current === dispatchId) {
+            setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
+          }
+        })
+        .catch((error) => {
+          if (saveDispatchIdRef.current === dispatchId) {
+            setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
+            onSaveStateChange?.(
+              { ...post, ...saveConfirmedRef.current },
+              saveConfirmedRef.current.isSaved,
+            );
+          }
+          toast.error(
+            error instanceof Error ? error.message : "Unable to save post",
+          );
+        });
+    }, VOTE_SAVE_DEBOUNCE_MS);
   };
 
   const handleCopyLink = async () => {
+    if (isShareCoolingDown) return;
+    setIsShareCoolingDown(true);
+    shareCooldownTimerRef.current = setTimeout(
+      () => setIsShareCoolingDown(false),
+      2000,
+    );
+
     try {
       if (typeof window !== "undefined") {
         await navigator.clipboard.writeText(
@@ -620,9 +681,9 @@ export function PostCard({
       await fetch(`/api/cloak-watch/posts/${localPost.id}/share`, {
         method: "POST",
       }).catch(() => null);
-      toast.success("Post link has been copied");
+      toast.success("Post link has been copied", { duration: 1500 });
     } catch {
-      toast.error("Unable to copy post link");
+      toast.error("Unable to copy post link", { duration: 1500 });
     }
   };
 
@@ -814,11 +875,12 @@ export function PostCard({
               </span>
             </button>
 
-            {/* Share Button (Unchanged) */}
+            {/* Share Button */}
             <button
               type="button"
               onClick={() => void handleCopyLink()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F6F6F6] text-[#2B2B2B]"
+              disabled={isShareCoolingDown}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F6F6F6] text-[#2B2B2B] disabled:opacity-50"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

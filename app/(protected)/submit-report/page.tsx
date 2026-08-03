@@ -8,6 +8,8 @@ import toast from "react-hot-toast";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 
+const MAX_NOTES_LENGTH = 300;
+
 type Platform = "tiktok" | "instagram" | "facebook" | "twitter" | "other";
 type User = {
   _id: string;
@@ -759,10 +761,15 @@ export default function SubmitReportPage() {
                 <textarea
                   placeholder="Add notes (optional)"
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e) =>
+                    setNotes(e.target.value.slice(0, MAX_NOTES_LENGTH))
+                  }
                   rows={4}
                   className="w-full bg-[#F5F5F5] rounded-2xl px-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 resize-none text-base"
                 />
+              </div>
+              <div className="mt-2 flex justify-end text-sm text-[#8F98A0]">
+                {notes.length}/{MAX_NOTES_LENGTH}
               </div>
             </div>
 
