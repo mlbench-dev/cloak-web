@@ -47,6 +47,14 @@ export default function OTPVerification({
   const [otp, setOtp] = useState("");
   const [timer, setTimer] = useState(45);
 
+  // The old code is invalidated the moment a new one is sent, so clear
+  // whatever was typed — leaving it in place invites submitting a code that
+  // can no longer work.
+  const handleResend = () => {
+    setOtp("");
+    onResend();
+  };
+
   const handleGoogleSignIn = async () => {
     if (onGoogleSignIn) {
       onGoogleSignIn();
@@ -159,7 +167,7 @@ export default function OTPVerification({
                 Didn&apos;t get the code?{" "}
                 <button
                   type="button"
-                  onClick={onResend}
+                  onClick={handleResend}
                   className="font-medium text-[#14C3CF] underline"
                 >
                   Send again

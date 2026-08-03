@@ -16,16 +16,29 @@ export async function POST(request: Request) {
     const now = new Date();
     console.log("OTP Verification Attempt:", { email, code, currentTime: now });
 
-    const otpRecord = await db.collection("otps").findOne({
-      email,
-      code,
-      expiresAt: { $gt: now },
-    });
+    // Look up the code regardless of expiry first so we can tell the user
+    // *why* it failed — "your code expired, request a new one" is a very
+    // different next step from "you mistyped the code."
+    const matchingRecord = await db.collection("otps").findOne({ email, code });
 
-    console.log("Found OTP Record:", otpRecord);
+    console.log("Found OTP Record:", matchingRecord);
+
+    if (matchingRecord && matchingRecord.expiresAt <= now) {
+      await db.collection("otps").deleteMany({ email });
+      return NextResponse.json(
+        { error: "This code has expired. Please request a new one." },
+        { status: 400 },
+      );
+    }
+
+    const otpRecord =
+      matchingRecord && matchingRecord.expiresAt > now ? matchingRecord : null;
 
     if (!otpRecord) {
-      return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid code. Please check and try again." },
+        { status: 400 },
+      );
     }
 
     // Delete the OTP after successful verification

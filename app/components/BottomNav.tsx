@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   AlertsNavIcon,
   CloakWatchNavIcon,
@@ -33,6 +34,26 @@ function isActivePath(pathname: string, href: string) {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/alerts/unread-count")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success) {
+          setUnreadAlerts(data.count);
+        }
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+    // Re-check whenever the route changes — e.g. right after leaving
+    // /alerts, once it's marked the current alerts as viewed.
+  }, [pathname]);
 
   return (
     <nav className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">
@@ -52,12 +73,19 @@ export default function BottomNav() {
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
-                <Icon
-                  isActive={active}
-                  size={24}
-                  activeColor="#00C3D0"
-                  inactiveColor="#94a3b8"
-                />
+                <span className="relative inline-flex">
+                  <Icon
+                    isActive={active}
+                    size={24}
+                    activeColor="#00C3D0"
+                    inactiveColor="#94a3b8"
+                  />
+                  {item.href === "/alerts" && unreadAlerts > 0 && (
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[9px] font-semibold leading-none text-white">
+                      {unreadAlerts > 9 ? "9+" : unreadAlerts}
+                    </span>
+                  )}
+                </span>
                 <span className="text-[10px] font-medium leading-tight">
                   {item.label}
                 </span>

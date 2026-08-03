@@ -50,6 +50,12 @@ const STEPS = [
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
+// authStep round-trips through the URL so a refresh on the OTP screen
+// re-lands there, but the email itself was only ever in memory — refreshing
+// wiped it. Session storage survives the refresh without putting an email
+// address in the URL/history.
+const PENDING_OTP_EMAIL_KEY = "cloak-pending-otp-email";
+
 function preloadImage(src: string) {
   return new Promise<void>((resolve) => {
     const image = new window.Image();
@@ -105,6 +111,15 @@ function HomeFlowContent() {
     if (requestedAuthStep) {
       setAuthStep(requestedAuthStep);
       setShowSplash(false);
+
+      if (requestedAuthStep === "OTP") {
+        const storedEmail = window.sessionStorage.getItem(
+          PENDING_OTP_EMAIL_KEY,
+        );
+        if (storedEmail) {
+          setEmail((prev) => prev || storedEmail);
+        }
+      }
     }
   }, [requestedAuthStep]);
 
@@ -244,9 +259,11 @@ function HomeFlowContent() {
       const data = await response.json();
       if (response.ok) {
         setEmail(submittedEmail);
+        window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, submittedEmail);
         goToAuthStep("OTP");
         toast.success("OTP sent to your email! Please check your inbox.", {
           id: "otp-sent",
+          duration: 2000,
         });
       } else {
         setError(data.error || "Failed to send OTP. Please try again.");
@@ -273,6 +290,7 @@ function HomeFlowContent() {
       const data = await response.json();
       if (response.ok) {
         setUserId(data.user.id);
+        window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY);
 
         // Use NextAuth signIn to create a session for the OTP user
         // This ensures the session is established and data is synced

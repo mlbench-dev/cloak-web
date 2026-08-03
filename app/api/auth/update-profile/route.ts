@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (username) updateData.username = username;
     if (profileImage) updateData.profileImage = profileImage;
     if (image) updateData.image = image;
-    if (name) updateData.name = name;
+    if (name) updateData.name = String(name).slice(0, 30);
 
     // Check for username uniqueness if being updated
     if (username) {

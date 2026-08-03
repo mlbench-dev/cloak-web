@@ -20,6 +20,8 @@ import type { Area } from "react-easy-crop";
 
 type Step = 1 | 2 | 3;
 
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
 type LocalMedia = {
   id: string;
   file: File;
@@ -70,11 +72,32 @@ export default function NewPostPage() {
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const nextItems: LocalMedia[] = [];
+
+    const oversized: File[] = [];
+    const accepted: File[] = [];
     Array.from(files).forEach((file) => {
-      const previewUrl = URL.createObjectURL(file);
-      nextItems.push({ id: createId(), file, previewUrl });
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        oversized.push(file);
+      } else {
+        accepted.push(file);
+      }
     });
+
+    if (oversized.length > 0) {
+      toast.error(
+        oversized.length === 1
+          ? `${oversized[0].name} is larger than 5MB. Please choose a smaller image.`
+          : `${oversized.length} images are larger than 5MB and were skipped.`,
+      );
+    }
+
+    if (accepted.length === 0) return;
+
+    const nextItems: LocalMedia[] = accepted.map((file) => ({
+      id: createId(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
     setMedia((prev) => {
       const next = [...prev, ...nextItems];
       if (prev.length === 0) {
@@ -172,7 +195,11 @@ export default function NewPostPage() {
       }
 
       PostSharedSuccessToast("Your post was shared");
-      router.push(`/cloak-watch/post/${data.post.id}`);
+      // Replace, not push — the new-post form shouldn't linger in history
+      // underneath the post detail page. This way the back button (which
+      // uses router.back()) returns straight to the Cloak Watch feed instead
+      // of back into the now-stale, already-submitted form.
+      router.replace(`/cloak-watch/post/${data.post.id}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Unable to post right now",
@@ -429,7 +456,8 @@ export default function NewPostPage() {
             <button
               type="button"
               onClick={handlePickMedia}
-              className="flex h-12 items-center gap-2 rounded-full bg-[#15C3CF] px-6 text-[14px] font-semibold text-white"
+              aria-disabled="true"
+              className="flex h-12 items-center gap-2 rounded-full bg-[#839297] px-6 text-[14px] font-semibold text-white cursor-not-allowed"
             >
               <span>Next</span>
               <span className="text-[18px] leading-none">›</span>

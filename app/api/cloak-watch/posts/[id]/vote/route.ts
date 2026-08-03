@@ -11,9 +11,14 @@ import {
 } from "@/lib/cloakWatch";
 import type { CloakWatchVoteValue } from "@/models/CloakWatch";
 
-function normalizeVote(value: unknown): CloakWatchVoteValue | null {
+// The client sends the *absolute* vote it wants to end up with (1, -1, or 0
+// to clear), not a "toggle this arrow" instruction. That makes the request
+// idempotent, which matters because rapid clicks are debounced client-side
+// down to a single network call representing the final state.
+function normalizeVote(value: unknown): CloakWatchVoteValue | 0 | null {
   if (value === 1 || value === "up") return 1;
   if (value === -1 || value === "down") return -1;
+  if (value === 0) return 0;
   return null;
 }
 
@@ -33,7 +38,7 @@ export async function POST(
     const body = await request.json();
     const nextVote = normalizeVote(body?.value);
 
-    if (!postId || !userId || !nextVote) {
+    if (!postId || !userId || nextVote === null) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
@@ -50,25 +55,22 @@ export async function POST(
     }
 
     const votesCollection = db.collection(CLOAK_WATCH_VOTES_COLLECTION);
-    const existingVote = await votesCollection.findOne({ postId, userId });
+    const viewerVote: CloakWatchVoteValue | 0 = nextVote;
 
-    let viewerVote: CloakWatchVoteValue | 0 = nextVote;
-
-    if (!existingVote) {
-      await votesCollection.insertOne({
-        postId,
-        userId,
-        value: nextVote,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    } else if (existingVote.value === nextVote) {
-      await votesCollection.deleteOne({ _id: existingVote._id });
-      viewerVote = 0;
+    // Set the vote to its final state atomically instead of read-then-write —
+    // concurrent clicks (or clicks from multiple tabs) can no longer race
+    // each other into a duplicate-key error on the unique {postId, userId}
+    // index.
+    if (nextVote === 0) {
+      await votesCollection.deleteOne({ postId, userId });
     } else {
       await votesCollection.updateOne(
-        { _id: existingVote._id },
-        { $set: { value: nextVote, updatedAt: new Date() } },
+        { postId, userId },
+        {
+          $set: { value: nextVote, updatedAt: new Date() },
+          $setOnInsert: { postId, userId, createdAt: new Date() },
+        },
+        { upsert: true },
       );
     }
 

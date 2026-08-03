@@ -187,6 +187,13 @@ export default function AlertsPage() {
     void fetchAlerts();
   }, [activeFilter]);
 
+  const hasMarkedViewed = useRef(false);
+  useEffect(() => {
+    if (hasMarkedViewed.current) return;
+    hasMarkedViewed.current = true;
+    fetch("/api/alerts", { method: "POST" }).catch(() => null);
+  }, []);
+
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between px-4 pb-4 bg-white z-10">

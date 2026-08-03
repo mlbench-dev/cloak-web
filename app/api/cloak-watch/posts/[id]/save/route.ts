@@ -6,11 +6,19 @@ import {
   CLOAK_WATCH_POSTS_COLLECTION,
   CLOAK_WATCH_SAVES_COLLECTION,
   ensureCloakWatchIndexes,
+  getSavesCountForPost,
   safeObjectId,
 } from "@/lib/cloakWatch";
 
+// The client sends the absolute save state it wants (true/false) rather than
+// "toggle", so the request is idempotent — rapid clicks are debounced
+// client-side down to a single network call for the final state.
+function normalizeIsSaved(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -22,8 +30,10 @@ export async function POST(
     const { id } = await context.params;
     const postId = safeObjectId(id);
     const userId = safeObjectId(session.user.id);
+    const body = await request.json().catch(() => null);
+    const targetIsSaved = normalizeIsSaved(body?.isSaved);
 
-    if (!postId || !userId) {
+    if (!postId || !userId || targetIsSaved === null) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
@@ -39,38 +49,36 @@ export async function POST(
     }
 
     const savesCollection = db.collection(CLOAK_WATCH_SAVES_COLLECTION);
-    const existingSave = await savesCollection.findOne({ postId, userId });
 
-    let isSaved = true;
-    let countDelta = 0;
-
-    if (!existingSave) {
-      await savesCollection.insertOne({
-        postId,
-        userId,
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      countDelta = 1;
-    } else {
-      isSaved = !existingSave.active;
+    // Set the save to its final state atomically instead of read-then-write —
+    // concurrent clicks can no longer race each other into a duplicate-key
+    // error on the unique {postId, userId} index.
+    if (targetIsSaved) {
       await savesCollection.updateOne(
-        { _id: existingSave._id },
-        { $set: { active: isSaved, updatedAt: new Date() } },
+        { postId, userId },
+        {
+          $set: { active: true, updatedAt: new Date() },
+          $setOnInsert: { postId, userId, createdAt: new Date() },
+        },
+        { upsert: true },
       );
-      countDelta = isSaved ? 1 : -1;
+    } else {
+      await savesCollection.updateOne(
+        { postId, userId },
+        { $set: { active: false, updatedAt: new Date() } },
+      );
     }
 
+    const saves = await getSavesCountForPost(db, postId);
     await db.collection(CLOAK_WATCH_POSTS_COLLECTION).updateOne(
       { _id: postId },
-      { $inc: { savesCount: countDelta }, $set: { updatedAt: new Date() } },
+      { $set: { savesCount: saves, updatedAt: new Date() } },
     );
 
     return NextResponse.json({
       success: true,
-      isSaved,
-      saves: Math.max(0, (post.savesCount || 0) + countDelta),
+      isSaved: targetIsSaved,
+      saves,
     });
   } catch (error) {
     console.error("Error saving cloak watch post:", error);
