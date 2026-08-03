@@ -21,6 +21,7 @@ import type { Area } from "react-easy-crop";
 type Step = 1 | 2 | 3;
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg"];
 
 type LocalMedia = {
   id: string;
@@ -74,14 +75,29 @@ export default function NewPostPage() {
     if (!files || files.length === 0) return;
 
     const oversized: File[] = [];
+    const unsupportedType: File[] = [];
     const accepted: File[] = [];
     Array.from(files).forEach((file) => {
-      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      // HEIC/HEIF (the default on iPhone cameras) can't be decoded by
+      // browsers — <img>/<canvas> just render it blank, which is exactly
+      // what was happening. Only accept formats we can actually preview,
+      // crop, and re-encode client-side.
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        unsupportedType.push(file);
+      } else if (file.size > MAX_IMAGE_SIZE_BYTES) {
         oversized.push(file);
       } else {
         accepted.push(file);
       }
     });
+
+    if (unsupportedType.length > 0) {
+      toast.error(
+        unsupportedType.length === 1
+          ? `${unsupportedType[0].name} isn't a supported format. Please upload a PNG or JPEG image.`
+          : `${unsupportedType.length} files aren't a supported format. Please upload PNG or JPEG images.`,
+      );
+    }
 
     if (oversized.length > 0) {
       toast.error(
@@ -156,6 +172,14 @@ export default function NewPostPage() {
         cropTargetMedia.file.name,
         cropTargetMedia.file.type || "image/jpeg",
       );
+
+      if (croppedFile.size > MAX_IMAGE_SIZE_BYTES) {
+        toast.error(
+          "The cropped image is still larger than 5MB. Please crop a smaller area.",
+        );
+        return;
+      }
+
       const newPreviewUrl = URL.createObjectURL(croppedFile);
 
       setMedia((prev) =>
@@ -435,7 +459,7 @@ export default function NewPostPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg"
           multiple
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
