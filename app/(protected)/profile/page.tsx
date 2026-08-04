@@ -142,6 +142,19 @@ export default function ProfilePage() {
 
   const exitEditProfile = () => router.push("/profile");
 
+  // "Discard" only navigated away before — the picked/cropped avatar and any
+  // typed display name stayed in memory, so returning to Edit Profile made
+  // it look like nothing was discarded at all.
+  const discardProfileEdits = () => {
+    if (pendingProfileImageUrl) {
+      URL.revokeObjectURL(pendingProfileImageUrl);
+    }
+    setPendingProfileImageFile(null);
+    setPendingProfileImageUrl("");
+    setEditData({ username, displayName: user?.name || "", email });
+    exitEditProfile();
+  };
+
   const handleEditProfileBack = () => {
     if (isProfileEditDirty) {
       setShowDiscardChangesModal(true);
@@ -1251,7 +1264,7 @@ export default function ProfilePage() {
                 <button
                   onClick={() => {
                     setShowDiscardChangesModal(false);
-                    exitEditProfile();
+                    discardProfileEdits();
                   }}
                   className="flex-1 h-14 rounded-full bg-red-500 font-semibold text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
                 >
