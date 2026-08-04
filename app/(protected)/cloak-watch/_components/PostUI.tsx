@@ -517,19 +517,99 @@ export function PostCard({
     saveConfirmedRef.current = { isSaved: post.isSaved, saves: post.saves };
   }, [post]);
 
-  useEffect(() => {
-    return () => {
-      if (voteTimerRef.current) clearTimeout(voteTimerRef.current);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      if (shareCooldownTimerRef.current)
-        clearTimeout(shareCooldownTimerRef.current);
-    };
-  }, []);
-
   const time = useMemo(
     () => formatTimeAgo(localPost.createdAt),
     [localPost.createdAt],
   );
+
+  // Fires the actual vote request for whatever is currently in
+  // pendingViewerVoteRef. Called either after the debounce settles, or
+  // immediately on unmount (see the flush effect below) — a debounced
+  // request that only clears the timer on unmount would silently drop the
+  // action, e.g. unsaving a post removes its card from the Saved Posts
+  // list, unmounting it before the timer ever fires.
+  const sendVoteRequest = () => {
+    const dispatchId = ++voteDispatchIdRef.current;
+    const target = pendingViewerVoteRef.current;
+
+    fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: target }),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Unable to update vote");
+        }
+        voteConfirmedRef.current = {
+          up: data.up,
+          down: data.down,
+          viewerVote: data.viewerVote,
+        };
+        // Only apply if no newer click has queued another request since
+        if (voteDispatchIdRef.current === dispatchId) {
+          setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
+        }
+      })
+      .catch((error) => {
+        if (voteDispatchIdRef.current === dispatchId) {
+          setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Unable to update vote",
+        );
+      });
+  };
+
+  const sendSaveRequest = () => {
+    const dispatchId = ++saveDispatchIdRef.current;
+    const target = pendingIsSavedRef.current;
+
+    fetch(`/api/cloak-watch/posts/${post.id}/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isSaved: target }),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Unable to save post");
+        }
+        saveConfirmedRef.current = { isSaved: data.isSaved, saves: data.saves };
+        if (saveDispatchIdRef.current === dispatchId) {
+          setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
+        }
+      })
+      .catch((error) => {
+        if (saveDispatchIdRef.current === dispatchId) {
+          setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
+          onSaveStateChange?.(
+            { ...post, ...saveConfirmedRef.current },
+            saveConfirmedRef.current.isSaved,
+          );
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Unable to save post",
+        );
+      });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (voteTimerRef.current) {
+        clearTimeout(voteTimerRef.current);
+        sendVoteRequest();
+      }
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        sendSaveRequest();
+      }
+      if (shareCooldownTimerRef.current)
+        clearTimeout(shareCooldownTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (hidden || localPost.isDeleted) {
     return null;
@@ -572,39 +652,7 @@ export function PostCard({
     // 2. Debounce the actual network call — only the final state after the
     // click burst settles gets sent, as a single idempotent request.
     if (voteTimerRef.current) clearTimeout(voteTimerRef.current);
-    voteTimerRef.current = setTimeout(() => {
-      const dispatchId = ++voteDispatchIdRef.current;
-      const target = pendingViewerVoteRef.current;
-
-      fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: target }),
-      })
-        .then(async (response) => {
-          const data = await response.json().catch(() => null);
-          if (!response.ok || !data?.success) {
-            throw new Error(data?.error || "Unable to update vote");
-          }
-          voteConfirmedRef.current = {
-            up: data.up,
-            down: data.down,
-            viewerVote: data.viewerVote,
-          };
-          // Only apply if no newer click has queued another request since
-          if (voteDispatchIdRef.current === dispatchId) {
-            setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
-          }
-        })
-        .catch((error) => {
-          if (voteDispatchIdRef.current === dispatchId) {
-            setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
-          }
-          toast.error(
-            error instanceof Error ? error.message : "Unable to update vote",
-          );
-        });
-    }, VOTE_SAVE_DEBOUNCE_MS);
+    voteTimerRef.current = setTimeout(sendVoteRequest, VOTE_SAVE_DEBOUNCE_MS);
   };
 
   const handleToggleSave = () => {
@@ -627,41 +675,7 @@ export function PostCard({
 
     // 2. Debounce the actual network call — same reasoning as votes above.
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const dispatchId = ++saveDispatchIdRef.current;
-      const target = pendingIsSavedRef.current;
-
-      fetch(`/api/cloak-watch/posts/${post.id}/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isSaved: target }),
-      })
-        .then(async (response) => {
-          const data = await response.json().catch(() => null);
-          if (!response.ok || !data?.success) {
-            throw new Error(data?.error || "Unable to save post");
-          }
-          saveConfirmedRef.current = {
-            isSaved: data.isSaved,
-            saves: data.saves,
-          };
-          if (saveDispatchIdRef.current === dispatchId) {
-            setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
-          }
-        })
-        .catch((error) => {
-          if (saveDispatchIdRef.current === dispatchId) {
-            setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
-            onSaveStateChange?.(
-              { ...post, ...saveConfirmedRef.current },
-              saveConfirmedRef.current.isSaved,
-            );
-          }
-          toast.error(
-            error instanceof Error ? error.message : "Unable to save post",
-          );
-        });
-    }, VOTE_SAVE_DEBOUNCE_MS);
+    saveTimerRef.current = setTimeout(sendSaveRequest, VOTE_SAVE_DEBOUNCE_MS);
   };
 
   const handleCopyLink = async () => {
@@ -749,7 +763,7 @@ export function PostCard({
           </button>
         </div>
 
-        <p className="mt-3 text-[14px] leading-6 text-[#2D2D2D]">
+        <p className="mt-3 break-words text-[14px] leading-6 text-[#2D2D2D]">
           {localPost.body}
         </p>
 
@@ -778,6 +792,11 @@ export function PostCard({
               touchAction: "pan-x pan-y",
               WebkitOverflowScrolling: "touch",
               overflowY: "hidden",
+              // Without this, swiping past the first/last image doesn't stop
+              // at the carousel's edge — the leftover swipe momentum chains
+              // to the page itself, dragging the whole screen sideways into
+              // empty space.
+              overscrollBehaviorX: "contain",
             }}
             className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar"
           >

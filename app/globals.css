@@ -41,6 +41,10 @@ body {
   min-height: 100dvh;
   width: 100%;
   overflow: hidden;
+  /* Belt-and-suspenders: nothing inside should ever be able to drag the
+     whole screen sideways via scroll chaining, even if a child element
+     forgets its own overscroll containment. */
+  overscroll-behavior-x: none;
   display: flex;
   flex-direction: column;
 }

@@ -62,7 +62,7 @@ export default function CloakWatchPostDetailPage() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
+      <main className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="h-10 w-10 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />

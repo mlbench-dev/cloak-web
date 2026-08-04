@@ -298,7 +298,7 @@ export default function NewPostPage() {
                   const bounded = Math.max(0, Math.min(idx, media.length - 1));
                   if (bounded !== activeIndex) setActiveIndex(bounded);
                 }}
-                className="flex w-full snap-x snap-mandatory overflow-x-auto no-scrollbar"
+                className="flex w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain no-scrollbar"
               >
                 {media.map((item) => (
                   <div
@@ -385,7 +385,7 @@ export default function NewPostPage() {
                   const bounded = Math.max(0, Math.min(idx, media.length - 1));
                   if (bounded !== activeIndex) setActiveIndex(bounded);
                 }}
-                className="flex w-full snap-x snap-mandatory overflow-x-auto no-scrollbar"
+                className="flex w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain no-scrollbar"
               >
                 {media.map((m, idx) => (
                   <div

@@ -58,13 +58,14 @@ export default function UsernameStep({
     }
   };
 
+  // Suggestions are generated once, from the initial base (name/email), and
+  // never regenerated afterward — not while typing, and not when the user
+  // picks one, which used to immediately replace the list it was just
+  // chosen from.
   useEffect(() => {
-    if (username.length >= 3) {
-      fetchSuggestions(username);
-    } else {
-      fetchSuggestions(initialBase);
-    }
-  }, [username, initialBase]);
+    fetchSuggestions(initialBase);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleUsernameChange = (value: string) => {
     const cleaned = value
