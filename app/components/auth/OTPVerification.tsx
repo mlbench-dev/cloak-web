@@ -8,10 +8,19 @@ type OTPVerificationProps = {
   email: string;
   onVerify: (otp: string) => void;
   onResend: () => void;
+  onChangeEmail?: () => void;
   onGoogleSignIn?: () => void;
   error?: string | null;
   isLoading?: boolean;
+  // Absolute timestamp (ms) — owned by the parent and persisted across
+  // refresh, rather than a "seconds remaining" count owned here, so a page
+  // reload recomputes the true remaining time instead of resetting it.
+  resendAvailableAt: number;
 };
+
+function secondsUntil(deadline: number): number {
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+}
 
 function GoogleMark() {
   return (
@@ -40,17 +49,32 @@ export default function OTPVerification({
   email,
   onVerify,
   onResend,
+  onChangeEmail,
   onGoogleSignIn,
   error,
   isLoading = false,
+  resendAvailableAt,
 }: OTPVerificationProps) {
   const [otp, setOtp] = useState("");
-  const [timer, setTimer] = useState(45);
+  const [timer, setTimer] = useState(() => secondsUntil(resendAvailableAt));
+
+  // Deadline moved (a fresh OTP was actually sent) — resync the countdown
+  // to it. If a resend request fails, the parent won't have moved the
+  // deadline, so this intentionally does nothing and the button — already
+  // enabled since resend is only reachable at timer 0 — stays that way.
+  useEffect(() => {
+    setTimer(secondsUntil(resendAvailableAt));
+    const interval = setInterval(() => {
+      setTimer(secondsUntil(resendAvailableAt));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendAvailableAt]);
 
   // The old code is invalidated the moment a new one is sent, so clear
   // whatever was typed — leaving it in place invites submitting a code that
-  // can no longer work.
+  // can no longer work. Resend is only reachable once the timer hits 0.
   const handleResend = () => {
+    if (timer > 0) return;
     setOtp("");
     onResend();
   };
@@ -62,16 +86,6 @@ export default function OTPVerification({
       await signIn("google", { callbackUrl: "/dashboard" });
     }
   };
-
-
-  useEffect(() => {
-    if (timer > 0) {
-      const interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [timer]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -118,9 +132,20 @@ export default function OTPVerification({
               </div>
             )}
             <div className="space-y-2.5">
-              <label htmlFor="email" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
-                Email
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="email" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
+                  Email
+                </label>
+                {onChangeEmail && (
+                  <button
+                    type="button"
+                    onClick={onChangeEmail}
+                    className="text-[13px] font-medium text-[#14C3CF] underline"
+                  >
+                    Wrong email? Change it
+                  </button>
+                )}
+              </div>
               <input
                 id="email"
                 type="email"
@@ -145,7 +170,7 @@ export default function OTPVerification({
                 className="h-14 w-full rounded-[18px] border border-transparent bg-white px-5 text-[16px] text-[#2D2D2D] outline-none focus:border-[#14C3CF] 2xl:h-16 2xl:text-[18px]"
               />
               <p className="text-[13px] text-[#8F98A0] 2xl:text-[15px]">
-                Enter the verification code we sent on your email <span className="text-[#14C3CF] font-medium">{formatTime(timer)}</span>
+                Enter the verification code we sent to your email.
               </p>
             </div>
 
@@ -168,9 +193,10 @@ export default function OTPVerification({
                 <button
                   type="button"
                   onClick={handleResend}
-                  className="font-medium text-[#14C3CF] underline"
+                  disabled={timer > 0}
+                  className="font-medium text-[#14C3CF] underline disabled:text-[#8F98A0] disabled:no-underline disabled:cursor-not-allowed"
                 >
-                  Send again
+                  {timer > 0 ? `Resend in ${formatTime(timer)}` : "Send again"}
                 </button>
               </p>
             </div>

@@ -60,6 +60,7 @@ export default function ProfilePage() {
   const [verificationFormKey, setVerificationFormKey] = useState(0);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [showDiscardChangesModal, setShowDiscardChangesModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -132,6 +133,35 @@ export default function ProfilePage() {
       });
     }
   }, [session]);
+
+  // Username/email fields are disabled (not editable), so only the display
+  // name and a pending new avatar can actually make the form dirty.
+  const isProfileEditDirty =
+    editData.displayName !== (user?.name || "") ||
+    pendingProfileImageFile !== null;
+
+  const exitEditProfile = () => router.push("/profile");
+
+  const handleEditProfileBack = () => {
+    if (isProfileEditDirty) {
+      setShowDiscardChangesModal(true);
+      return;
+    }
+    exitEditProfile();
+  };
+
+  // Covers leaving via the browser (tab close, refresh, typing a new URL) —
+  // the in-app back button above is what handles client-side navigation.
+  useEffect(() => {
+    if (view !== "edit" || !isProfileEditDirty) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [view, isProfileEditDirty]);
 
   const handleProfileCropComplete = useCallback(
     (_croppedArea: any, croppedAreaPixels: any) => {
@@ -803,7 +833,7 @@ export default function ProfilePage() {
           </div>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2 no-scrollbar">
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2 no-scrollbar">
           {postsLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
@@ -872,7 +902,7 @@ export default function ProfilePage() {
     return (
       <div className="flex flex-col h-full bg-white">
         <header className="shrink-0 flex items-center justify-between  px-4 bg-white">
-          <button onClick={() => router.push("/profile")} className="p-2">
+          <button onClick={handleEditProfileBack} className="p-2">
             <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
           </button>
           <h1 className="text-lg font-semibold">Edit Profile</h1>
@@ -970,7 +1000,7 @@ export default function ProfilePage() {
           <div className="pb-6">
             <button
               onClick={handleEditProfile}
-              disabled={isUploading}
+              disabled={isUploading || !isProfileEditDirty}
               className="w-full h-14 bg-[#14C3CF] text-white rounded-full font-semibold text-lg shadow-lg shadow-[#14C3CF]/20 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isUploading ? (
@@ -1187,6 +1217,46 @@ export default function ProfilePage() {
                     <RefreshCw className="h-5 w-5" />
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDiscardChangesModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-[340px] bg-white rounded-[32px] p-6 space-y-6 animate-in zoom-in-95 duration-300">
+              <div className="flex justify-between items-center">
+                <h3 className="text-[20px] font-bold text-[#2D2D2D]">
+                  Discard Changes?
+                </h3>
+                <button
+                  onClick={() => setShowDiscardChangesModal(false)}
+                  className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+                >
+                  <X className="h-5 w-5 text-slate-400" />
+                </button>
+              </div>
+
+              <p className="text-[16px] leading-relaxed text-[#8F98A0]">
+                You have unsaved changes. If you leave now, they will be lost.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDiscardChangesModal(false)}
+                  className="flex-1 h-14 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all"
+                >
+                  Keep Editing
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDiscardChangesModal(false);
+                    exitEditProfile();
+                  }}
+                  className="flex-1 h-14 rounded-full bg-red-500 font-semibold text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
+                >
+                  Discard
+                </button>
               </div>
             </div>
           </div>

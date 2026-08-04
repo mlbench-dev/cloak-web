@@ -56,6 +56,19 @@ const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
 // address in the URL/history.
 const PENDING_OTP_EMAIL_KEY = "cloak-pending-otp-email";
 
+// The resend countdown is stored as an absolute deadline (not "seconds
+// remaining") so a page refresh can recompute how much time is actually
+// left instead of resetting the timer back to the full duration.
+const OTP_RESEND_SECONDS = 45;
+const OTP_RESEND_DEADLINE_KEY = "cloak-otp-resend-deadline";
+
+function readStoredResendDeadline(): number {
+  if (typeof window === "undefined") return 0;
+  const raw = window.sessionStorage.getItem(OTP_RESEND_DEADLINE_KEY);
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function preloadImage(src: string) {
   return new Promise<void>((resolve) => {
     const image = new window.Image();
@@ -93,6 +106,9 @@ function HomeFlowContent() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [authStep, setAuthStep] = useState<AuthStep | null>(null);
   const [email, setEmail] = useState("");
+  const [otpResendAvailableAt, setOtpResendAvailableAt] = useState<number>(
+    readStoredResendDeadline,
+  );
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +276,12 @@ function HomeFlowContent() {
       if (response.ok) {
         setEmail(submittedEmail);
         window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, submittedEmail);
+        const deadline = Date.now() + OTP_RESEND_SECONDS * 1000;
+        window.sessionStorage.setItem(
+          OTP_RESEND_DEADLINE_KEY,
+          String(deadline),
+        );
+        setOtpResendAvailableAt(deadline);
         goToAuthStep("OTP");
         toast.success("OTP sent to your email! Please check your inbox.", {
           id: "otp-sent",
@@ -291,6 +313,7 @@ function HomeFlowContent() {
       if (response.ok) {
         setUserId(data.user.id);
         window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY);
+        window.sessionStorage.removeItem(OTP_RESEND_DEADLINE_KEY);
 
         // Use NextAuth signIn to create a session for the OTP user
         // This ensures the session is established and data is synced
@@ -313,6 +336,18 @@ function HomeFlowContent() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // The email field on the OTP screen is disabled by design (it shouldn't
+  // be editable in place — a changed email needs a new code sent to it),
+  // so this is the way back if someone mistyped it.
+  const handleChangeEmail = () => {
+    setError(null);
+    setEmail("");
+    window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY);
+    window.sessionStorage.removeItem(OTP_RESEND_DEADLINE_KEY);
+    setOtpResendAvailableAt(0);
+    goToAuthStep("EMAIL");
   };
 
   const handleUsernameSubmit = async (username: string) => {
@@ -485,9 +520,11 @@ function HomeFlowContent() {
         email={email}
         onVerify={handleOTPVerify}
         onResend={() => handleEmailSubmit(email)}
+        onChangeEmail={handleChangeEmail}
         onGoogleSignIn={handleGoogleSignIn}
         error={error}
         isLoading={isLoading}
+        resendAvailableAt={otpResendAvailableAt}
       />
     );
   }
