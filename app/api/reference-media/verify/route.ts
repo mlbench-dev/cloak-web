@@ -4,11 +4,54 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
+// Without this, the platform's default function timeout (on Vercel, as low
+// as 10-15s depending on plan) can silently kill this request mid-flight —
+// e.g. right after marking verificationInProgress: true but before the
+// external call returns — leaving the user stuck on an infinite spinner.
+// A Cloud Run cold start alone can eat 30-50s; give this room to actually
+// finish. Lower this once the verification service is configured with
+// min-instances > 0 to stay warm.
+export const maxDuration = 60;
+
 const VERIFICATION_API_BASE_URL =
-  process.env.VERIFICATION_API_URL || "http://192.168.0.171:8000";
+  process.env.VERIFICATION_API_URL ||
+  "https://verification-739230282785.europe-west1.run.app";
 const VERIFICATION_API_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/verify`;
 const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/update`;
-const VERIFICATION_API_HEALTH_ENDPOINT = `${VERIFICATION_API_BASE_URL}/health`;
+
+// NOTE: this is a static token pasted into BEARER_TOKEN, not a token minted
+// per-request from a service account. Google identity tokens (the kind
+// `gcloud auth print-identity-token` prints) expire in ~1 hour — this value
+// WILL go stale and start producing 401s in production until someone
+// regenerates it and updates the env var (here and in Vercel) again. Fine
+// as a stopgap; swap to google-auth-library + a service account (which
+// mints and refreshes tokens automatically) before this is relied on
+// unattended.
+const VERIFICATION_API_BEARER_TOKEN = process.env.BEARER_TOKEN || "";
+
+function getVerificationApiHeaders(extra?: Record<string, string>) {
+  const headers: Record<string, string> = { ...extra };
+  if (VERIFICATION_API_BEARER_TOKEN) {
+    headers.Authorization = `Bearer ${VERIFICATION_API_BEARER_TOKEN}`;
+  }
+  return headers;
+}
+
+type ApiDocumentType = "id_card" | "passport" | "driving_license";
+
+// Stored documentType is the human-readable label shown in the identity
+// verification form (see DOCUMENT_TYPES in IdentityVerificationStep.tsx),
+// not the API's slug — translate between them.
+function mapDocumentTypeToApiValue(
+  documentType: unknown,
+): ApiDocumentType | null {
+  const normalized = String(documentType || "").toLowerCase();
+  if (normalized.includes("passport")) return "passport";
+  if (normalized.includes("driv")) return "driving_license";
+  if (normalized.includes("national") || normalized.includes("id"))
+    return "id_card";
+  return null;
+}
 
 function toPercent(value: unknown) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -189,9 +232,36 @@ export async function POST() {
       );
     }
 
+    const documentTypeForApi = mapDocumentTypeToApiValue(
+      verificationDoc.documentType,
+    );
+    if (!documentTypeForApi) {
+      return NextResponse.json(
+        {
+          error:
+            "Your identity document type could not be determined. Please re-submit your document.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!VERIFICATION_API_BEARER_TOKEN) {
+      console.error(
+        "BEARER_TOKEN is not configured — cannot call the verification service.",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Server not available, try again later from the Protected Media menu.",
+        },
+        { status: 502 },
+      );
+    }
+
     const idCardUrl = verificationDoc.verification_images[0];
     const requestBody: Record<string, string> = {
       id_card: idCardUrl,
+      document_type: documentTypeForApi,
     };
 
     // Map images to their stored positions
@@ -226,93 +296,83 @@ export async function POST() {
       );
     }
 
-    const healthResponse = await fetch(VERIFICATION_API_HEALTH_ENDPOINT, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+    // A failure here is an infrastructure/auth problem, not evidence the
+    // user's identity didn't match — never let this path fall through to
+    // marking identityVerificationStatus as REJECTED. It resets
+    // verificationInProgress (so the "Upload Media" retry screen shows up
+    // instead of an infinite spinner) and leaves status as-is for a retry.
+    const respondServiceUnavailable = async () => {
+      if (verificationDoc._id) {
+        await db.collection("identityVerifications").updateOne(
+          { _id: verificationDoc._id },
+          {
+            $set: {
+              verificationInProgress: false,
+              updatedAt: new Date(),
+            },
+          },
+        );
+      }
+      return NextResponse.json(
+        {
+          error:
+            "Server not available, try again later from the Protected Media menu.",
+        },
+        { status: 502 },
+      );
+    };
+
+    const verificationEndpoint = requiresThreeImages
+      ? VERIFICATION_API_ENDPOINT
+      : VERIFICATION_API_UPDATE_ENDPOINT;
+    const verificationMethod = requiresThreeImages ? "POST" : "PATCH";
+
+    // TEMP debug logging while chasing the passport/driving_license
+    // mismatch — remove once resolved.
+    console.log("[verify] calling verification service", {
+      endpoint: verificationEndpoint,
+      method: verificationMethod,
+      requiresThreeImages,
+      requestBody,
     });
 
-    if (!healthResponse.ok) {
-      if (verificationDoc._id) {
-        await db.collection("identityVerifications").updateOne(
-          { _id: verificationDoc._id },
-          {
-            $set: {
-              verificationInProgress: false,
-              updatedAt: new Date(),
-            },
-          },
-        );
-      }
-      console.error(
-        "Verification service health check failed:",
-        healthResponse.status,
-      );
-      return NextResponse.json(
-        {
-          error:
-            "Server not available, try again later from the Protected Media menu.",
-        },
-        { status: 502 },
-      );
-    }
-
-    const healthJson = await healthResponse.json().catch(() => null);
-    if (healthJson && String(healthJson.status).toLowerCase() !== "ok") {
-      if (verificationDoc._id) {
-        await db.collection("identityVerifications").updateOne(
-          { _id: verificationDoc._id },
-          {
-            $set: {
-              verificationInProgress: false,
-              updatedAt: new Date(),
-            },
-          },
-        );
-      }
-      console.error("Verification service unhealthy:", healthJson);
-      return NextResponse.json(
-        {
-          error:
-            "Server not available, try again later from the Protected Media menu.",
-        },
-        { status: 502 },
-      );
-    }
-
-    const externalResponse = await fetch(
-      requiresThreeImages
-        ? VERIFICATION_API_ENDPOINT
-        : VERIFICATION_API_UPDATE_ENDPOINT,
-      {
-        method: requiresThreeImages ? "POST" : "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    );
+    const externalResponse = await fetch(verificationEndpoint, {
+      method: verificationMethod,
+      headers: getVerificationApiHeaders({
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify(requestBody),
+    });
 
     const externalJson = await externalResponse.json().catch(() => null);
+
+    console.log("[verify] verification service responded", {
+      status: externalResponse.status,
+      body: externalJson,
+    });
+
+    // Auth failures and server errors mean the check never actually ran —
+    // only a genuine content-based rejection (422, or the parsed signals
+    // below on a 2xx) should ever write REJECTED to the user's record.
+    if (
+      externalResponse.status === 401 ||
+      externalResponse.status === 403 ||
+      externalResponse.status >= 500
+    ) {
+      console.error(
+        "Verification service call failed:",
+        externalResponse.status,
+        externalJson,
+      );
+      return respondServiceUnavailable();
+    }
 
     let identityVerificationStatus: "APPROVED" | "REJECTED" = "REJECTED";
 
     if (!externalResponse.ok) {
-      if (externalResponse.status === 422) {
-        identityVerificationStatus = "REJECTED";
-      } else {
-        identityVerificationStatus = "REJECTED";
-        // return NextResponse.json(
-        //   {
-        //     error:
-        //       externalJson?.detail ||
-        //       externalJson?.message ||
-        //       "Human verification service unavailable.",
-        //   },
-        //   { status: 502 }
-        // );
-      }
+      // Everything reaching here (401/403/5xx already handled above) is a
+      // genuine content-based rejection from the service, e.g. 422.
+      identityVerificationStatus = "REJECTED";
     } else {
       const normalizedStatus = String(externalJson?.status || "").toUpperCase();
       const verifiedFlag = externalJson?.verified;
