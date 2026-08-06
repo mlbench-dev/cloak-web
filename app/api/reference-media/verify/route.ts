@@ -107,7 +107,6 @@ export async function POST() {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     const client = await clientPromise;
     const db = client.db();
     const userId = new ObjectId(session.user.id);

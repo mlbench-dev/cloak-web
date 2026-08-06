@@ -23,6 +23,13 @@ type LinkPreview = {
   image?: string | null;
 };
 
+type AiConfidenceStatus =
+  | "pending"
+  | "processing"
+  | "awaiting_verification"
+  | "completed"
+  | "failed";
+
 type ReportDetails = {
   _id: string;
   platform: string;
@@ -30,9 +37,24 @@ type ReportDetails = {
   notes?: string;
   status: string;
   aiConfidence: number;
+  aiConfidenceMessage?: string;
+  aiConfidenceSource?: "api" | "fallback";
+  aiConfidenceStatus?: AiConfidenceStatus;
   createdAt?: string;
   user?: ReportUser;
 };
+
+// AI confidence isn't ready in any of these — either it's actively running,
+// queued for a retry, or waiting on the target user's own verification.
+// All three should keep showing a loader instead of a stale "0%".
+function isAiConfidencePending(status?: AiConfidenceStatus) {
+  return (
+    status === "pending" ||
+    status === "processing" ||
+    status === "awaiting_verification" ||
+    status === undefined
+  );
+}
 
 type ResultModalStatus = "VERIFIED" | "FALSE_POSITIVE" | null;
 
@@ -222,24 +244,15 @@ export default function ReportDetailsPage({
 
     const fetchReport = async () => {
       try {
-        const fetchByType = async (type: "sent" | "received") => {
-          const res = await fetch(`/api/reports?type=${type}`);
-          const data = await res.json().catch(() => null);
-          if (data?.success) {
-            const found = data.reports.find((item: any) => item._id === id);
-            if (found) {
-              setReport(found);
-              setReportViewType(type);
-              return true;
-            }
-          }
-          return false;
-        };
+        const res = await fetch(`/api/reports/${id}?type=${initialViewType}`);
+        const data = await res.json().catch(() => null);
 
-        const foundInRequested = await fetchByType(initialViewType);
-        if (!foundInRequested) {
-          await fetchByType(initialViewType === "sent" ? "received" : "sent");
+        if (!res.ok || !data?.success || !data?.report) {
+          throw new Error(data?.error || "Failed to fetch report");
         }
+
+        setReport(data.report);
+        setReportViewType(data.viewType || initialViewType);
       } catch (error) {
         console.error("Failed to fetch report:", error);
       } finally {
@@ -250,9 +263,36 @@ export default function ReportDetailsPage({
     void fetchReport();
   }, [id, initialViewType]);
 
+  // AI confidence can take a while now (the underlying service gets up to
+  // 10 minutes) and is computed server-side in the background — poll while
+  // it's still pending/processing/awaiting verification so the loader
+  // actually resolves into the real result on its own, instead of the user
+  // having to manually refresh to find out it finished.
+  useEffect(() => {
+    if (!report || !isAiConfidencePending(report.aiConfidenceStatus)) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/reports/${id}?type=${initialViewType}`);
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && data?.report) {
+          setReport(data.report);
+        }
+      } catch (error) {
+        console.error("Failed to poll report status:", error);
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+    // Deliberately keyed on the status string, not the whole `report`
+    // object — every poll tick replaces `report` with a new reference, and
+    // depending on it here would tear down and recreate the interval every
+    // 6s for no reason instead of only when the status actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, initialViewType, report?.aiConfidenceStatus]);
+
   useEffect(() => {
     if (!report?.sourceLink) {
-      setPreview(null);
       return;
     }
 
@@ -323,15 +363,17 @@ export default function ReportDetailsPage({
   const personSectionTitle =
     reportViewType === "sent" ? "Target User" : "Reported By";
 
-  const sourceLinkLabel = useMemo(() => {
-    if (!report?.sourceLink) return "";
+  const sourceLinkLabel = report?.sourceLink
+    ? (() => {
     try {
       const parsed = new URL(report.sourceLink);
       return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname}${parsed.search}`;
     } catch {
       return report.sourceLink;
     }
-  }, [report?.sourceLink]);
+      })()
+    : "";
+  const activePreview = report?.sourceLink ? preview : null;
 
   const statusMeta = getStatusMeta(report?.status || "");
 
@@ -471,12 +513,12 @@ export default function ReportDetailsPage({
               <div className="flex h-[260px] items-center justify-center">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
               </div>
-            ) : preview?.image ? (
+            ) : activePreview?.image ? (
               <div className="flex h-[260px] items-center justify-center bg-[#F1F1F1]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={preview.image}
-                  alt={preview.title || "Link preview"}
+                  src={activePreview.image}
+                  alt={activePreview.title || "Link preview"}
                   className="h-full w-auto max-w-full object-contain"
                 />
               </div>
@@ -484,10 +526,10 @@ export default function ReportDetailsPage({
               <div className="flex h-[260px] flex-col items-center justify-center px-6 text-center">
                 <FileSearch className="h-10 w-10 text-[#B0B5BB]" />
                 <p className="mt-4 text-[16px] font-medium text-[#2D2D2D]">
-                  {preview?.title || "Preview unavailable"}
+                  {activePreview?.title || "Preview unavailable"}
                 </p>
                 <p className="mt-2 text-[14px] text-[#99A0A7]">
-                  {preview?.domain || sourceLinkLabel}
+                  {activePreview?.domain || sourceLinkLabel}
                 </p>
               </div>
             )}
@@ -502,16 +544,31 @@ export default function ReportDetailsPage({
                 AI Confidence Match
               </p>
             </div>
-            <p className="text-[16px] font-semibold text-[#2D2D2D]">
-              {report.aiConfidence}%
+            {isAiConfidencePending(report.aiConfidenceStatus) ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#12C6D1]/30 border-t-[#12C6D1]" />
+            ) : (
+              <p className="text-[16px] font-semibold text-[#2D2D2D]">
+                {report.aiConfidence}%
+              </p>
+            )}
+          </div>
+          {isAiConfidencePending(report.aiConfidenceStatus) ? (
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-[#12C6D1]/60" />
+            </div>
+          ) : (
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
+              <div
+                className="h-full rounded-full bg-[#12C6D1]"
+                style={{ width: `${report.aiConfidence}%` }}
+              />
+            </div>
+          )}
+          {report.aiConfidenceMessage ? (
+            <p className="mt-3 text-[13px] leading-6 text-[#4F5A61]">
+              {report.aiConfidenceMessage}
             </p>
-          </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
-            <div
-              className="h-full rounded-full bg-[#12C6D1]"
-              style={{ width: `${report.aiConfidence}%` }}
-            />
-          </div>
+          ) : null}
         </section>
 
         {report.status === "PENDING" && reportViewType !== "sent" && (
