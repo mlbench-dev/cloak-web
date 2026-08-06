@@ -137,16 +137,13 @@ export default function ProgressPage() {
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
-      <header className="shrink-0 flex items-center justify-between px-4 pb-3 pt-[max(env(safe-area-inset-top),1rem)] bg-white">
-        <button
-          onClick={() => router.back()}
-          className="flex h-10 w-10 items-center justify-center rounded-full active:scale-95"
-        >
-          <ChevronLeft className="h-6 w-6 text-[#6B7280]" />
+      <header className="flex items-center justify-between  bg-white z-10">
+        <button onClick={() => router.back()} className="p-2">
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h2 className="text-[15px] font-semibold text-[#2D2D2D]">
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">
           Your Progress
-        </h2>
+        </h1>
         <div className="w-10" />
       </header>
 

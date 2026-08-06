@@ -126,18 +126,10 @@ export default function MyReportsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* <header className="shrink-0 flex items-center justify-between py-4 px-4 bg-white">
-        <button onClick={() => router.push("/profile")} className="p-2">
-          <ChevronLeft className="h-6 w-6 text-slate-600" />
-        </button>
-        <h1 className="text-2xl font-bold text-[#2D2D2D]">My Reports</h1>
-        <div className="w-10" />
-      </header> */}
-
+    <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
         <button onClick={() => router.back()} className="p-2">
-          <ChevronLeft className="h-6 w-6 text-slate-400" />
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
         <h1 className="text-lg font-semibold text-[#2D2D2D]">My Reports</h1>
         <div className="w-10" />

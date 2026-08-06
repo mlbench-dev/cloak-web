@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronLeft, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, History, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type VerificationStatusScreenProps = {
@@ -33,7 +33,7 @@ function getFriendlyScoreLabel(label: string) {
   return label.replaceAll("_", " ");
 }
 
-function formatVerificationReason(reason: string) {
+export function formatVerificationReason(reason: string) {
   return reason
     .replace(/\bface1_vs_id\b/gi, "Protected photo 1 match")
     .replace(/\bface2_vs_id\b/gi, "Protected photo 2 match")
@@ -150,23 +150,8 @@ export default function VerificationStatusScreen({
 
   return (
     <main className="min-h-full bg-white font-sf-pro-display text-[#111111]">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-5 pb-[max(env(safe-area-inset-bottom),20px)] pt-[max(env(safe-area-inset-top),16px)]">
-        {/* <header className="relative flex items-center justify-center pb-7 pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              router.push("/profile");
-            }}
-            className="absolute left-0 top-0 flex h-11 w-11 items-center justify-center rounded-full text-[#60646C]"
-            aria-label="Go back"
-          >
-            <ChevronLeft className="h-6 w-6" strokeWidth={1.9} />
-          </button>
-          <h1 className="text-[17px] font-semibold leading-6 text-[#1C1C1E]">
-            Verification
-          </h1>
-        </header> */}
-        <header className="flex items-center justify-between px-4  bg-white z-10">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-4 pb-[max(env(safe-area-inset-bottom),20px)] pt-[max(env(safe-area-inset-top),16px)]">
+        <header className="flex items-center justify-between bg-white z-10">
           <button
             onClick={() => {
               router.push("/profile");
@@ -336,36 +321,24 @@ export default function VerificationStatusScreen({
               </section>
 
               {recentHistory.length > 0 ? (
-                <section className="mt-7 rounded-[22px] border border-[#EBF1F2] bg-[#FCFEFE] px-5 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
-                  <h3 className="text-[17px] font-semibold leading-6 text-[#272727]">
-                    Recent verification results
-                  </h3>
-                  <div className="mt-4 space-y-3">
-                    {recentHistory.map((entry, index) => (
-                      <div
-                        key={`${entry.status || "unknown"}-${entry.reason || "no-reason"}-${index}`}
-                        className="rounded-[18px] bg-white px-4 py-3"
-                      >
-                        <p
-                          className={`text-[14px] font-semibold ${
-                            String(entry.status).toUpperCase() === "APPROVED"
-                              ? "text-[#16C2CE]"
-                              : "text-[#F04B43]"
-                          }`}
-                        >
-                          {String(entry.status).toUpperCase() === "APPROVED"
-                            ? "Approved"
-                            : "Rejected"}
-                        </p>
-                        {entry.reason ? (
-                          <p className="mt-1 text-[14px] leading-6 text-[#5F6670]">
-                            {formatVerificationReason(entry.reason)}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
+                <button
+                  type="button"
+                  onClick={() => router.push("/verification/history")}
+                  className="mt-7 flex items-center justify-between rounded-[22px] border border-[#EBF1F2] bg-[#FCFEFE] px-5 py-4 text-left shadow-[0_1px_0_rgba(0,0,0,0.02)]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EAF8F9] text-[#17C1CD]">
+                      <History
+                        className="h-[18px] w-[18px]"
+                        strokeWidth={2.1}
+                      />
+                    </div>
+                    <span className="text-[16px] font-semibold leading-6 text-[#272727]">
+                      Verification History
+                    </span>
                   </div>
-                </section>
+                  <ChevronRight className="h-5 w-5 text-[#9CA3AE]" />
+                </button>
               ) : null}
 
               <div className="mt-auto space-y-4 pt-10">

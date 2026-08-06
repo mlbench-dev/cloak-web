@@ -720,7 +720,7 @@ export default function ProfilePage() {
     const isPending = user?.identityVerificationStatus === "PENDING";
     return (
       <div className="flex h-full flex-col">
-        <header className="flex items-center justify-between px-4 bg-white z-10">
+        <header className="flex items-center justify-between  bg-white z-10">
           <button
             onClick={() => {
               router.push("/profile");
@@ -776,8 +776,8 @@ export default function ProfilePage() {
     };
 
     return (
-      <div className="flex flex-col h-full">
-        <header className="flex items-center py-4 bg-white">
+      <div className="flex h-full flex-col bg-white font-sf-pro-display">
+        <header className="flex items-center justify-between  bg-white z-10">
           <button
             onClick={() => {
               setForceVerificationForm(false);
@@ -785,11 +785,12 @@ export default function ProfilePage() {
             }}
             className="p-2"
           >
-            <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
+            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="flex-1 text-center text-lg font-semibold mr-10">
+          <h1 className="text-lg font-semibold text-[#2D2D2D]">
             Verification
           </h1>
+          <div className="w-10" />
         </header>
         <div className="flex-1">
           <IdentityVerificationStep
@@ -823,9 +824,9 @@ export default function ProfilePage() {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="shrink-0 bg-white">
-          <div className="flex items-center justify-between px-4 py-4">
+          <div className="flex items-center justify-between ">
             <button onClick={() => router.push("/profile")} className="p-2">
-              <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
+              <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
             </button>
             <h1 className="text-lg font-semibold text-[#2D2D2D]">
               {postsViewTitle}
@@ -833,7 +834,7 @@ export default function ProfilePage() {
             <div className="w-10" />
           </div>
 
-          <div className="px-4 pb-2">
+          <div className="px-4 pb-2 mt-4">
             <div className="flex items-center gap-3 rounded-full bg-[#F3F3F3] px-4 py-3">
               <Search className="h-5 w-5 text-[#98A0A7]" />
               <input
@@ -913,12 +914,12 @@ export default function ProfilePage() {
 
   if (view === "edit") {
     return (
-      <div className="flex flex-col h-full bg-white">
-        <header className="shrink-0 flex items-center justify-between  px-4 bg-white">
+      <div className="flex h-full flex-col bg-white font-sf-pro-display">
+        <header className="flex items-center justify-between  bg-white z-10">
           <button onClick={handleEditProfileBack} className="p-2">
-            <ChevronRight className="h-6 w-6 rotate-180 text-slate-400" />
+            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold">Edit Profile</h1>
+          <h1 className="text-lg font-semibold text-[#2D2D2D]">Edit Profile</h1>
           <div className="w-10" />
         </header>
 

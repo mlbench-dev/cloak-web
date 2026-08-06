@@ -133,7 +133,7 @@ export default function VerificationPage() {
     return (
       <main className="min-h-full bg-white font-sf-pro-display text-[#111111]">
         <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-5 pb-[max(env(safe-area-inset-bottom),20px)] pt-[max(env(safe-area-inset-top),16px)]">
-          <header className="flex items-center justify-between px-4 bg-white z-10">
+          <header className="flex items-center justify-between  bg-white z-10">
             <button
               onClick={() => {
                 router.push("/profile");

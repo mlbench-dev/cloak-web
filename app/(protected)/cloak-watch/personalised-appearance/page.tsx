@@ -31,17 +31,13 @@ export default function PersonalisedAppearancePage() {
   }, [query]);
 
   return (
-    <div className="flex h-full flex-col bg-white font-sf-pro-display px-4 py-4">
-      <header className="shrink-0 bg-white ">
-        <div className="flex items-center justify-between px-4">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-[#2D2D2D]"
-          >
-            <ChevronLeft className="h-6 w-6 text-[#98A0A7]" />
+    <div className="flex h-full flex-col bg-white font-sf-pro-display">
+      <header className="shrink-0 bg-white">
+        <div className="flex items-center justify-between px-4 py-4">
+          <button type="button" onClick={() => router.back()} className="p-2">
+            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="flex-1 text-center text-[17px] font-semibold text-[#2D2D2D]">
+          <h1 className="text-lg font-semibold text-[#2D2D2D]">
             Personalised Appearance
           </h1>
           <div className="w-10" />

@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import type { PlanFeature, PlanSummary, PlanTone } from "../_lib/plans";
 
@@ -67,27 +66,14 @@ export function SubscriptionScreenShell({
 }
 
 export function SubscriptionHeader() {
-  const router = useRouter();
-
   return (
-    <header className="flex items-center justify-between p-4 bg-white z-10">
+    <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
       <button onClick={() => window.history.back()} className="p-2">
-        <ChevronLeft className="h-6 w-6 text-slate-400" />
+        <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
       </button>
       <h1 className="text-lg font-semibold text-[#2D2D2D]">Subscription</h1>
       <div className="w-10" />
     </header>
-    // <header className="relative flex shrink-0 items-center justify-center px-5 pt-4 pb-5">
-    //   <button
-    //     type="button"
-    //     onClick={() => router.back()}
-    //     aria-label="Go back"
-    //     className="absolute left-4 flex h-9 w-9 items-center justify-center text-[#2D2D2D]"
-    //   >
-    //     <ChevronLeft className="h-6 w-6" />
-    //   </button>
-    //   <h1 className="text-[17px] font-semibold text-[#2D2D2D]">Subscription</h1>
-    // </header>
   );
 }
 

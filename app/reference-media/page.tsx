@@ -249,6 +249,18 @@ function ReferenceMediaContent() {
             await updateSession({
               identityVerificationStatus: verificationStatus,
             });
+
+            // The user already navigated away by this point (verification
+            // runs in the background) — this toast is how they actually
+            // find out it's done, instead of having to notice the page
+            // silently updated or refresh it themselves to check.
+            if (verificationStatus === "APPROVED") {
+              toast.success("Your identity has been verified!");
+            } else if (verificationStatus === "REJECTED") {
+              toast.error(
+                "Your identity verification was unsuccessful. Check your Profile for details.",
+              );
+            }
           }
         } catch (error) {
           console.error("Verification start failed:", error);
@@ -257,7 +269,7 @@ function ReferenceMediaContent() {
       })();
 
       toast.success(
-        "We will verify your identity ASAP. Please check your Profile after some time.",
+        "We will verify your identity shortly. Please check your Profile after some time.",
       );
       router.push("/dashboard");
     } catch (error) {
@@ -334,20 +346,14 @@ function ReferenceMediaContent() {
       className="flex flex-col bg-white font-sf-pro-display"
       style={{ height: "var(--app-height, 100dvh)" }}
     >
-      <header className="flex items-center justify-between py-4 px-4 bg-white z-10 flex-shrink-0">
+      <header className="flex items-center justify-between px-4 py-4 bg-white z-10 flex-shrink-0">
         <button onClick={handleHeaderBack} className="p-2">
-          <ChevronLeft className="h-6 w-6 text-slate-400" />
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
         <h1 className="text-lg font-semibold text-[#2D2D2D]">
           {mode === "onboarding" ? "Add Protected Media" : "Protected Media"}
         </h1>
-        <div className="w-16 text-right">
-          {mode === "onboarding" ? (
-            <div className="w-10" />
-          ) : (
-            <div className="w-10" />
-          )}
-        </div>
+        <div className="w-10" />
       </header>
 
       <div className="flex-1 flex flex-col overflow-y-auto px-6 py-6">

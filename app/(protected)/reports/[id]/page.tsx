@@ -359,16 +359,16 @@ export default function ReportDetailsPage({
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <header className="flex items-center justify-between px-2 pt-1">
+      <header className="flex items-center justify-between  bg-white z-10">
         <button
           onClick={() =>
             router.push(reportViewType === "sent" ? "/my-reports" : "/reports")
           }
           className="p-2"
         >
-          <ChevronLeft className="h-6 w-6 text-[#98A0A7]" />
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-[17px] font-semibold text-[#2D2D2D]">
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">
           Report Details
         </h1>
         <div className="min-w-[78px] pr-2 text-right">
