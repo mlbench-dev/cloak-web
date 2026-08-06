@@ -14,6 +14,11 @@ import {
   shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
 
+// See app/api/reports/route.ts for why this matches the AI service's
+// 10-minute fetch timeout, and the caveat that your Vercel plan may still
+// cap this lower regardless.
+export const maxDuration = 600;
+
 type StoredReport = {
   _id?: ObjectId;
   reportedBy: ObjectId;

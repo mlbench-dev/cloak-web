@@ -8,7 +8,20 @@ import { ReportDoc, RecentSearchDoc } from "@/models/User";
 import {
   computeAndStoreAiConfidence,
   detectPlatform,
+  refreshVerificationGate,
+  shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
+
+// The AI verification call (kicked off via after() below, both here and in
+// GET) can now take up to 10 minutes — the function instance has to stay
+// alive that whole time for it to actually finish, or Vercel kills it
+// mid-flight and the report is left stuck "processing" until the next
+// retry window. NOTE: this is capped by your Vercel plan regardless of what
+// we set here — Hobby is fixed at 10s no matter what, Pro tops out at 300s
+// on classic serverless functions (up to 800s only with Fluid Compute
+// enabled). If you're not on Fluid Compute, 10 minutes will still get cut
+// short in production even with this set.
+export const maxDuration = 600;
 
 function buildRecentSearchDoc(
   sessionUserId: string,
@@ -267,6 +280,27 @@ export async function GET(request: Request) {
         { $sort: { createdAt: -1 } },
       ])
       .toArray();
+
+    // Same lazy retry as the single-report view (GET /api/reports/[id]),
+    // just fanned out across the whole list — the list is what people
+    // actually check regularly ("My Reports"), so gating retries on someone
+    // drilling into one specific report's detail page left failed/pending
+    // ones stuck far more often than it should. Cheap gate re-checks run
+    // for every report in view, concurrently; the expensive AI call only
+    // kicks off for ones that are actually due (not already processing,
+    // not cooling down, not out of retries).
+    await Promise.all(
+      reports.map(async (report) => {
+        report.aiConfidenceStatus = await refreshVerificationGate(
+          db,
+          report._id,
+          report as any,
+        );
+        if (shouldAttemptAiConfidence(report as any)) {
+          after(() => computeAndStoreAiConfidence(report._id));
+        }
+      }),
+    );
 
     return NextResponse.json({ success: true, reports });
   } catch (error) {

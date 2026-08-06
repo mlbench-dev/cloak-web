@@ -23,6 +23,13 @@ type LinkPreview = {
   image?: string | null;
 };
 
+type AiConfidenceStatus =
+  | "pending"
+  | "processing"
+  | "awaiting_verification"
+  | "completed"
+  | "failed";
+
 type ReportDetails = {
   _id: string;
   platform: string;
@@ -32,9 +39,22 @@ type ReportDetails = {
   aiConfidence: number;
   aiConfidenceMessage?: string;
   aiConfidenceSource?: "api" | "fallback";
+  aiConfidenceStatus?: AiConfidenceStatus;
   createdAt?: string;
   user?: ReportUser;
 };
+
+// AI confidence isn't ready in any of these — either it's actively running,
+// queued for a retry, or waiting on the target user's own verification.
+// All three should keep showing a loader instead of a stale "0%".
+function isAiConfidencePending(status?: AiConfidenceStatus) {
+  return (
+    status === "pending" ||
+    status === "processing" ||
+    status === "awaiting_verification" ||
+    status === undefined
+  );
+}
 
 type ResultModalStatus = "VERIFIED" | "FALSE_POSITIVE" | null;
 
@@ -242,6 +262,34 @@ export default function ReportDetailsPage({
 
     void fetchReport();
   }, [id, initialViewType]);
+
+  // AI confidence can take a while now (the underlying service gets up to
+  // 10 minutes) and is computed server-side in the background — poll while
+  // it's still pending/processing/awaiting verification so the loader
+  // actually resolves into the real result on its own, instead of the user
+  // having to manually refresh to find out it finished.
+  useEffect(() => {
+    if (!report || !isAiConfidencePending(report.aiConfidenceStatus)) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/reports/${id}?type=${initialViewType}`);
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success && data?.report) {
+          setReport(data.report);
+        }
+      } catch (error) {
+        console.error("Failed to poll report status:", error);
+      }
+    }, 6000);
+
+    return () => clearInterval(interval);
+    // Deliberately keyed on the status string, not the whole `report`
+    // object — every poll tick replaces `report` with a new reference, and
+    // depending on it here would tear down and recreate the interval every
+    // 6s for no reason instead of only when the status actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, initialViewType, report?.aiConfidenceStatus]);
 
   useEffect(() => {
     if (!report?.sourceLink) {
@@ -496,19 +544,29 @@ export default function ReportDetailsPage({
                 AI Confidence Match
               </p>
             </div>
-            <p className="text-[16px] font-semibold text-[#2D2D2D]">
-              {report.aiConfidence}%
-            </p>
+            {isAiConfidencePending(report.aiConfidenceStatus) ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#12C6D1]/30 border-t-[#12C6D1]" />
+            ) : (
+              <p className="text-[16px] font-semibold text-[#2D2D2D]">
+                {report.aiConfidence}%
+              </p>
+            )}
           </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
-            <div
-              className="h-full rounded-full bg-[#12C6D1]"
-              style={{ width: `${report.aiConfidence}%` }}
-            />
-          </div>
+          {isAiConfidencePending(report.aiConfidenceStatus) ? (
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-[#12C6D1]/60" />
+            </div>
+          ) : (
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
+              <div
+                className="h-full rounded-full bg-[#12C6D1]"
+                style={{ width: `${report.aiConfidence}%` }}
+              />
+            </div>
+          )}
           {report.aiConfidenceMessage ? (
             <p className="mt-3 text-[13px] leading-6 text-[#4F5A61]">
-              {report.aiConfidenceMessage}
+              {report.aiConfidencxeMessage}
             </p>
           ) : null}
         </section>

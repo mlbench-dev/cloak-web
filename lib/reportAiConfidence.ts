@@ -7,9 +7,9 @@ const REPORT_AI_VERIFICATION_BASE_URL =
   process.env.VERIFICATION_API_URL_URL?.trim() ||
   // process.env.SUBMIT_REPORT_AI_VERIFICATION?.trim() ||
   // process.env.SUBMIT_REPORT_AI_VERIFICATION_URL?.trim() ||
-  "http://192.168.0.148:3000";
+  "https://verification-739230282785.europe-west1.run.app";
 const REPORT_AI_VERIFICATION_ENDPOINT = `${REPORT_AI_VERIFICATION_BASE_URL}/api/v1/social-media-verification/verify`;
-const REPORT_AI_VERIFICATION_TIMEOUT_MS = 45000;
+const REPORT_AI_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes;
 
 export const AI_CONFIDENCE_MAX_ATTEMPTS = 4;
 export const AI_CONFIDENCE_RETRY_COOLDOWN_MS = 60 * 1000;
@@ -44,11 +44,6 @@ function normalizeSimilarity(value: unknown): number | null {
   return numeric === null ? null : normalizeConfidence(numeric);
 }
 
-function average(numbers: number[]) {
-  if (!numbers.length) return null;
-  return numbers.reduce((sum, item) => sum + item, 0) / numbers.length;
-}
-
 function extractConfidence(payload: unknown): number | null {
   if (!payload || typeof payload !== "object") return null;
 
@@ -59,11 +54,14 @@ function extractConfidence(payload: unknown): number | null {
       Boolean(item) && typeof item === "object" && !Array.isArray(item),
   );
 
-  const directSimilarity = normalizeSimilarity(
-    record.average_similarity ?? record.averageSimilarity,
-  );
-  if (directSimilarity !== null) return directSimilarity;
-
+  // `results` is a flat list — one entry per detected face across every
+  // image, video frame, and (for reels/videos) the post's cover thumbnail
+  // that the service checked. A single unrelated cover photo or a bad video
+  // frame can sit right next to the entry that's the actual genuine match,
+  // and *averaging* them together drags a real ~65% match down to ~35% —
+  // effectively hiding the match. The highest `average_similarity` across
+  // every result is the best evidence of a match, so that's what we report,
+  // not the average of all of them.
   const resultSimilarities = results
     .map((result) => {
       if (!result || typeof result !== "object" || Array.isArray(result)) {
@@ -76,9 +74,14 @@ function extractConfidence(payload: unknown): number | null {
     })
     .filter((value): value is number => value !== null);
 
-  const averagedResultSimilarity = average(resultSimilarities);
-  if (averagedResultSimilarity !== null)
-    return Math.round(averagedResultSimilarity);
+  if (resultSimilarities.length > 0) {
+    return Math.max(...resultSimilarities);
+  }
+
+  const directSimilarity = normalizeSimilarity(
+    record.average_similarity ?? record.averageSimilarity,
+  );
+  if (directSimilarity !== null) return directSimilarity;
 
   const candidates: unknown[] = [
     record.aiConfidence,
@@ -123,27 +126,30 @@ function summarizeVerificationResult(payload: unknown): string | null {
 
   const record = payload as Record<string, unknown>;
   const results = Array.isArray(record.results) ? record.results : [];
-  const avgSimilarity = extractConfidence(payload);
+  const bestSimilarity = extractConfidence(payload);
   const facesMatched = readNumericConfidence(record.faces_matched);
-  const imagesProcessed = readNumericConfidence(record.images_processed);
+  const imagesProcessed = readNumericConfidence(record.images_processed) ?? 0;
+  const videosProcessed = readNumericConfidence(record.videos_processed) ?? 0;
+  const totalProcessed = imagesProcessed + videosProcessed;
 
-  if (
-    typeof facesMatched === "number" &&
-    typeof imagesProcessed === "number" &&
-    imagesProcessed > 0
-  ) {
+  if (typeof facesMatched === "number" && totalProcessed > 0) {
     const matchedText = `${Math.round(facesMatched)} face${
       Math.round(facesMatched) === 1 ? "" : "s"
     } matched`;
-    const processedText = `${Math.round(imagesProcessed)} processed`;
-    if (avgSimilarity !== null) {
-      return `${matchedText} out of ${processedText} with ${avgSimilarity}% average similarity.`;
+    const parts: string[] = [];
+    if (imagesProcessed > 0)
+      parts.push(`${imagesProcessed} image${imagesProcessed === 1 ? "" : "s"}`);
+    if (videosProcessed > 0)
+      parts.push(`${videosProcessed} video${videosProcessed === 1 ? "" : "s"}`);
+    const processedText = `${parts.join(" and ")} processed`;
+    if (bestSimilarity !== null) {
+      return `${matchedText} out of ${processedText}, with a best match of ${bestSimilarity}%.`;
     }
     return `${matchedText} out of ${processedText}.`;
   }
 
-  if (results.length > 0 && avgSimilarity !== null) {
-    return `Verification completed with ${avgSimilarity}% average similarity.`;
+  if (results.length > 0 && bestSimilarity !== null) {
+    return `Verification completed with a best match of ${bestSimilarity}%.`;
   }
 
   return null;

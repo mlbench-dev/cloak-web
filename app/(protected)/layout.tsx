@@ -14,6 +14,21 @@ export default function ProtectedLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isGateChecking, setIsGateChecking] = useState(true);
+  // useSession()'s update() (called whenever we push a fresh
+  // identityVerificationStatus after a background verification finishes)
+  // briefly flips status back to "loading" while it refetches — even though
+  // the user never actually logged out. Blocking on every "loading" status
+  // was unmounting the whole page (and everything under it, including
+  // Dashboard's own data fetch) for that instant, which looked and behaved
+  // like an unwanted page reload. Only the *first* loading state — before
+  // we've ever confirmed the user is signed in — should gate the UI.
+  const [hasAuthenticatedOnce, setHasAuthenticatedOnce] = useState(false);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      setHasAuthenticatedOnce(true);
+    }
+  }, [status]);
   const hideBottomNav =
     pathname === "/subscription" ||
     pathname.startsWith("/subscription/") ||
@@ -44,7 +59,7 @@ export default function ProtectedLayout({
     setIsGateChecking(false);
   }, [status, session, router]);
 
-  if (status === "loading" || isGateChecking) {
+  if (!hasAuthenticatedOnce && (status === "loading" || isGateChecking)) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center bg-white font-sf-pro-display">
         <div className="h-10 w-10 border-4 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
