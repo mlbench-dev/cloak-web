@@ -566,7 +566,7 @@ export default function ReportDetailsPage({
           )}
           {report.aiConfidenceMessage ? (
             <p className="mt-3 text-[13px] leading-6 text-[#4F5A61]">
-              {report.aiConfidencxeMessage}
+              {report.aiConfidenceMessage}
             </p>
           ) : null}
         </section>
