@@ -13,13 +13,14 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
       <div className="flex justify-center pt-3">
         <div className="w-10 h-1 bg-slate-200 rounded-full" />
       </div>
-      <header className="flex items-center py-4 px-4">
+      <header className="flex items-center justify-between  bg-white z-10">
         <button onClick={onClose} className="p-2">
-          <ChevronLeft className="h-6 w-6 text-slate-400" />
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="flex-1 text-center text-[17px] font-semibold text-[#2D2D2D] mr-10">
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">
           How to choose the right photos
         </h1>
+        <div className="w-10" />
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">

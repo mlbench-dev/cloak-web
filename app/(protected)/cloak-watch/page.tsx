@@ -38,7 +38,7 @@ export default function CloakWatchPage() {
             Cloak Watch
           </h1>
           <div className="flex items-center gap-3">
-            <button
+            {/* <button
               type="button"
               onClick={() =>
                 router.push("/cloak-watch/personalised-appearance")
@@ -46,7 +46,7 @@ export default function CloakWatchPage() {
               className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#2D2D2D]"
             >
               <SlidersHorizontal className="h-5 w-5" strokeWidth={2.1} />
-            </button>
+            </button> */}
             <button
               type="button"
               onClick={() => router.push("/cloak-watch/new-post")}

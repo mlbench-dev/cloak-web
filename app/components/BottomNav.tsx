@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertsNavIcon,
   CloakWatchNavIcon,
@@ -35,8 +35,17 @@ function isActivePath(pathname: string, href: string) {
 export default function BottomNav() {
   const pathname = usePathname();
   const [unreadAlerts, setUnreadAlerts] = useState(0);
+  // Dev-only React Strict Mode runs effect->cleanup->effect once per mount
+  // to surface missing cleanup logic, which was firing this fetch twice for
+  // the same pathname. Keying the guard on the pathname itself (rather than
+  // a one-shot "already fetched" flag) skips that phantom second run while
+  // still refetching on every genuine navigation.
+  const lastFetchedPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (lastFetchedPathnameRef.current === pathname) return;
+    lastFetchedPathnameRef.current = pathname;
+
     let cancelled = false;
 
     fetch("/api/alerts/unread-count")

@@ -249,22 +249,13 @@ export default function NewPostPage() {
   }, [activeIndex, media]);
 
   return (
-    <div className="flex h-full flex-col bg-white font-sf-pro-display px-4 py-4">
-      <header className="shrink-0 bg-white px-4 ">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="flex h-10 w-10 items-center justify-center rounded-full"
-          >
-            <ChevronLeft className="h-6 w-6 text-[#98A0A7]" />
-          </button>
-          <h1 className="flex-1 text-center text-[17px] font-semibold text-[#2D2D2D]">
-            New Post
-          </h1>
-          <div className="w-10" />
-        </div>
-        <div className="h-4" />
+    <div className="flex h-full flex-col bg-white font-sf-pro-display">
+      <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
+        <button type="button" onClick={handleBack} className="p-2">
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
+        </button>
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">New Post</h1>
+        <div className="w-10" />
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">

@@ -46,20 +46,12 @@ export default function CloakWatchPostDetailPage() {
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
-      <header className="shrink-0 bg-white px-4 pt-[max(env(safe-area-inset-top),1rem)]">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex h-10 w-10 items-center justify-center rounded-full"
-          >
-            <ChevronLeft className="h-6 w-6 text-[#98A0A7]" />
-          </button>
-          <h1 className="flex-1 text-center text-[17px] font-semibold text-[#2D2D2D]">
-            Post
-          </h1>
-          <div className="w-10" />
-        </div>
+      <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
+        <button type="button" onClick={() => router.back()} className="p-2">
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
+        </button>
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">Post</h1>
+        <div className="w-10" />
       </header>
 
       <main className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
