@@ -205,7 +205,7 @@ export default function AlertsPage() {
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-white no-scrollbar">
-        <div className="w-full space-y-5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        <div className="w-full space-y-5 px-1 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
           <section className="pt-1">
             <div className="overflow-x-auto no-scrollbar">
               <div className="flex w-max min-w-full flex-nowrap items-center justify-between gap-1 min-[412px]:gap-3 min-[430px]:gap-4">

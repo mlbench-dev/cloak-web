@@ -424,7 +424,7 @@ export default function ReportDetailsPage({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
+      <div className="flex-1 overflow-y-auto px-2 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
         <section>
           <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
             {personSectionTitle}

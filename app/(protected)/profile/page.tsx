@@ -1288,7 +1288,7 @@ export default function ProfilePage() {
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar bg-white">
-        <div className="space-y-5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        <div className="space-y-5 px-1 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
           <section className="pb-2 pt-1">
             <div className="flex items-start gap-4">
               <div className="relative mt-1 h-[60px] w-[60px] shrink-0 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center">
