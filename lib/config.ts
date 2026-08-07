@@ -1,32 +1,36 @@
-import { AchievementCode, AchievementDoc, LevelConfig } from "@/models/User";
+import { AchievementDoc, LevelConfig } from "@/models/User";
 
-// Points configuration
-export const POINTS_CONFIG = {
-  // Points for submitting a report
-  REPORT_SUBMISSION: 0, 
-  // Points for having a report verified
-  REPORT_VERIFICATION: 100,
-  // Base points multiplier for level thresholds (50, 50*10=500, 50*50=2500, etc.)
-  LEVEL_MULTIPLIERS: [1, 10, 50, 100, 200, 400, 800],
+// XP is the only currency that drives level progression. Achievements are
+// a separate, badge-only system (see ACHIEVEMENTS_CONFIG below) and no
+// longer grant XP or points of any kind.
+export const XP_CONFIG = {
+  // XP awarded to the reporter when a submitted report is approved
+  // (status -> "VERIFIED") by the reported user. False/rejected reports
+  // award no XP.
+  REPORT_APPROVED: 50,
 };
 
+// Level thresholds: total XP required to reach each level. Below the first
+// threshold a user is unranked (level 0). Configurable here only — nothing
+// else in the codebase should hardcode these values.
 export const LEVEL_CONFIG: LevelConfig[] = [
-  { level: 1, pointsRequired: 0, name: "First Signal" },
-  { level: 2, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[0] * 50, name: "Active Watcher" },
-  { level: 3, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[1] * 50, name: "Scout" },
-  { level: 4, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[2] * 50, name: "Sentinel" },
-  { level: 5, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[3] * 50, name: "Sharp Eye" },
-  { level: 6, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[4] * 50, name: "Truth Seeker" },
-  { level: 7, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[5] * 50, name: "Elite Detector" },
-  { level: 8, pointsRequired: POINTS_CONFIG.LEVEL_MULTIPLIERS[6] * 50, name: "Cloak Guardian" },
+  { level: 1, xpRequired: 50 },
+  { level: 2, xpRequired: 150 },
+  { level: 3, xpRequired: 400 },
+  { level: 4, xpRequired: 900 },
+  { level: 5, xpRequired: 1500 },
+  { level: 6, xpRequired: 2500 },
+  { level: 7, xpRequired: 4000 },
+  { level: 8, xpRequired: 6000 },
 ];
 
-export const ACHIEVEMENTS: AchievementDoc[] = [
+// Achievements are badge-only milestones — reaching the target unlocks the
+// badge and nothing else. They have no effect on XP or level.
+export const ACHIEVEMENTS_CONFIG: AchievementDoc[] = [
   {
     code: "FIRST_SIGNAL",
     name: "First Signal",
     description: "Submit Your First Report",
-    pointsReward: 50,
     target: 1,
     iconColor: "#F59E0B",
     order: 1,
@@ -35,7 +39,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "ACTIVE_WATCHER",
     name: "Active Watcher",
     description: "Submit 10 Reports",
-    pointsReward: 100,
     target: 10,
     iconColor: "#8B5CF6",
     order: 2,
@@ -44,7 +47,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "SCOUT",
     name: "Scout",
     description: "Submit 50 Reports",
-    pointsReward: 250,
     target: 50,
     iconColor: "#6366F1",
     order: 3,
@@ -53,7 +55,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "SENTINEL",
     name: "Sentinel",
     description: "Submit 100 Reports",
-    pointsReward: 500,
     target: 100,
     iconColor: "#3B82F6",
     order: 4,
@@ -62,7 +63,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "SHARP_EYE",
     name: "Sharp Eye",
     description: "Get 5 Reports Verified",
-    pointsReward: 150,
     target: 5,
     iconColor: "#10B981",
     order: 5,
@@ -71,7 +71,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "TRUTH_SEEKER",
     name: "Truth Seeker",
     description: "Get 25 Reports Verified",
-    pointsReward: 300,
     target: 25,
     iconColor: "#06B6D4",
     order: 6,
@@ -80,7 +79,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "ELITE_DETECTOR",
     name: "Elite Detector",
     description: "Get 75 Reports Verified",
-    pointsReward: 750,
     target: 75,
     iconColor: "#EC4899",
     order: 7,
@@ -89,7 +87,6 @@ export const ACHIEVEMENTS: AchievementDoc[] = [
     code: "CLOAK_GUARDIAN",
     name: "Cloak Guardian",
     description: "Maintain 100% Accuracy With 50 Verified Reports",
-    pointsReward: 1000,
     target: 50,
     iconColor: "#EF4444",
     order: 8,

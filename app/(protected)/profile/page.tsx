@@ -36,6 +36,7 @@ import {
   type CloakWatchPostScope,
 } from "@/app/(protected)/cloak-watch/_lib/posts";
 import { getCroppedImg } from "@/lib/cropImage";
+import { getAchievementIcon } from "@/lib/achievements";
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -113,6 +114,11 @@ export default function ProfilePage() {
     accuracyPercentage: number;
   } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [profileLevel, setProfileLevel] = useState<number | null>(null);
+  const [profileLastAchievement, setProfileLastAchievement] = useState<{
+    name: string;
+    imageSrc: string;
+  } | null>(null);
   const hasFetchedProfileStats = useRef(false);
 
   const [editData, setEditData] = useState({
@@ -258,6 +264,24 @@ export default function ProfilePage() {
             approvedReports: Number(data.stats.verifiedReports || 0),
             accuracyPercentage: Number(data.stats.accuracyPercentage || 0),
           });
+          setProfileLevel(Number(data.stats.level || 0));
+        }
+        if (data?.success && Array.isArray(data?.achievements)) {
+          const lastCompleted = data.achievements
+            .filter((a: any) => a.unlockedAt)
+            .sort(
+              (a: any, b: any) =>
+                new Date(b.unlockedAt).getTime() -
+                new Date(a.unlockedAt).getTime(),
+            )[0];
+          setProfileLastAchievement(
+            lastCompleted
+              ? {
+                  name: lastCompleted.config?.name || lastCompleted.code,
+                  imageSrc: getAchievementIcon(lastCompleted.code),
+                }
+              : null,
+          );
         }
       } catch (err) {
         console.error(err);
@@ -1344,6 +1368,14 @@ export default function ProfilePage() {
               </div>
               <p className="text-[14px] text-[#A7ADB2]">
                 {user?.name || username}
+              </p>
+              <p className="text-[13px] text-[#A7ADB2]">
+                {profileLevel !== null && profileLevel > 0
+                  ? `Level ${profileLevel}`
+                  : "Unranked"}
+                {profileLastAchievement
+                  ? ` · ${profileLastAchievement.name}`
+                  : ""}
               </p>
             </div>
           </section>

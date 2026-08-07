@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import AchievementsSection from "@/app/components/dashboard/AchievementsSection";
 import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import RecentActivitySection from "@/app/components/dashboard/RecentActivitySection";
-import { ACHIEVEMENTS } from "@/lib/config";
+import { getAchievementIcon } from "@/lib/achievements";
 
 interface DashboardUser {
   username: string;
@@ -17,14 +17,13 @@ interface DashboardUser {
 }
 
 interface DashboardStats {
+  xp: number;
   level: number;
-  levelName: string;
   levelProgress: number;
-  pointsToNextLevel: number;
+  xpToNextLevel: number;
   totalReports: number;
   verifiedReports: number;
   accuracyPercentage: number;
-  totalPoints: number;
 }
 
 interface DashboardAchievement {
@@ -34,7 +33,6 @@ interface DashboardAchievement {
     description: string;
     iconColor: string;
     order: number;
-    pointsReward: number;
     target: number;
   };
   progress: number;
@@ -78,7 +76,7 @@ export default function DashboardPage() {
         if (data.success) {
           setUser(data.user);
           setStats(data.stats);
-          setAchievements(data.achievements.slice(0, 5));
+          setAchievements(data.achievements);
           setRecentActivity(data.recentActivity);
         }
       } catch (err) {
@@ -98,30 +96,27 @@ export default function DashboardPage() {
     );
   }
 
-  // Convert our achievement data to the component format
-  const getAchievementIcon = (code: string) => {
-    switch (code) {
-      case "FIRST_SIGNAL":
-        return "/images/dashboard/achievements/first-signal.svg";
-      case "ACTIVE_WATCHER":
-        return "/images/dashboard/achievements/active-watcher.svg";
-      case "SCOUT":
-        return "/images/dashboard/achievements/scout.svg";
-      case "SENTINEL":
-        return "/images/dashboard/achievements/sentinal.svg"; // File is named sentinal.svg
-      case "SHARP_EYE":
-        return "/images/dashboard/achievements/sharp-eye.svg";
-      default:
-        return "/images/dashboard/achievements/first-signal.svg";
-    }
-  };
-
-  const componentAchievements = achievements.map((a) => ({
+  const componentAchievements = achievements.slice(0, 5).map((a) => ({
     name: a.config.name,
     progress: Math.min(100, (a.progress / a.target) * 100),
     color: a.config.iconColor,
     imageSrc: getAchievementIcon(a.code),
   }));
+
+  const lastCompletedAchievement = achievements
+    .filter((a) => a.unlockedAt)
+    .sort(
+      (a, b) =>
+        new Date(b.unlockedAt as Date).getTime() -
+        new Date(a.unlockedAt as Date).getTime(),
+    )[0];
+
+  const lastAchievement = lastCompletedAchievement
+    ? {
+        name: lastCompletedAchievement.config.name,
+        imageSrc: getAchievementIcon(lastCompletedAchievement.code),
+      }
+    : null;
 
   const componentRecentActivity = recentActivity.map((a) => {
     const date = new Date(a.createdAt);
@@ -166,7 +161,8 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <DashboardHeader
         username={user?.username || "user"}
-        levelLabel={`Level ${stats?.level || 1} ${stats?.levelName || "Rookie"}`}
+        levelLabel={stats && stats.level > 0 ? `Level ${stats.level}` : "Unranked"}
+        lastAchievement={lastAchievement}
         verified={user?.identityVerificationStatus === "APPROVED"}
         premium={user?.role === "VERIFIED_USER"}
         stats={[
@@ -174,15 +170,13 @@ export default function DashboardPage() {
           { label: "Verified", value: `${stats?.verifiedReports || 0}` },
           { label: "Accuracy", value: `${stats?.accuracyPercentage || 0}%` },
         ]}
-        pointsToNextLevel={stats?.pointsToNextLevel || 0}
-        currentPoints={stats?.totalPoints || 0}
-        nextLevelPoints={
-          (stats?.totalPoints || 0) + (stats?.pointsToNextLevel || 0)
-        }
+        xpToNextLevel={stats?.xpToNextLevel || 0}
+        currentXp={stats?.xp || 0}
+        nextLevelXp={(stats?.xp || 0) + (stats?.xpToNextLevel || 0)}
         levelProgress={stats?.levelProgress || 0}
         profileImage={user?.profileImage}
         image={user?.image}
-        currentLevel={stats?.level || 1}
+        currentLevel={stats?.level || 0}
       />
 
       <AchievementsSection achievements={componentAchievements} />

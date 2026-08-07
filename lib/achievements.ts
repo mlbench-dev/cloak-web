@@ -1,45 +1,72 @@
-import {
-  ACHIEVEMENTS,
-  LEVEL_CONFIG,
-} from "./config";
-import { UserDoc } from "@/models/User";
+import { ACHIEVEMENTS_CONFIG, LEVEL_CONFIG } from "./config";
+import { AchievementCode, UserDoc } from "@/models/User";
 
-// Calculate current level and progress from points
-export function calculateLevel(points: number) {
-  let currentLevel = 1;
-  let nextLevelPoints = LEVEL_CONFIG[1]?.pointsRequired || 100;
+// Shared badge icon lookup — used by every screen that renders achievement
+// badges (dashboard, progress, profile) so the mapping can't drift out of
+// sync between them again.
+export function getAchievementIcon(code: AchievementCode | string) {
+  switch (code) {
+    case "FIRST_SIGNAL":
+      return "/images/dashboard/achievements/first-signal.svg";
+    case "ACTIVE_WATCHER":
+      return "/images/dashboard/achievements/active-watcher.svg";
+    case "SCOUT":
+      return "/images/dashboard/achievements/scout.svg";
+    case "SENTINEL":
+      return "/images/dashboard/achievements/sentinal.svg"; // File is named sentinal.svg
+    case "SHARP_EYE":
+      return "/images/dashboard/achievements/sharp-eye.svg";
+    case "TRUTH_SEEKER":
+      return "/images/dashboard/achievements/truth-seeker.svg";
+    case "ELITE_DETECTOR":
+      return "/images/dashboard/achievements/elite-detector.svg";
+    case "CLOAK_GUARDIAN":
+      return "/images/dashboard/achievements/cloak-guardian.svg";
+    default:
+      return "/images/dashboard/achievements/first-signal.svg";
+  }
+}
+
+// Calculate current level and progress from XP. Levels start at 1 once the
+// first threshold is reached; below that, a user is level 0 (unranked).
+export function calculateLevel(xp: number) {
+  let currentLevel = 0;
+  let nextLevelXp = LEVEL_CONFIG[0]?.xpRequired ?? Infinity;
 
   for (let i = 0; i < LEVEL_CONFIG.length; i++) {
-    if (points >= LEVEL_CONFIG[i].pointsRequired) {
+    if (xp >= LEVEL_CONFIG[i].xpRequired) {
       currentLevel = LEVEL_CONFIG[i].level;
-      nextLevelPoints = LEVEL_CONFIG[i + 1]?.pointsRequired || Infinity;
+      nextLevelXp = LEVEL_CONFIG[i + 1]?.xpRequired ?? Infinity;
     } else {
+      nextLevelXp = LEVEL_CONFIG[i].xpRequired;
       break;
     }
   }
 
   const currentLevelConfig = LEVEL_CONFIG.find(l => l.level === currentLevel);
-  const nextLevelConfig = LEVEL_CONFIG.find(l => l.level === currentLevel + 1);
-  const pointsToNextLevel = nextLevelConfig ? nextLevelConfig.pointsRequired - points : 0;
+  const currentLevelXp = currentLevelConfig?.xpRequired ?? 0;
+  const xpToNextLevel = nextLevelXp === Infinity ? 0 : nextLevelXp - xp;
   let progressPercentage = 0;
 
-  if (currentLevelConfig && nextLevelConfig) {
-    const levelPoints = points - currentLevelConfig.pointsRequired;
-    const levelTotalPoints = nextLevelConfig.pointsRequired - currentLevelConfig.pointsRequired;
-    progressPercentage = Math.min(100, Math.max(0, (levelPoints / levelTotalPoints) * 100));
+  if (nextLevelXp !== Infinity) {
+    const levelXp = xp - currentLevelXp;
+    const levelTotalXp = nextLevelXp - currentLevelXp;
+    progressPercentage = Math.min(100, Math.max(0, (levelXp / levelTotalXp) * 100));
+  } else {
+    progressPercentage = 100;
   }
 
   return {
     currentLevel,
-    nextLevelPoints,
-    pointsToNextLevel,
+    nextLevelXp,
+    xpToNextLevel,
     progressPercentage,
   };
 }
 
 // Initialize default user achievements array
 export function initializeUserAchievements() {
-  return ACHIEVEMENTS.map(achievement => ({
+  return ACHIEVEMENTS_CONFIG.map(achievement => ({
     code: achievement.code,
     progress: 0,
     target: achievement.target,
@@ -47,21 +74,19 @@ export function initializeUserAchievements() {
   }));
 }
 
-// Check and unlock achievements as needed
-export async function checkAchievements(user: UserDoc) {
+// Recompute achievement progress and unlock badges as milestones are
+// reached. Achievements are badge-only — this never touches XP or level.
+export function checkAchievements(user: UserDoc) {
   const updatedAchievements = [...user.achievements];
-  let pointsToAdd = 0;
-  let levelChanged = false;
 
-  // Check each achievement
-  ACHIEVEMENTS.forEach(achievementConfig => {
+  ACHIEVEMENTS_CONFIG.forEach(achievementConfig => {
     const existingAchievement = updatedAchievements.find(a => a.code === achievementConfig.code);
     let newProgress = existingAchievement?.progress || 0;
 
     switch (achievementConfig.code) {
       case "FIRST_SIGNAL":
-        // Cap at 1
-        newProgress = Math.min(user.totalReports, 1);
+        // Requires the first *approved* report, not just a submission.
+        newProgress = Math.min(user.verifiedReports, 1);
         break;
       case "ACTIVE_WATCHER":
       case "SCOUT":
@@ -91,14 +116,12 @@ export async function checkAchievements(user: UserDoc) {
       existingAchievement.progress = newProgress;
     }
 
-    // Check if should unlock and not already unlocked
+    // Unlock the badge once, and never re-evaluate it after that.
     const achievement = updatedAchievements.find(a => a.code === achievementConfig.code)!;
     if (!achievement.unlockedAt && achievement.progress >= achievement.target) {
       achievement.unlockedAt = new Date();
-      pointsToAdd += achievementConfig.pointsReward;
-      levelChanged = true;
     }
   });
 
-  return { updatedAchievements, pointsToAdd, levelChanged };
+  return { updatedAchievements };
 }

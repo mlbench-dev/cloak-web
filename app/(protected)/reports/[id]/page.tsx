@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ExternalLink, FileSearch } from "lucide-react";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import { XP_CONFIG } from "@/lib/config";
 
 type ReportUser = {
   username: string;
@@ -166,7 +167,7 @@ function DecisionResultModal({
           {isApproved ? (
             <>
               <p className="mt-4 text-[18px] leading-8 text-[#8D979E]">
-                +50 points have been rewarded to reporter
+                +{XP_CONFIG.REPORT_APPROVED} XP have been awarded to reporter
               </p>
               <div className="mt-4 flex items-center gap-2">
                 <div className="relative h-8 w-8 overflow-hidden rounded-full bg-slate-200">
