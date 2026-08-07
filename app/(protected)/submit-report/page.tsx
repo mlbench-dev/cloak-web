@@ -428,7 +428,7 @@ export default function SubmitReportPage() {
             </button>
           </header>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-1 py-6">
             <div className="mb-6">
               <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
                 Target User
@@ -598,7 +598,7 @@ export default function SubmitReportPage() {
             <h1 className="text-2xl font-bold text-[#2D2D2D]">Submit Report</h1>
           </header>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-1 py-6">
             <p className="text-[#666666] text-lg mb-6">
               Fill in the details below
             </p>
@@ -774,7 +774,7 @@ export default function SubmitReportPage() {
             </div>
 
             {/* Bottom buttons now in scrollable area */}
-            <div className="flex items-center gap-3 pb-6 w-full">
+            <div className="flex items-center gap-3 pb-6 w-full px-2">
               <button
                 type="button"
                 onClick={() => setStep(1)}
