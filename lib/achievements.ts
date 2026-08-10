@@ -85,8 +85,8 @@ export function checkAchievements(user: UserDoc) {
 
     switch (achievementConfig.code) {
       case "FIRST_SIGNAL":
-        // Requires the first *approved* report, not just a submission.
-        newProgress = Math.min(user.verifiedReports, 1);
+        // Unlocks on submission, not approval.
+        newProgress = Math.min(user.totalReports, 1);
         break;
       case "ACTIVE_WATCHER":
       case "SCOUT":
