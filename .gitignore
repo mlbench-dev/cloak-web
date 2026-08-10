@@ -101,10 +101,8 @@ dist-ssr
 .dbg/*
 
 .vite
-config.bat
 branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
+
 # Sentry Config File
 .env.sentry-build-plugin
 
