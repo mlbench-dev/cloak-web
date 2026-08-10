@@ -117,7 +117,7 @@ export default function OTPVerification({
             <h1 className="text-[24px] font-[600] leading-[1.2] tracking-[-0.03em] text-[#2D2D2D] 2xl:text-[30px]">
               Continue with Email
             </h1>
-            <p className="max-w-[260px] text-[14px] leading-6 text-[#8F98A0] 2xl:max-w-[320px] 2xl:text-[16px]">
+            <p className="max-w-[320px] text-[14px] leading-6 text-[#8F98A0] 2xl:max-w-[320px] 2xl:text-[14px]">
               We will send you a one-time password to your email.
             </p>
           </div>
@@ -133,7 +133,7 @@ export default function OTPVerification({
             )}
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <label htmlFor="email" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
+                <label htmlFor="email" className="block text-[14px] font-medium text-[#3E454B] 2xl:text-[14px]">
                   Email
                 </label>
                 {onChangeEmail && (
@@ -151,12 +151,12 @@ export default function OTPVerification({
                 type="email"
                 value={email}
                 disabled
-                className="h-14 w-full rounded-[18px] border border-transparent bg-[#ECECEC] px-5 text-[16px] text-[#A7ADB2] outline-none 2xl:h-16 2xl:text-[18px]"
+                className="h-14 w-full rounded-[18px] border border-transparent bg-[#ECECEC] px-5 text-[14px] text-[#A7ADB2] outline-none 2xl:h-16 2xl:text-[14px]"
               />
             </div>
 
             <div className="space-y-2.5">
-              <label htmlFor="otp" className="block text-[15px] font-medium text-[#3E454B] 2xl:text-[17px]">
+              <label htmlFor="otp" className="block text-[14px] font-medium text-[#3E454B] 2xl:text-[14px]">
                 Enter OTP
               </label>
               <input
@@ -167,7 +167,7 @@ export default function OTPVerification({
                 placeholder="Enter 4-digit OTP here"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                className="h-14 w-full rounded-[18px] border border-transparent bg-white px-5 text-[16px] text-[#2D2D2D] outline-none focus:border-[#14C3CF] 2xl:h-16 2xl:text-[18px]"
+                className="h-14 w-full rounded-[18px] border border-transparent bg-white px-5 text-[14px] text-[#2D2D2D] outline-none focus:border-[#14C3CF] 2xl:h-16 2xl:text-[14px]"
               />
               <p className="text-[13px] text-[#8F98A0] 2xl:text-[15px]">
                 Enter the verification code we sent to your email.

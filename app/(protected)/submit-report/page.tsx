@@ -9,7 +9,8 @@ import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 
 const MAX_NOTES_LENGTH = 300;
-
+const truncateText = (text: string, maxChars: number) =>
+  text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}...` : text;
 type Platform = "tiktok" | "instagram" | "facebook" | "twitter" | "other";
 type User = {
   _id: string;
@@ -419,7 +420,14 @@ export default function SubmitReportPage() {
       {step === 1 ? (
         <>
           <header className="shrink-0 flex items-center justify-between py-4 px-4 bg-white">
-            <h1 className="text-2xl font-bold text-[#2D2D2D]">Submit Report</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-[#2D2D2D]">
+                Submit Report
+              </h1>
+              <p className="text-[#8F98A0] text-[14px] font-medium">
+                Fill in the detail below.
+              </p>
+            </div>
             <button
               onClick={() => router.push("/my-reports")}
               className="px-4 py-2 bg-[#14C3CF] text-white rounded-full text-sm font-medium"
@@ -428,7 +436,7 @@ export default function SubmitReportPage() {
             </button>
           </header>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-1 py-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
             <div className="mb-6">
               <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
                 Target User
@@ -516,7 +524,10 @@ export default function SubmitReportPage() {
                                   )}
                                 </div>
                                 <p className="text-[#8F98A0] text-sm">
-                                  {search.targetUser.name || ""}
+                                  {truncateText(
+                                    search.targetUser.name || "",
+                                    20,
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -576,7 +587,7 @@ export default function SubmitReportPage() {
                               )}
                             </div>
                             <p className="text-[#8F98A0] text-sm">
-                              {user.name || ""}
+                              {truncateText(user.name || "", 20)}
                             </p>
                           </div>
                         </div>
@@ -598,7 +609,7 @@ export default function SubmitReportPage() {
             <h1 className="text-2xl font-bold text-[#2D2D2D]">Submit Report</h1>
           </header>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-1 py-6">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
             <p className="text-[#666666] text-lg mb-6">
               Fill in the details below
             </p>
@@ -635,7 +646,7 @@ export default function SubmitReportPage() {
                         )}
                       </div>
                       <p className="text-[#8F98A0] text-sm">
-                        {selectedUser.name || ""}
+                        {truncateText(selectedUser.name || "", 20)}
                       </p>
                     </div>
                   </div>
@@ -774,7 +785,7 @@ export default function SubmitReportPage() {
             </div>
 
             {/* Bottom buttons now in scrollable area */}
-            <div className="flex items-center gap-3 pb-6 w-full px-2">
+            <div className="flex items-center gap-3 pb-6 w-full">
               <button
                 type="button"
                 onClick={() => setStep(1)}

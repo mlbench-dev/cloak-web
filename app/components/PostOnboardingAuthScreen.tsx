@@ -125,7 +125,7 @@ export default function PostOnboardingAuthScreen({
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="email@service.com"
+                placeholder="Enter Your Email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 onBlur={() => setTouched(true)}

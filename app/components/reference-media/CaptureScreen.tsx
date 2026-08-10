@@ -292,7 +292,10 @@ export default function CaptureScreen({
   const canAddMore = currentCount < 3 && !isSaving;
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[#0E0A08] font-sf-pro-display text-white">
+    <div
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0E0A08] font-sf-pro-display text-white"
+      style={{ height: "var(--app-height, 100dvh)" }}
+    >
       {!cameraError && (
         <div className="absolute inset-0 overflow-hidden">
           <video

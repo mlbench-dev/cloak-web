@@ -1,9 +1,47 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { BadgeCheckIcon } from "@/public/svgIcons";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, X, BadgeCheck } from "lucide-react";
+
+function BottomSheet({
+  open,
+  onClose,
+  children,
+  panelClassName = "",
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  panelClassName?: string;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/20"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full rounded-t-[30px] bg-white pt-2 ${panelClassName}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto h-2 w-16 rounded-full bg-[#DADADA]" />
+        {children}
+      </div>
+    </div>
+  );
+}
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -55,13 +93,14 @@ export default function IdentityVerificationStep({
   showSkip = true,
   status,
   isLoading = false,
-  maxFiles = 2,
+  maxFiles = 1,
   prefillFromSavedVerification = true,
   draftScopeKey = null,
 }: IdentityVerificationStepProps) {
   const [step, setStep] = useState<"upload" | "submitted">("upload");
   const [documentType, setDocumentType] = useState("");
   const [showDocTypeMenu, setShowDocTypeMenu] = useState(false);
+  const [showGuidelineSheet, setShowGuidelineSheet] = useState(true);
   const [files, setFiles] = useState<VerificationFileItem[]>([]);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,6 +254,15 @@ export default function IdentityVerificationStep({
     });
 
     if (e.target) e.target.value = "";
+  };
+
+  const handleAddFileClick = () => {
+    if (!documentType) {
+      setFieldError("Please select a document type first.");
+      return;
+    }
+    setFieldError(null);
+    fileInputRef.current?.click();
   };
 
   const removeFile = (index: number) => {
@@ -484,12 +532,12 @@ export default function IdentityVerificationStep({
           </div>
 
           <div className="flex-1 min-h-0 w-full space-y-6 overflow-y-auto overflow-x-hidden pb-4">
-            <div className="space-y-2.5 relative">
+            <div className="space-y-2.5">
               <label className="block text-[15px] font-medium text-[#3E454B]">
                 Document type
               </label>
               <button
-                onClick={() => setShowDocTypeMenu(!showDocTypeMenu)}
+                onClick={() => setShowDocTypeMenu(true)}
                 disabled={isLoading}
                 className="flex h-14 w-full min-w-0 items-center justify-between rounded-[18px] bg-[#ECECEC] px-5 text-[15px] text-[#2D2D2D]"
               >
@@ -519,31 +567,39 @@ export default function IdentityVerificationStep({
                 </svg>
               </button>
 
-              {showDocTypeMenu && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-2 max-w-full overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl animate-in fade-in zoom-in-95 duration-200">
-                  <div className="p-4 border-b border-gray-50 flex justify-center">
-                    <div className="w-10 h-1 bg-[#E5E5E5] rounded-full" />
-                  </div>
-                  <div className="px-2 py-2">
-                    <p className="px-4 py-2 text-[14px] font-semibold text-[#2D2D2D]">
-                      Select document type to verify
-                    </p>
-                    {DOCUMENT_TYPES.map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => {
-                          setDocumentType(type);
-                          setShowDocTypeMenu(false);
-                          setFieldError(null);
-                        }}
-                        className="w-full rounded-xl px-4 py-3 text-left text-[15px] break-words hover:bg-[#F5F5F5] transition-colors"
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
+              <BottomSheet
+                open={showDocTypeMenu}
+                onClose={() => setShowDocTypeMenu(false)}
+              >
+                <div className="relative flex items-center justify-center px-6 pt-2">
+                  <p className="text-[16px] font-semibold text-[#2D2D2D]">
+                    Select document type to verify
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowDocTypeMenu(false)}
+                    className="absolute right-3 top-1 flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
-              )}
+                <div className="mt-3 border-t border-[#E8E8E8]" />
+                <div className="px-4 py-2 pb-6">
+                  {DOCUMENT_TYPES.map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setDocumentType(type);
+                        setShowDocTypeMenu(false);
+                        setFieldError(null);
+                      }}
+                      className="w-full rounded-xl px-4 py-3 text-left text-[15px] break-words hover:bg-[#F5F5F5] transition-colors"
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </BottomSheet>
               {fieldError && (
                 <p className="text-[12px] font-medium text-[#FF3B30]">
                   {fieldError}
@@ -551,45 +607,8 @@ export default function IdentityVerificationStep({
               )}
             </div>
 
-            <div className="space-y-3">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading || files.length >= maxFiles}
-                className={`w-full h-10 rounded-full border-2  flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
-                  files.length > 0
-                    ? "border-[#00C3D0] bg-[#00C3D0]  text-white"
-                    : "border-[#839297] bg-[#839297] text-white"
-                }`}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M18.125 16.875V6.7625C18.125 6.49717 18.0196 6.24293 17.8321 6.05546L12.3321 0.555456C12.1446 0.367991 11.8903 0.262695 11.625 0.262695H2.5V16.875C2.5 18.2557 3.61929 19.375 5 19.375H15.625C17.0057 19.375 18.125 18.2557 18.125 16.875ZM16.875 16.875C16.875 17.5654 16.3154 18.125 15.625 18.125H5C4.30964 18.125 3.75 17.5654 3.75 16.875V1.5127H11.25V7.5H16.875V16.875ZM12.5 2.39645L15.9906 5.8877H12.5V2.39645ZM5.625 6.25H8.125V5H5.625V6.25ZM5.625 10H14.375V8.75H5.625V10ZM5.625 13.75H14.375V12.5H5.625V13.75Z"
-                    fill="currentColor"
-                    fillRule="evenodd"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Add File
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/png,image/jpeg"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <p className="text-[12px] text-[#8F98A0]">
-                Upload up to {maxFiles} document image
-                {maxFiles === 1 ? "" : "s"}.
-              </p>
-
+            {/* 1. Files Preview List (Rendered first if files exist) */}
+            {files.length > 0 && (
               <div className="grid grid-cols-1 gap-4 pb-4 sm:flex sm:overflow-x-auto sm:no-scrollbar sm:snap-x">
                 {files.map((file, idx) => (
                   <div
@@ -638,7 +657,6 @@ export default function IdentityVerificationStep({
                         </svg>
                       </button>
                     </div>
-                    {/* Image Preview */}
                     <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
                       <img
                         src={file.previewUrl}
@@ -649,29 +667,62 @@ export default function IdentityVerificationStep({
                   </div>
                 ))}
               </div>
-            </div>
+            )}
 
-            <div className="flex items-center gap-3 p-4 bg-[#14C3CF]/5 rounded-2xl border border-[#14C3CF]/10">
-              <div className="flex-1">
-                <p className="text-[12px] leading-relaxed text-[#2D2D2D]">
-                  Verified users get a badge , to let other users know that
-                  Cloak has verified their identity
-                </p>
-              </div>
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#14C3CF]">
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            {/* 2. Add File Button & Explanatory Text (Moved beneath the previews) */}
+            <div className="space-y-3 pt-2">
+              <button
+                onClick={handleAddFileClick}
+                disabled={isLoading || files.length >= maxFiles}
+                className={`w-full h-10 rounded-full border-2 flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
+                  documentType && files.length < maxFiles
+                    ? "border-[#00C3D0] bg-[#00C3D0] text-white"
+                    : "border-[#839297] bg-[#839297] text-white"
+                }`}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   <path
-                    d="M1 4L3.5 6.5L9 1"
-                    stroke="white"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    d="M18.125 16.875V6.7625C18.125 6.49717 18.0196 6.24293 17.8321 6.05546L12.3321 0.555456C12.1446 0.367991 11.8903 0.262695 11.625 0.262695H2.5V16.875C2.5 18.2557 3.61929 19.375 5 19.375H15.625C17.0057 19.375 18.125 18.2557 18.125 16.875ZM16.875 16.875C16.875 17.5654 16.3154 18.125 15.625 18.125H5C4.30964 18.125 3.75 17.5654 3.75 16.875V1.5127H11.25V7.5H16.875V16.875ZM12.5 2.39645L15.9906 5.8877H12.5V2.39645ZM5.625 6.25H8.125V5H5.625V6.25ZM5.625 10H14.375V8.75H5.625V10ZM5.625 13.75H14.375V12.5H5.625V13.75Z"
+                    fill="currentColor"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
                   />
                 </svg>
-              </div>
+                Add File
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <p className="text-[12px] text-[#8F98A0]">
+                {!documentType
+                  ? "Select a document type to upload its image."
+                  : files.length >= maxFiles
+                    ? "Document image uploaded."
+                    : "Upload 1 clear image of your document."}
+              </p>
             </div>
           </div>
-
+          <div className="flex items-center gap-3 p-4 bg-[#14C3CF]/5 rounded-2xl border border-[#14C3CF]/10 shrink-0">
+            <div className="flex-1">
+              <p className="text-[12px] leading-relaxed text-[#2D2D2D]">
+                Verified users get a badge , to let other users know that Cloak
+                has verified their identity
+              </p>
+            </div>
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#F7F7F7]">
+              <BadgeCheck size={20} fill="#14C3CF" className="text-white" />
+            </div>
+          </div>
           <div className="w-full pt-6 flex gap-3 shrink-0">
             {/* {showSkip && (
               <button onClick={onSkip} className="flex-1 h-14 rounded-full bg-[#ECECEC] text-[16px] font-medium text-[#2D2D2D]">
@@ -696,6 +747,31 @@ export default function IdentityVerificationStep({
           </div>
         </div>
       </div>
+
+      <BottomSheet
+        open={showGuidelineSheet}
+        onClose={() => setShowGuidelineSheet(false)}
+      >
+        <div className="flex justify-end px-4 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowGuidelineSheet(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="px-6 pb-8">
+          <div className="relative w-full aspect-[4/3]">
+            <Image
+              src="/images/ID-card/Id-card.png"
+              alt="Document photo guidelines"
+              fill
+              className="object-contain"
+            />
+          </div>
+        </div>
+      </BottomSheet>
     </main>
   );
 }

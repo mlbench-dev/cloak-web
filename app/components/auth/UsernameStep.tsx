@@ -121,7 +121,7 @@ export default function UsernameStep({
             <h1 className="text-[24px] font-[600] leading-[1.2] tracking-[-0.03em] text-[#2D2D2D] 2xl:text-[30px]">
               Create a Username
             </h1>
-            <p className="max-w-[280px] text-[14px] leading-6 text-[#8F98A0] 2xl:max-w-[320px] 2xl:text-[16px]">
+            <p className="max-w-[360px] text-[14px] leading-6 text-[#8F98A0] 2xl:max-w-[360px] 2xl:text-[16px]">
               Create a username so its easy for people to mention you in the
               platform
             </p>

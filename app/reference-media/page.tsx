@@ -323,23 +323,23 @@ function ReferenceMediaContent() {
     router.back();
   };
 
-  if (view === "INFO") {
-    return <InfoScreen onClose={() => setView("MAIN")} />;
-  }
+  // if (view === "INFO") {
+  //   return <InfoScreen onClose={() => setView("MAIN")} />;
+  // }
 
-  if (view === "CAPTURE") {
-    return (
-      <CaptureScreen
-        dbImages={dbImages.map((img) => img.imageUrl)}
-        localImages={localImages}
-        onClose={() => setView("MAIN")}
-        isSaving={isUploadingImages}
-        onComplete={(newLocalImages) => {
-          void handleCaptureComplete(newLocalImages);
-        }}
-      />
-    );
-  }
+  // if (view === "CAPTURE") {
+  //   return (
+  //     <CaptureScreen
+  //       dbImages={dbImages.map((img) => img.imageUrl)}
+  //       localImages={localImages}
+  //       onClose={() => setView("MAIN")}
+  //       isSaving={isUploadingImages}
+  //       onComplete={(newLocalImages) => {
+  //         void handleCaptureComplete(newLocalImages);
+  //       }}
+  //     />
+  //   );
+  // }
 
   return (
     <div
@@ -548,7 +548,19 @@ function ReferenceMediaContent() {
           </button>
         </div>
       </div>
+      {view === "INFO" && <InfoScreen onClose={() => setView("MAIN")} />}
 
+      {view === "CAPTURE" && (
+        <CaptureScreen
+          dbImages={dbImages.map((img) => img.imageUrl)}
+          localImages={localImages}
+          onClose={() => setView("MAIN")}
+          isSaving={isUploadingImages}
+          onComplete={(newLocalImages) => {
+            void handleCaptureComplete(newLocalImages);
+          }}
+        />
+      )}
       {/* Confirmation Dialog */}
       {/* {showConfirmDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
