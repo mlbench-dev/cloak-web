@@ -43,6 +43,7 @@ type ReportDetails = {
   aiConfidenceStatus?: AiConfidenceStatus;
   createdAt?: string;
   user?: ReportUser;
+  reportedByUser?: ReportUser;
 };
 
 // AI confidence isn't ready in any of these — either it's actively running,
@@ -359,19 +360,25 @@ export default function ReportDetailsPage({
   const getAvatarUrl = (user?: ReportUser) =>
     user?.profileImage || user?.image || "/images/placeholder_avatar.png";
 
-  const reportedBy = useMemo(() => report?.user || null, [report]);
-  const detailUser = useMemo(() => report?.user || null, [report]);
+  // const reportedBy = useMemo(() => report?.user || null, [report]);
+  // const detailUser = useMemo(() => report?.user || null, [report]);
+  const detailUser = useMemo(() => {
+    if (!report) return null;
+    return reportViewType === "sent" ? report.user : report.reportedByUser;
+  }, [report, reportViewType]);
+
+  const reportedBy = useMemo(() => report?.reportedByUser || null, [report]);
   const personSectionTitle =
     reportViewType === "sent" ? "Target User" : "Reported By";
 
   const sourceLinkLabel = report?.sourceLink
     ? (() => {
-    try {
-      const parsed = new URL(report.sourceLink);
-      return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname}${parsed.search}`;
-    } catch {
-      return report.sourceLink;
-    }
+        try {
+          const parsed = new URL(report.sourceLink);
+          return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname}${parsed.search}`;
+        } catch {
+          return report.sourceLink;
+        }
       })()
     : "";
   const activePreview = report?.sourceLink ? preview : null;
@@ -411,9 +418,7 @@ export default function ReportDetailsPage({
         >
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">
-          Report Details
-        </h1>
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">Report Details</h1>
         <div className="min-w-[78px] pr-2 text-right">
           {statusMeta.label ? (
             <p className={`text-[15px] font-medium ${statusMeta.className}`}>
@@ -425,7 +430,7 @@ export default function ReportDetailsPage({
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
+      <div className="flex-1 overflow-y-auto px-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
         <section>
           <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
             {personSectionTitle}

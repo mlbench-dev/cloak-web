@@ -128,7 +128,7 @@ export default function MyReportsPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.back()} className="p-2">
+        <button onClick={() => router.push("/profile")} className="p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
         <h1 className="text-lg font-semibold text-[#2D2D2D]">My Reports</h1>
