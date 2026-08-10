@@ -4,13 +4,14 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { ReportDoc, RecentSearchDoc } from "@/models/User";
+import { ReportDoc, RecentSearchDoc, UserDoc } from "@/models/User";
 import {
   computeAndStoreAiConfidence,
   detectPlatform,
   refreshVerificationGate,
   shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
+import { checkAchievements, initializeUserAchievements } from "@/lib/achievements";
 
 // The AI verification call (kicked off via after() below, both here and in
 // GET) can now take up to 10 minutes — the function instance has to stay
@@ -122,13 +123,36 @@ export async function POST(request: Request) {
     const result = await db.collection("reports").insertOne(report);
     const reportId = result.insertedId;
 
-    await usersCollection.updateOne(
+    const reporter = (await usersCollection.findOneAndUpdate(
       { _id: new ObjectId(session.user.id) },
       {
         $inc: { totalReports: 1 },
         $set: { updatedAt: new Date() },
       },
-    );
+      { returnDocument: "after" },
+    )) as UserDoc | null;
+
+    // Submission-count achievements (e.g. First Signal) can unlock right
+    // here — don't wait for the report to be approved/rejected.
+    if (reporter) {
+      const achievements =
+        Array.isArray(reporter.achievements) && reporter.achievements.length > 0
+          ? reporter.achievements
+          : initializeUserAchievements();
+
+      const { updatedAchievements } = checkAchievements({
+        ...reporter,
+        achievements,
+        totalReports: reporter.totalReports || 0,
+        verifiedReports: reporter.verifiedReports || 0,
+        accuracyPercentage: reporter.accuracyPercentage || 0,
+      } as UserDoc);
+
+      await usersCollection.updateOne(
+        { _id: new ObjectId(session.user.id) },
+        { $set: { achievements: updatedAchievements } },
+      );
+    }
 
     await upsertRecentSearch(db, session.user.id, targetUser);
 
@@ -215,31 +239,69 @@ export async function GET(request: Request) {
         .limit(10)
         .toArray();
 
-      const enrichedSearches = await Promise.all(
-        searches.map(async (search) => {
-          if (!search.targetUser) {
-            const targetUser = await db
-              .collection("users")
-              .findOne({ _id: search.targetUserId });
-            if (targetUser) {
-              search.targetUser = {
-                _id: targetUser._id.toString(),
-                username: targetUser.username,
-                name: targetUser.name,
-                image: targetUser.image,
-                profileImage: targetUser.profileImage,
-                identityVerificationStatus:
-                  targetUser.identityVerificationStatus,
-              };
-            }
-          }
-          return search;
-        }),
+      // The stored `targetUser` is a snapshot taken when the search was
+      // saved — it stays truthy even after the target account is deleted,
+      // so its presence alone doesn't prove the user still exists. Always
+      // re-verify against the live users collection instead of only doing
+      // so when the snapshot happens to be missing.
+      const targetUserIds = searches
+        .map((search) => search.targetUserId)
+        .filter((id): id is ObjectId => Boolean(id));
+
+      const liveTargetUsers = await db
+        .collection("users")
+        .find(
+          { _id: { $in: targetUserIds } },
+          {
+            projection: {
+              username: 1,
+              name: 1,
+              image: 1,
+              profileImage: 1,
+              identityVerificationStatus: 1,
+            },
+          },
+        )
+        .toArray();
+      const liveTargetUserById = new Map(
+        liveTargetUsers.map((user) => [user._id.toString(), user]),
       );
+
+      const staleSearchIds: ObjectId[] = [];
+      const validSearches = searches.filter((search) => {
+        const liveUser = search.targetUserId
+          ? liveTargetUserById.get(search.targetUserId.toString())
+          : undefined;
+
+        if (!liveUser) {
+          staleSearchIds.push(search._id);
+          return false;
+        }
+
+        // Refresh the snapshot so a stale username/avatar doesn't linger.
+        search.targetUser = {
+          _id: liveUser._id.toString(),
+          username: liveUser.username,
+          name: liveUser.name,
+          image: liveUser.image,
+          profileImage: liveUser.profileImage,
+          identityVerificationStatus: liveUser.identityVerificationStatus,
+        };
+        return true;
+      });
+
+      if (staleSearchIds.length > 0) {
+        // Lazily clean up references to users who no longer exist (e.g.
+        // legacy data from before account deletion started purging these)
+        // so they don't need to be re-checked on every future load.
+        await db
+          .collection("recentSearches")
+          .deleteMany({ _id: { $in: staleSearchIds } });
+      }
 
       return NextResponse.json({
         success: true,
-        searches: enrichedSearches.filter((s) => s.targetUser),
+        searches: validSearches,
       });
     }
 
