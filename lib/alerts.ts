@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { POINTS_CONFIG } from "@/lib/config";
+import { XP_CONFIG } from "@/lib/config";
 
 export type AlertFilter = "Community" | "Rewards" | "System";
 export type BadgeTone = "cyan" | "green";
@@ -126,7 +126,7 @@ export async function getAllAlertsForUser(
       return {
         id: `rewards-${String(report._id)}`,
         title: `Report verified for @${targetUsername}`,
-        description: `+${POINTS_CONFIG.REPORT_VERIFICATION} points have been added`,
+        description: `+${XP_CONFIG.REPORT_APPROVED} points have been added`,
         createdAt: new Date(createdAt).toISOString(),
         filter: "Rewards",
         avatarType: "image",

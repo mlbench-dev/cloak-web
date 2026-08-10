@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Trophy } from "lucide-react";
 import Image from "next/image";
 import { LEVEL_CONFIG } from "@/lib/config";
+import { getAchievementIcon } from "@/lib/achievements";
 
 interface DashboardUser {
   username: string;
@@ -17,14 +18,13 @@ interface DashboardUser {
 }
 
 interface DashboardStats {
+  xp: number;
   level: number;
-  levelName: string;
   levelProgress: number;
-  pointsToNextLevel: number;
+  xpToNextLevel: number;
   totalReports: number;
   verifiedReports: number;
   accuracyPercentage: number;
-  totalPoints: number;
 }
 
 interface DashboardAchievement {
@@ -34,36 +34,12 @@ interface DashboardAchievement {
     description: string;
     iconColor: string;
     order: number;
-    pointsReward: number;
     target: number;
   };
   progress: number;
   target: number;
   unlockedAt?: Date;
 }
-
-const getAchievementIcon = (code: string) => {
-  switch (code) {
-    case "FIRST_SIGNAL":
-      return "/images/dashboard/achievements/first-signal.svg";
-    case "ACTIVE_WATCHER":
-      return "/images/dashboard/achievements/active-watcher.svg";
-    case "SCOUT":
-      return "/images/dashboard/achievements/scout.svg";
-    case "SENTINEL":
-      return "/images/dashboard/achievements/sentinal.svg";
-    case "SHARP_EYE":
-      return "/images/dashboard/achievements/sharp-eye.svg";
-    case "TRUTH_SEEKER":
-      return "/images/dashboard/achievements/truth-seeker.svg";
-    case "ELITE_DETECTOR":
-      return "/images/dashboard/achievements/elite-detector.svg";
-    case "CLOAK_GUARDIAN":
-      return "/images/dashboard/achievements/cloak-guardian.svg";
-    default:
-      return "/images/dashboard/achievements/first-signal.svg";
-  }
-};
 
 export default function ProgressPage() {
   const router = useRouter();
@@ -96,36 +72,35 @@ export default function ProgressPage() {
   }, []);
 
   const levelMeta = useMemo(() => {
-    const currentLevel = stats?.level || 1;
-    const currentLevelConfig =
-      LEVEL_CONFIG.find((level) => level.level === currentLevel) ||
-      LEVEL_CONFIG[0];
+    const currentLevel = stats?.level || 0;
+    const currentLevelConfig = LEVEL_CONFIG.find((level) => level.level === currentLevel);
     const nextLevelConfig = LEVEL_CONFIG.find(
       (level) => level.level === currentLevel + 1,
     );
-    const totalPoints = stats?.totalPoints || 0;
-    const currentLevelPoints = Math.max(
-      0,
-      totalPoints - (currentLevelConfig?.pointsRequired || 0),
-    );
-    const nextLevelPoints =
-      nextLevelConfig?.pointsRequired ||
-      totalPoints + (stats?.pointsToNextLevel || 0);
+    const xp = stats?.xp || 0;
+    const currentLevelXp = Math.max(0, xp - (currentLevelConfig?.xpRequired || 0));
+    const nextLevelXp =
+      nextLevelConfig?.xpRequired ?? xp + (stats?.xpToNextLevel || 0);
 
     return {
-      currentLevelPoints,
-      nextLevelPoints,
+      currentLevelXp,
+      nextLevelXp,
+      isMaxLevel: !nextLevelConfig,
     };
   }, [stats]);
 
+  // Overall progress across the full level ladder (levels 1-8), not just
+  // progress within the current level — the trophy ring only completes once
+  // the user reaches the final level.
   const levelRingOffset = useMemo(() => {
-    const normalizedProgress = Math.max(
+    const maxLevelXp = LEVEL_CONFIG[LEVEL_CONFIG.length - 1].xpRequired;
+    const overallProgress = Math.max(
       0,
-      Math.min(stats?.levelProgress || 0, 100),
+      Math.min(((stats?.xp || 0) / maxLevelXp) * 100, 100),
     );
     const circumference = 314;
-    return circumference - (normalizedProgress / 100) * circumference;
-  }, [stats?.levelProgress]);
+    return circumference - (overallProgress / 100) * circumference;
+  }, [stats?.xp]);
 
   if (loading) {
     return (
@@ -188,14 +163,15 @@ export default function ProgressPage() {
               {user?.username || user?.name || "Cloak User"}
             </h3>
             <p className="mt-2 text-[13px] text-[#A7ADB2]">
-              Level {stats?.level || 1}/10
+              {stats && stats.level > 0 ? `Level ${stats.level}` : "Unranked"}/{LEVEL_CONFIG.length}
             </p>
           </div>
 
           <div className="mt-8">
             <p className="text-[14px] font-medium text-[#3F3F46]">
-              {stats?.pointsToNextLevel || 0} points away from Level{" "}
-              {(stats?.level || 1) + 1}
+              {levelMeta.isMaxLevel
+                ? "Max level reached"
+                : `${stats?.xpToNextLevel || 0} points away from Level ${(stats?.level || 0) + 1}`}
             </p>
             <div className="mt-3 h-[10px] w-full overflow-hidden rounded-full bg-[#E8E8E8]">
               <div
@@ -206,9 +182,9 @@ export default function ProgressPage() {
               />
             </div>
             <div className="mt-2 flex items-center justify-between text-[13px] text-[#A7ADB2]">
-              <span>{levelMeta.currentLevelPoints}</span>
+              <span>{levelMeta.currentLevelXp}</span>
               <span>
-                {stats?.totalPoints || 0}/{levelMeta.nextLevelPoints}
+                {stats?.xp || 0}/{levelMeta.nextLevelXp}
               </span>
             </div>
           </div>

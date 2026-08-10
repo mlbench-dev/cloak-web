@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { calculateLevel, initializeUserAchievements, checkAchievements } from "@/lib/achievements";
-import { ACHIEVEMENTS, LEVEL_CONFIG } from "@/lib/config";
+import { ACHIEVEMENTS_CONFIG } from "@/lib/config";
 import { UserDoc } from "@/models/User";
 
 export async function GET(request: Request) {
@@ -98,16 +98,16 @@ export async function GET(request: Request) {
       ...user,
       achievements: userAchievements,
     } as UserDoc;
-    const { updatedAchievements } = await checkAchievements(userDoc);
+    const { updatedAchievements } = checkAchievements(userDoc);
     userAchievements = updatedAchievements;
 
-    // Calculate level info
-    const levelInfo = calculateLevel(user.points);
-    const currentLevelConfig = LEVEL_CONFIG.find(l => l.level === levelInfo.currentLevel);
+    // Calculate level info from XP — level progression is entirely separate
+    // from achievement badges below.
+    const levelInfo = calculateLevel(user.xp || 0);
 
-    // Enrich achievements with config
+    // Enrich achievements with their (badge-only) config
     const enrichedAchievements = userAchievements.map((achievement: any) => {
-      const config = ACHIEVEMENTS.find(a => a.code === achievement.code);
+      const config = ACHIEVEMENTS_CONFIG.find(a => a.code === achievement.code);
       return {
         ...achievement,
         config,
@@ -126,14 +126,13 @@ export async function GET(request: Request) {
         role: user.role,
       },
       stats: {
+        xp: user.xp || 0,
         level: levelInfo.currentLevel,
-        levelName: currentLevelConfig?.name,
         levelProgress: levelInfo.progressPercentage,
-        pointsToNextLevel: levelInfo.pointsToNextLevel,
+        xpToNextLevel: levelInfo.xpToNextLevel,
         totalReports: user.totalReports,
         verifiedReports: user.verifiedReports,
         accuracyPercentage: user.accuracyPercentage,
-        totalPoints: user.points,
       },
       achievements: enrichedAchievements,
       recentActivity: recentReports,

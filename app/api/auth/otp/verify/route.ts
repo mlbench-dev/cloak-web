@@ -1,5 +1,6 @@
 import clientPromise from "@/lib/mongodb";
-import { initializeUserAchievements } from "@/lib/achievements";
+import { calculateLevel, initializeUserAchievements } from "@/lib/achievements";
+import { XP_CONFIG } from "@/lib/config";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -56,8 +57,8 @@ export async function POST(request: Request) {
         isVerified: false,
         identityVerificationStatus: null,
         role: "USER", // Default role
-        points: 0,
-        level: 1,
+        xp: 0,
+        level: 0,
         totalReports: 0,
         verifiedReports: 0,
         accuracyPercentage: 0,
@@ -70,11 +71,22 @@ export async function POST(request: Request) {
         updatedAt: new Date(),
       };
 
-      // Initialize missing fields in case user was created before these were added
-      if (typeof user.points !== "number") updateData.points = 0;
-      if (typeof user.level !== "number") updateData.level = 1;
-      if (typeof user.totalReports !== "number") updateData.totalReports = 0;
+      // Initialize missing fields in case user was created before these were
+      // added (pre-migration legacy users). XP is backfilled from approved
+      // report history rather than reset to 0, so existing users don't lose
+      // visible progress.
       if (typeof user.verifiedReports !== "number") updateData.verifiedReports = 0;
+      if (typeof user.xp !== "number") {
+        const verifiedReports =
+          typeof updateData.verifiedReports === "number"
+            ? updateData.verifiedReports
+            : user.verifiedReports;
+        updateData.xp = verifiedReports * XP_CONFIG.REPORT_APPROVED;
+      }
+      if (typeof user.level !== "number") {
+        updateData.level = calculateLevel(updateData.xp ?? user.xp ?? 0).currentLevel;
+      }
+      if (typeof user.totalReports !== "number") updateData.totalReports = 0;
       if (typeof user.accuracyPercentage !== "number") updateData.accuracyPercentage = 0;
       if (!Array.isArray(user.achievements)) updateData.achievements = initializeUserAchievements();
 

@@ -7,15 +7,21 @@ type Stat = {
   value: string;
 };
 
+type LastAchievement = {
+  name: string;
+  imageSrc: string;
+};
+
 type DashboardHeaderProps = {
   username: string;
   levelLabel: string;
+  lastAchievement?: LastAchievement | null;
   verified: boolean;
   premium: boolean;
   stats: Stat[];
-  pointsToNextLevel: number;
-  currentPoints: number;
-  nextLevelPoints: number;
+  xpToNextLevel: number;
+  currentXp: number;
+  nextLevelXp: number;
   levelProgress: number;
   profileImage?: string;
   image?: string;
@@ -25,12 +31,13 @@ type DashboardHeaderProps = {
 export default function DashboardHeader({
   username,
   levelLabel,
+  lastAchievement,
   verified,
   premium,
   stats,
-  pointsToNextLevel,
-  currentPoints,
-  nextLevelPoints,
+  xpToNextLevel,
+  currentXp,
+  nextLevelXp,
   levelProgress,
   profileImage,
   image,
@@ -47,7 +54,10 @@ export default function DashboardHeader({
             {verified && <VerifiedBadge className="h-4 w-4 text-primary" strokeWidth={1.9} />}
             {premium && <Crown className="h-4 w-4 fill-primary text-primary" strokeWidth={1.8} />}
           </div>
-          <p className="text-[13px] text-slate-400">{levelLabel}</p>
+          <p className="text-[13px] text-slate-400">
+            {levelLabel}
+            {lastAchievement ? ` · ${lastAchievement.name}` : ""}
+          </p>
         </div>
       </div>
 
@@ -81,7 +91,7 @@ export default function DashboardHeader({
 
       <div className="space-y-2 rounded-2xl bg-[#E7FAFC] px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-slate-700">{pointsToNextLevel} points away from Level {currentLevel + 1}</p>
+          <p className="text-sm text-slate-700">{xpToNextLevel} points away from Level {currentLevel + 1}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -93,9 +103,9 @@ export default function DashboardHeader({
           </div>
 
           <div className="flex items-center justify-between text-[10px] text-slate-400">
-            <span>{currentPoints}</span>
+            <span>{currentXp}</span>
             <span>
-              {currentPoints}/{nextLevelPoints}
+              {currentXp}/{nextLevelXp}
             </span>
           </div>
         </div>

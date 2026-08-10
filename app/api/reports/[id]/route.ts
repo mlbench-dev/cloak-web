@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { checkAchievements, calculateLevel } from "@/lib/achievements";
-import { POINTS_CONFIG } from "@/lib/config";
+import { XP_CONFIG } from "@/lib/config";
 import type { AiConfidenceStatus, ReportDoc, UserDoc } from "@/models/User";
 import {
   computeAndStoreAiConfidence,
@@ -32,6 +32,7 @@ type StoredReport = {
   aiConfidenceAttempts?: number;
   aiConfidenceLastAttemptAt?: Date;
   status?: string;
+  xpAwarded?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   platform?: string;
@@ -79,11 +80,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
+    // A report can only be resolved once. This is the sole guard against
+    // duplicate XP allocation: once status leaves "PENDING", this route can
+    // never touch the reporter's stats/XP for this report again.
+    if (report.status !== "PENDING") {
+      return NextResponse.json(
+        { error: "Report has already been resolved" },
+        { status: 400 },
+      );
+    }
+
     const updateData: {
       status: "VERIFIED" | "FALSE_POSITIVE" | "REJECTED";
       updatedAt: Date;
       verifiedAt?: Date;
       verifiedBy?: ObjectId;
+      xpAwarded?: boolean;
     } = {
       status,
       updatedAt: new Date(),
@@ -92,6 +104,7 @@ export async function PATCH(
     if (status === "VERIFIED") {
       updateData.verifiedAt = new Date();
       updateData.verifiedBy = new ObjectId(session.user.id);
+      updateData.xpAwarded = true;
     }
 
     await reportsCollection.updateOne(
@@ -99,56 +112,56 @@ export async function PATCH(
       { $set: updateData },
     );
 
-    if (status === "VERIFIED" || status === "FALSE_POSITIVE") {
-      const reporterId = report.reportedBy;
-      const reporter = (await usersCollection.findOne({
-        _id: reporterId,
-      })) as UserDoc | null;
+    const reporterId = report.reportedBy;
+    const reporter = (await usersCollection.findOne({
+      _id: reporterId,
+    })) as UserDoc | null;
 
-      if (reporter) {
-        const updatedReporter: UserDoc = {
-          ...reporter,
-          achievements: Array.isArray(reporter.achievements)
-            ? reporter.achievements
-            : [],
-          points: reporter.points || 0,
-          level: reporter.level || 1,
-          totalReports: reporter.totalReports || 0,
-          verifiedReports: reporter.verifiedReports || 0,
-          accuracyPercentage: reporter.accuracyPercentage || 0,
-        };
+    if (reporter) {
+      const updatedReporter: UserDoc = {
+        ...reporter,
+        achievements: Array.isArray(reporter.achievements)
+          ? reporter.achievements
+          : [],
+        xp: reporter.xp || 0,
+        level: reporter.level || 0,
+        totalReports: reporter.totalReports || 0,
+        verifiedReports: reporter.verifiedReports || 0,
+        accuracyPercentage: reporter.accuracyPercentage || 0,
+      };
 
-        if (status === "VERIFIED") {
-          updatedReporter.verifiedReports += 1;
-          updatedReporter.points += POINTS_CONFIG.REPORT_VERIFICATION;
-        }
+      // Only an approved (VERIFIED) report grants XP — false/rejected
+      // reports never do.
+      if (status === "VERIFIED") {
+        updatedReporter.verifiedReports += 1;
+        updatedReporter.xp += XP_CONFIG.REPORT_APPROVED;
+      }
 
-        if (updatedReporter.totalReports > 0) {
-          updatedReporter.accuracyPercentage = Math.round(
-            (updatedReporter.verifiedReports / updatedReporter.totalReports) *
-              100,
-          );
-        }
-
-        const levelInfo = calculateLevel(updatedReporter.points);
-        updatedReporter.level = levelInfo.currentLevel;
-
-        const achievementResult = await checkAchievements(updatedReporter);
-
-        await usersCollection.updateOne(
-          { _id: reporterId },
-          {
-            $set: {
-              verifiedReports: updatedReporter.verifiedReports,
-              accuracyPercentage: updatedReporter.accuracyPercentage,
-              points: updatedReporter.points,
-              level: updatedReporter.level,
-              achievements: achievementResult.updatedAchievements,
-              updatedAt: new Date(),
-            },
-          },
+      if (updatedReporter.totalReports > 0) {
+        updatedReporter.accuracyPercentage = Math.round(
+          (updatedReporter.verifiedReports / updatedReporter.totalReports) *
+            100,
         );
       }
+
+      const levelInfo = calculateLevel(updatedReporter.xp);
+      updatedReporter.level = levelInfo.currentLevel;
+
+      const { updatedAchievements } = checkAchievements(updatedReporter);
+
+      await usersCollection.updateOne(
+        { _id: reporterId },
+        {
+          $set: {
+            verifiedReports: updatedReporter.verifiedReports,
+            accuracyPercentage: updatedReporter.accuracyPercentage,
+            xp: updatedReporter.xp,
+            level: updatedReporter.level,
+            achievements: updatedAchievements,
+            updatedAt: new Date(),
+          },
+        },
+      );
     }
 
     return NextResponse.json({ success: true });

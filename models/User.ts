@@ -33,7 +33,9 @@ export interface UserDoc {
   role: UserRole;
   isVerified: boolean;
   identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED";
-  points: number;
+  // XP drives level progression only. Kept separate from achievements, which
+  // are badge-only milestones with no bearing on XP/level.
+  xp: number;
   level: number;
   totalReports: number;
   verifiedReports: number;
@@ -84,6 +86,9 @@ export interface ReportDoc {
   aiConfidenceLastAttemptAt?: Date;
   verifiedBy?: ObjectId;
   verifiedAt?: Date;
+  // Guards against awarding XP more than once for the same report, even if
+  // its status is transitioned/re-fetched multiple times.
+  xpAwarded?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,12 +108,12 @@ export interface RecentSearchDoc {
   createdAt: Date;
 }
 
+// Achievements are badge-only milestones — no point/XP reward is attached.
 export interface AchievementDoc {
   _id?: ObjectId;
   code: AchievementCode;
   name: string;
   description: string;
-  pointsReward: number;
   target: number;
   iconColor: string;
   order: number;
@@ -116,6 +121,5 @@ export interface AchievementDoc {
 
 export interface LevelConfig {
   level: number;
-  pointsRequired: number;
-  name: string;
+  xpRequired: number;
 }
