@@ -12,6 +12,15 @@ import {
   shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
 import { checkAchievements, initializeUserAchievements } from "@/lib/achievements";
+import {
+  checkLimit,
+  consumeLimit,
+  ensurePlanIndexes,
+  getUpsellPayload,
+  resolveUserPlan,
+} from "@/lib/planLimits";
+import { PLAN_LIMITS } from "@/lib/config";
+import type { PlanCode } from "@/models/Subscription";
 
 // The AI verification call (kicked off via after() below, both here and in
 // GET) can now take up to 10 minutes — the function instance has to stay
@@ -90,6 +99,7 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
+    await ensurePlanIndexes(db);
     const usersCollection = db.collection("users");
 
     const targetUser = await usersCollection.findOne({
@@ -100,6 +110,17 @@ export async function POST(request: Request) {
         { error: "Target user not found" },
         { status: 404 },
       );
+    }
+
+    const reporterId = new ObjectId(session.user.id);
+    const reporterPlan = await resolveUserPlan(db, reporterId);
+    const reportsCheck = await checkLimit(db, {
+      userId: reporterId,
+      plan: reporterPlan,
+      kind: "REPORTS_MONTHLY",
+    });
+    if (!reportsCheck.allowed) {
+      return NextResponse.json(getUpsellPayload(reportsCheck), { status: 403 });
     }
 
     const platform = providedPlatform || detectPlatform(sourceLink);
@@ -186,6 +207,7 @@ export async function PATCH(request: Request) {
     }
 
     const db = await getDb();
+    await ensurePlanIndexes(db);
     const targetUser = await db.collection("users").findOne({
       _id: new ObjectId(targetUserId),
     });
@@ -195,6 +217,39 @@ export async function PATCH(request: Request) {
         { error: "Target user not found" },
         { status: 404 },
       );
+    }
+
+    const searcherId = new ObjectId(session.user.id);
+    const alreadySaved = await db.collection("recentSearches").findOne(
+      { userId: searcherId, targetUserId: targetUser._id },
+      { projection: { _id: 1 } },
+    );
+
+    // Re-selecting an already-saved contact doesn't burn a daily search
+    // credit or count against the saved-lookups cap — only a genuinely new
+    // lookup does.
+    if (!alreadySaved) {
+      const plan = await resolveUserPlan(db, searcherId);
+
+      const savedCheck = await checkLimit(db, {
+        userId: searcherId,
+        plan,
+        kind: "SAVED_LOOKUPS",
+      });
+      if (!savedCheck.allowed) {
+        return NextResponse.json(getUpsellPayload(savedCheck), { status: 403 });
+      }
+
+      const searchCheck = await checkLimit(db, {
+        userId: searcherId,
+        plan,
+        kind: "SEARCH_DAILY",
+      });
+      if (!searchCheck.allowed) {
+        return NextResponse.json(getUpsellPayload(searchCheck), { status: 403 });
+      }
+
+      await consumeLimit(db, { userId: searcherId, kind: "SEARCH_DAILY" });
     }
 
     await upsertRecentSearch(db, session.user.id, targetUser);
@@ -343,6 +398,22 @@ export async function GET(request: Request) {
       ])
       .toArray();
 
+    // Batched so the retry-cooldown lookup below doesn't cost one query
+    // per report — Boost/Cloak Pro reporters get a shorter cooldown
+    // between automatic retries (see lib/config.ts PLAN_LIMITS).
+    const reporterIds = Array.from(
+      new Set(reports.map((report) => report.reportedBy.toString())),
+    ).map((id) => new ObjectId(id));
+    const reporterPlans = reporterIds.length
+      ? await db
+          .collection("users")
+          .find({ _id: { $in: reporterIds } }, { projection: { plan: 1 } })
+          .toArray()
+      : [];
+    const planByReporterId = new Map(
+      reporterPlans.map((u) => [u._id.toString(), (u.plan as PlanCode) || "FREEMIUM"]),
+    );
+
     // Same lazy retry as the single-report view (GET /api/reports/[id]),
     // just fanned out across the whole list — the list is what people
     // actually check regularly ("My Reports"), so gating retries on someone
@@ -358,7 +429,8 @@ export async function GET(request: Request) {
           report._id,
           report as any,
         );
-        if (shouldAttemptAiConfidence(report as any)) {
+        const reporterPlan = planByReporterId.get(report.reportedBy.toString()) || "FREEMIUM";
+        if (shouldAttemptAiConfidence(report as any, PLAN_LIMITS[reporterPlan].retryCooldownMs)) {
           after(() => computeAndStoreAiConfidence(report._id));
         }
       }),

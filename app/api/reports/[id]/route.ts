@@ -5,7 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { checkAchievements, calculateLevel } from "@/lib/achievements";
-import { XP_CONFIG } from "@/lib/config";
+import { XP_CONFIG, PLAN_LIMITS } from "@/lib/config";
+import { resolveUserPlan } from "@/lib/planLimits";
 import type { AiConfidenceStatus, ReportDoc, UserDoc } from "@/models/User";
 import {
   computeAndStoreAiConfidence,
@@ -131,10 +132,13 @@ export async function PATCH(
       };
 
       // Only an approved (VERIFIED) report grants XP — false/rejected
-      // reports never do.
+      // reports never do. The multiplier used is whatever plan the
+      // reporter is on at approval time, not submission time.
       if (status === "VERIFIED") {
         updatedReporter.verifiedReports += 1;
-        updatedReporter.xp += XP_CONFIG.REPORT_APPROVED;
+        const reporterPlan = await resolveUserPlan(db, reporterId);
+        const multiplier = PLAN_LIMITS[reporterPlan].xpMultiplier;
+        updatedReporter.xp += Math.round(XP_CONFIG.REPORT_APPROVED * multiplier);
       }
 
       if (updatedReporter.totalReports > 0) {
@@ -265,7 +269,9 @@ export async function GET(
 
     // Only kicks off the expensive AI call if the gate is open and
     // we're not already processing / out of retries / cooling down.
-    if (shouldAttemptAiConfidence(report)) {
+    // Boost/Cloak Pro reporters get a shorter cooldown between retries.
+    const reporterPlan = await resolveUserPlan(db, report.reportedBy);
+    if (shouldAttemptAiConfidence(report, PLAN_LIMITS[reporterPlan].retryCooldownMs)) {
       after(() => computeAndStoreAiConfidence(reportId));
     }
 

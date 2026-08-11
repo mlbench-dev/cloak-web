@@ -1,4 +1,5 @@
 import { AchievementDoc, LevelConfig } from "@/models/User";
+import { PlanCode } from "@/models/Subscription";
 
 // XP is the only currency that drives level progression. Achievements are
 // a separate, badge-only system (see ACHIEVEMENTS_CONFIG below) and no
@@ -8,6 +9,74 @@ export const XP_CONFIG = {
   // (status -> "VERIFIED") by the reported user. False/rejected reports
   // award no XP.
   REPORT_APPROVED: 50,
+};
+
+// Display name shown wherever a plan is referenced in user-facing copy
+// (upsell toasts, checkout item_name, etc.) — single source so it can't
+// drift between call sites.
+export const PLAN_DISPLAY_NAME: Record<PlanCode, string> = {
+  FREEMIUM: "Freemium",
+  BOOST: "Boost Protection",
+  CLOAK_PRO: "Cloak Pro",
+};
+
+// Per-plan limits and perks, enforced by lib/planLimits.ts. null means
+// unlimited. Prices are in ZAR cents (PayFast settles in ZAR only) — the
+// USD figures shown in the UI ($4.99 / $11.99) are a fixed display peg, not
+// live FX conversion, and are decoupled from this billed amount.
+//
+// priceZarCents below were computed 2026-08-11 off a live USD/ZAR quote
+// (~16.17) with a small buffer for daily FX drift + PayFast transaction
+// fees, rounded to a clean price point — NOT a confirmed final business
+// price. Confirm with the client before going live; ZAR/USD moves daily
+// and PayFast doesn't do dynamic conversion, so this needs a human
+// decision on cadence for revisiting it, not just a one-time set.
+export const PLAN_LIMITS: Record<
+  PlanCode,
+  {
+    reportsPerMonth: number | null;
+    searchesPerDay: number | null;
+    savedLookupsMax: number | null;
+    canPostCommunity: boolean;
+    xpMultiplier: number;
+    priceZarCents: number;
+    // How long a failed AI-confidence check waits before automatically
+    // retrying (lib/reportAiConfidence.ts). Reports still process in the
+    // order submitted — this isn't a priority queue — but a shorter
+    // cooldown means a paying user's retry-after-failure comes back
+    // faster on average. Applies per report, keyed off the reporter's plan.
+    retryCooldownMs: number;
+  }
+> = {
+  FREEMIUM: {
+    reportsPerMonth: 3,
+    searchesPerDay: 10,
+    savedLookupsMax: 5,
+    canPostCommunity: false,
+    xpMultiplier: 1,
+    priceZarCents: 0,
+    retryCooldownMs: 60 * 1000,
+  },
+  BOOST: {
+    reportsPerMonth: 20,
+    searchesPerDay: null,
+    savedLookupsMax: null,
+    canPostCommunity: true,
+    xpMultiplier: 1.5,
+    // $4.99 @ ~16.17 ZAR/USD ≈ R80.71 + buffer -> R84.99. Provisional.
+    priceZarCents: 8499,
+    retryCooldownMs: 20 * 1000,
+  },
+  CLOAK_PRO: {
+    reportsPerMonth: null,
+    searchesPerDay: null,
+    savedLookupsMax: null,
+    canPostCommunity: true,
+    xpMultiplier: 2,
+    // $11.99 @ ~16.17 ZAR/USD ≈ R193.93 + buffer -> R199.99. Provisional.
+    priceZarCents: 19999,
+    retryCooldownMs: 10 * 1000,
+  },
 };
 
 // Level thresholds: total XP required to reach each level. Below the first

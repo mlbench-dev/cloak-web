@@ -49,6 +49,7 @@ export const authOptions: NextAuthOptions = {
             identityVerificationStatus: user.identityVerificationStatus,
             documentType: user.documentType,
             role: user.role,
+            plan: user.plan,
           };
         }
         return null;
@@ -107,6 +108,7 @@ export const authOptions: NextAuthOptions = {
               isVerified: false,
               identityVerificationStatus: null,
               role: "USER",
+              plan: "FREEMIUM",
               googleId: user.id,
               createdAt: new Date(),
               updatedAt: new Date(),
@@ -115,6 +117,7 @@ export const authOptions: NextAuthOptions = {
             (user as any).isVerified = false;
             (user as any).identityVerificationStatus = null;
             (user as any).role = "USER";
+            (user as any).plan = "FREEMIUM";
           }
           console.log("Google sign-in callback successful");
           return true;
@@ -135,6 +138,7 @@ export const authOptions: NextAuthOptions = {
           (user as any).identityVerificationStatus || null;
         token.documentType = (user as any).documentType || null;
         token.role = (user as any).role || "USER";
+        token.plan = (user as any).plan || "FREEMIUM";
         token.image = (user as any).image || user.image;
         token.name = (user as any).name || user.name;
         token.onboardingStartedAt = new Date(); // Track when onboarding started
@@ -148,6 +152,12 @@ export const authOptions: NextAuthOptions = {
         if (session?.identityVerificationStatus)
           token.identityVerificationStatus = session.identityVerificationStatus;
         if (session?.documentType) token.documentType = session.documentType;
+        // Force the DB refresh below to run on the very next callback
+        // invocation instead of waiting out JWT_DB_REFRESH_INTERVAL_MS —
+        // an explicit update() call (e.g. right after a subscription
+        // checkout) means the caller wants fresh state now, not in up to
+        // 2 more minutes.
+        token.dbRefreshedAt = 0;
       }
 
       // Every session check (client session fetch or getServerSession() in an
@@ -173,6 +183,7 @@ export const authOptions: NextAuthOptions = {
               userFromDb.identityVerificationStatus || null;
             token.documentType = userFromDb.documentType || null;
             token.role = userFromDb.role || "USER";
+            token.plan = userFromDb.plan || "FREEMIUM";
             token.image =
               userFromDb.image || userFromDb.profileImage || token.image;
             token.name = userFromDb.name || token.name;
@@ -198,6 +209,7 @@ export const authOptions: NextAuthOptions = {
           token.identityVerificationStatus;
         (session.user as any).documentType = token.documentType;
         (session.user as any).role = token.role;
+        (session.user as any).plan = token.plan || "FREEMIUM";
         (session.user as any).image = token.image;
         (session.user as any).name = token.name ?? null;
         (session.user as any).email = token.email ?? null;

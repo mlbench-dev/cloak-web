@@ -7,6 +7,7 @@ import { Search, X, MessageCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import { showPlanLimitToast } from "@/app/components/planLimitToast";
 
 const MAX_NOTES_LENGTH = 300;
 const truncateText = (text: string, maxChars: number) =>
@@ -195,6 +196,18 @@ export default function SubmitReportPage() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.search) {
         upsertRecentSearchState(data.search);
+        return;
+      }
+      if (!res.ok && data?.error) {
+        // Plan-limit blocks (daily search cap / saved-lookups cap) land
+        // here — the user can still pick this person and submit a report
+        // (that's a separate limit check), they just won't get a saved
+        // lookup out of it this time.
+        if (data.code === "PLAN_LIMIT_REACHED") {
+          showPlanLimitToast(data.error);
+        } else {
+          toast.error(data.error);
+        }
       }
     } catch (error) {
       console.error("Error saving recent search:", error);
@@ -385,6 +398,8 @@ export default function SubmitReportPage() {
       if (data.success) {
         toast.success("Report submitted successfully!");
         router.push("/profile");
+      } else if (data.code === "PLAN_LIMIT_REACHED") {
+        showPlanLimitToast(data.error);
       } else {
         toast.error(data.error || "Failed to submit report");
       }

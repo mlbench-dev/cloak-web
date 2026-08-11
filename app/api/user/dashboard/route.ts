@@ -124,6 +124,7 @@ export async function GET(request: Request) {
         isVerified: user.isVerified,
         identityVerificationStatus: user.identityVerificationStatus,
         role: user.role,
+        plan: user.plan || "FREEMIUM",
       },
       stats: {
         xp: user.xp || 0,

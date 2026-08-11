@@ -13,6 +13,7 @@ import {
   safeObjectId,
   uploadCloakWatchImages,
 } from "@/lib/cloakWatch";
+import { checkLimit, getUpsellPayload, resolveUserPlan } from "@/lib/planLimits";
 
 export async function GET(request: Request) {
   try {
@@ -180,6 +181,14 @@ export async function POST(request: Request) {
     const user = await db.collection("users").findOne({ _id: userId });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const plan = await resolveUserPlan(db, userId);
+    const postCheck = await checkLimit(db, { userId, plan, kind: "COMMUNITY_POST" });
+    if (!postCheck.allowed) {
+      // Check before uploading — a blocked user shouldn't pay for a wasted
+      // Firebase upload.
+      return NextResponse.json(getUpsellPayload(postCheck), { status: 403 });
     }
 
     const uploadedImages = await uploadCloakWatchImages(files, session.user.id);

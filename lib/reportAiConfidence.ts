@@ -440,6 +440,11 @@ export function shouldAttemptAiConfidence(
     | "aiConfidenceAttempts"
     | "aiConfidenceLastAttemptAt"
   >,
+  // Boost/Cloak Pro reporters get a shorter cooldown between retry
+  // attempts (lib/config.ts PLAN_LIMITS.retryCooldownMs) — callers that
+  // know the reporter's plan should pass it; defaults to the Freemium
+  // cooldown when unknown.
+  cooldownMs: number = AI_CONFIDENCE_RETRY_COOLDOWN_MS,
 ): boolean {
   const status = getEffectiveAiConfidenceStatus(report);
   if (
@@ -456,10 +461,7 @@ export function shouldAttemptAiConfidence(
 
   const lastAttempt = report.aiConfidenceLastAttemptAt;
   if (!lastAttempt) return true;
-  return (
-    Date.now() - new Date(lastAttempt).getTime() >=
-    AI_CONFIDENCE_RETRY_COOLDOWN_MS
-  );
+  return Date.now() - new Date(lastAttempt).getTime() >= cooldownMs;
 }
 
 export async function refreshVerificationGate(

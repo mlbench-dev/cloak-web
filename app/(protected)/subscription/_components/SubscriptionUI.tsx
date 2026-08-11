@@ -87,10 +87,12 @@ export function CurrentPlanCard({
   icon: Icon,
   title,
   tone,
+  statusLabel = "Active",
 }: {
   icon: LucideIcon;
   title: string;
   tone: PlanTone;
+  statusLabel?: string;
 }) {
   const styles = toneClasses[tone];
 
@@ -106,7 +108,7 @@ export function CurrentPlanCard({
           <p className="text-[16px] font-semibold leading-5 text-[#2D2D2D]">
             {title}
           </p>
-          <p className="mt-1 text-[14px] leading-4 text-[#8F98A0]">Active</p>
+          <p className="mt-1 text-[14px] leading-4 text-[#8F98A0]">{statusLabel}</p>
         </div>
       </div>
     </div>
@@ -173,6 +175,9 @@ export function PlanUpsellCard({
         <p className="mt-1 text-[15px] font-medium leading-5 text-[#14C3CF]">
           {plan.priceLine}
         </p>
+        <p className="mt-0.5 text-[12px] leading-4 text-[#B0B5BB]">
+          {plan.zarPriceLine}
+        </p>
         <p className="mt-1 text-[14px] leading-5 text-[#8F98A0]">
           {plan.description}
         </p>
@@ -228,16 +233,22 @@ export function BillingCard({
 
 export function CancelSubscriptionBlock({
   accessUntilDate,
+  onCancel,
+  isCancelling = false,
 }: {
   accessUntilDate: string;
+  onCancel?: () => void;
+  isCancelling?: boolean;
 }) {
   return (
     <div className="mt-auto pt-8 pb-4">
       <button
         type="button"
-        className="w-full rounded-full border border-[#ECECEC] bg-white px-4 py-4 text-[15px] font-medium text-[#F05B5B]"
+        onClick={onCancel}
+        disabled={isCancelling}
+        className="w-full rounded-full border border-[#ECECEC] bg-white px-4 py-4 text-[15px] font-medium text-[#F05B5B] disabled:opacity-60"
       >
-        Cancel Subscription
+        {isCancelling ? "Cancelling..." : "Cancel Subscription"}
       </button>
       <p className="mt-4 text-[14px] leading-5 text-[#8F98A0]">
         If you cancel , you can still access the subscription till{" "}
@@ -320,6 +331,9 @@ export function UpgradeModal({
         <h2 className="mx-auto max-w-[290px] text-center text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111827]">
           {title}
         </h2>
+        <p className="mx-auto mt-2 text-center text-[13px] leading-5 text-[#9CA3AF]">
+          {plan.zarPriceLine}
+        </p>
         <p className="mb-3 mt-10 text-[14px] font-medium text-[#8F98A0]">
           What You Will Get
         </p>

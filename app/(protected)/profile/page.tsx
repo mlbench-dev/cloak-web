@@ -28,6 +28,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import PlanBadge from "@/app/components/PlanBadge";
+import type { PlanCode } from "@/models/Subscription";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
 import { PostCard } from "@/app/(protected)/cloak-watch/_components/PostUI";
 import {
@@ -106,7 +108,7 @@ export default function ProfilePage() {
     user?.identityVerificationStatus === "APPROVED" ||
     user?.isVerified ||
     false;
-  const isPremium = user?.role === "VERIFIED_USER" || false;
+  const plan: PlanCode = user?.plan || "FREEMIUM";
   const [imageLoading, setImageLoading] = useState(true);
   const [profileStats, setProfileStats] = useState<{
     totalReports: number;
@@ -1362,9 +1364,7 @@ export default function ProfilePage() {
                 {isVerified && (
                   <VerifiedBadge className="h-5 w-5 text-[#00C3D0]" />
                 )}
-                {isPremium && (
-                  <Crown className="h-[18px] w-[18px] fill-[#14C3CF] text-[#14C3CF]" />
-                )}
+                <PlanBadge plan={plan} />
               </div>
               <p className="text-[14px] text-[#A7ADB2]">
                 {user?.name || username}

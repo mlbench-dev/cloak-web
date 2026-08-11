@@ -57,6 +57,7 @@ export async function POST(request: Request) {
         isVerified: false,
         identityVerificationStatus: null,
         role: "USER", // Default role
+        plan: "FREEMIUM",
         xp: 0,
         level: 0,
         totalReports: 0,
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
       if (typeof user.totalReports !== "number") updateData.totalReports = 0;
       if (typeof user.accuracyPercentage !== "number") updateData.accuracyPercentage = 0;
       if (!Array.isArray(user.achievements)) updateData.achievements = initializeUserAchievements();
+      if (typeof user.plan !== "string") updateData.plan = "FREEMIUM";
 
       await db.collection("users").updateOne(
         { _id: user._id },
@@ -105,6 +107,7 @@ export async function POST(request: Request) {
         isVerified: (user as any).isVerified || false,
         identityVerificationStatus: (user as any).identityVerificationStatus || null,
         role: (user as any).role,
+        plan: (user as any).plan || "FREEMIUM",
       },
     });
   } catch (error) {

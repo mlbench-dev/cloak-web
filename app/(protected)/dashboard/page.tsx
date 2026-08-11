@@ -5,6 +5,7 @@ import AchievementsSection from "@/app/components/dashboard/AchievementsSection"
 import DashboardHeader from "@/app/components/dashboard/DashboardHeader";
 import RecentActivitySection from "@/app/components/dashboard/RecentActivitySection";
 import { getAchievementIcon } from "@/lib/achievements";
+import type { PlanCode } from "@/models/Subscription";
 
 interface DashboardUser {
   username: string;
@@ -14,6 +15,7 @@ interface DashboardUser {
   isVerified: boolean;
   identityVerificationStatus?: string;
   role: string;
+  plan: PlanCode;
 }
 
 interface DashboardStats {
@@ -164,7 +166,7 @@ export default function DashboardPage() {
         levelLabel={stats && stats.level > 0 ? `Level ${stats.level}` : "Unranked"}
         lastAchievement={lastAchievement}
         verified={user?.identityVerificationStatus === "APPROVED"}
-        premium={user?.role === "VERIFIED_USER"}
+        plan={user?.plan || "FREEMIUM"}
         stats={[
           { label: "Reports", value: `${stats?.totalReports || 0}` },
           { label: "Verified", value: `${stats?.verifiedReports || 0}` },

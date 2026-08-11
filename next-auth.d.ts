@@ -1,5 +1,6 @@
 import "next-auth";
 import "next-auth/jwt";
+import type { PlanCode } from "@/models/Subscription";
 
 declare module "next-auth" {
   interface Session {
@@ -10,6 +11,9 @@ declare module "next-auth" {
       identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
       documentType?: string | null;
       role?: string;
+      // Optimistic UI only (e.g. hiding gated actions) — every actual
+      // enforcement decision re-derives the plan from the database.
+      plan?: PlanCode;
       sessionExpired?: boolean;
     } & DefaultSession["user"];
     sessionExpired?: boolean;
@@ -22,6 +26,7 @@ declare module "next-auth" {
     identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
     documentType?: string | null;
     role?: string;
+    plan?: PlanCode;
   }
 }
 
@@ -33,6 +38,7 @@ declare module "next-auth/jwt" {
     identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
     documentType?: string | null;
     role?: string;
+    plan?: PlanCode;
     onboardingStartedAt?: string | Date;
     sessionExpired?: boolean;
     dbRefreshedAt?: number;

@@ -1,7 +1,9 @@
 import VerifiedBadge from "@/app/components/VerifiedBadge";
-import { Crown, User } from "lucide-react";
+import PlanBadge from "@/app/components/PlanBadge";
+import { User } from "lucide-react";
 import Image from "next/image";
 import { LEVEL_CONFIG } from "@/lib/config";
+import type { PlanCode } from "@/models/Subscription";
 type Stat = {
   label: string;
   value: string;
@@ -17,7 +19,7 @@ type DashboardHeaderProps = {
   levelLabel: string;
   lastAchievement?: LastAchievement | null;
   verified: boolean;
-  premium: boolean;
+  plan: PlanCode;
   stats: Stat[];
   xpToNextLevel: number;
   currentXp: number;
@@ -33,7 +35,7 @@ export default function DashboardHeader({
   levelLabel,
   lastAchievement,
   verified,
-  premium,
+  plan,
   stats,
   xpToNextLevel,
   currentXp,
@@ -63,12 +65,7 @@ export default function DashboardHeader({
                 strokeWidth={1.9}
               />
             )}
-            {premium && (
-              <Crown
-                className="h-4 w-4 fill-primary text-primary"
-                strokeWidth={1.8}
-              />
-            )}
+            <PlanBadge plan={plan} />
           </div>
           <p className="text-[13px] text-slate-400">
             {levelLabel}

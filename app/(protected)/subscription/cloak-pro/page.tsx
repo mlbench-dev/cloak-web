@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import {
   BillingCard,
   CancelSubscriptionBlock,
@@ -9,9 +11,37 @@ import {
   SubscriptionHeader,
   SubscriptionScreenShell,
 } from "../_components/SubscriptionUI";
-import { activePlanMeta, cloakProPlan } from "../_lib/plans";
+import { cloakProPlan } from "../_lib/plans";
+import { cancelActiveSubscription } from "../_lib/checkout";
+import { fetchSubscriptionStatus, formatPlanDate } from "../_lib/status";
 
 export default function CloakProSubscriptionPage() {
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [accessUntilDate, setAccessUntilDate] = useState("—");
+
+  useEffect(() => {
+    void fetchSubscriptionStatus().then((status) => {
+      setAccessUntilDate(formatPlanDate(status?.currentPeriodEnd || null));
+    });
+  }, []);
+
+  const handleCancel = async () => {
+    if (isCancelling) return;
+    setIsCancelling(true);
+    try {
+      await cancelActiveSubscription();
+      toast.success(
+        `Cancelled — you'll keep access until ${accessUntilDate}.`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to cancel subscription.",
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <SubscriptionScreenShell>
       <SubscriptionHeader />
@@ -24,7 +54,7 @@ export default function CloakProSubscriptionPage() {
           <SectionLabel>Billing &amp; Payment</SectionLabel>
           <BillingCard
             price={cloakProPlan.price}
-            nextChargeDate={activePlanMeta.nextChargeDate}
+            nextChargeDate={accessUntilDate}
           />
         </div>
 
@@ -33,7 +63,11 @@ export default function CloakProSubscriptionPage() {
           <FeatureListCard features={cloakProPlan.features} tone={cloakProPlan.tone} />
         </div>
 
-        <CancelSubscriptionBlock accessUntilDate={activePlanMeta.accessUntilDate} />
+        <CancelSubscriptionBlock
+          accessUntilDate={accessUntilDate}
+          onCancel={handleCancel}
+          isCancelling={isCancelling}
+        />
       </div>
     </SubscriptionScreenShell>
   );

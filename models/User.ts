@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { PlanCode } from "./Subscription";
 
 export type UserRole = "USER" | "VERIFIED_USER";
 export type ReportStatus =
@@ -31,6 +32,10 @@ export interface UserDoc {
   username?: string;
   profileImage?: string;
   role: UserRole;
+  // Denormalized cache of the user's current subscription plan — mirrors
+  // identityVerificationStatus below (cached here, full record lives in a
+  // separate collection). Treat undefined as "FREEMIUM" for legacy rows.
+  plan: PlanCode;
   isVerified: boolean;
   identityVerificationStatus?: "PENDING" | "APPROVED" | "REJECTED";
   // XP drives level progression only. Kept separate from achievements, which

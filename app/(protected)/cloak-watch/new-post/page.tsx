@@ -13,6 +13,7 @@ import {
   Crop as CropIcon,
 } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import { showPlanLimitToast } from "@/app/components/planLimitToast";
 import { PostSharedSuccessToast } from "../_components/PostUI";
 import { CropModal } from "./_components/CropModal";
 import { getCroppedImg } from "./_lib/cropImage";
@@ -215,6 +216,11 @@ export default function NewPostPage() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.success) {
+        if (data?.code === "PLAN_LIMIT_REACHED") {
+          showPlanLimitToast(data.error);
+          setSubmitting(false);
+          return;
+        }
         throw new Error(data?.error || "Unable to post right now");
       }
 

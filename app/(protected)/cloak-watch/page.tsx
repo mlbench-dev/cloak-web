@@ -1,17 +1,36 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
 import { PostCard } from "./_components/PostUI";
 import { fetchPosts, type CloakWatchPost } from "./_lib/posts";
+import { PLAN_LIMITS } from "@/lib/config";
+import { showPlanLimitToast } from "@/app/components/planLimitToast";
+import type { PlanCode } from "@/models/Subscription";
 
 export default function CloakWatchPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [query, setQuery] = useState("");
   const [posts, setPosts] = useState<CloakWatchPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Optimistic UX only — blocks the compose flow before the user wastes
+  // time writing a post, but POST /api/cloak-watch/posts is still the real
+  // enforcement (this can go stale for up to the JWT's refresh interval).
+  const handleCreatePost = () => {
+    const plan = ((session?.user as any)?.plan as PlanCode) || "FREEMIUM";
+    if (!PLAN_LIMITS[plan].canPostCommunity) {
+      showPlanLimitToast(
+        "Community posting is a Boost Protection perk. Upgrade to Boost Protection to post in Cloak Watch.",
+      );
+      return;
+    }
+    router.push("/cloak-watch/new-post");
+  };
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -49,7 +68,7 @@ export default function CloakWatchPage() {
             </button> */}
             <button
               type="button"
-              onClick={() => router.push("/cloak-watch/new-post")}
+              onClick={handleCreatePost}
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#DADADA] bg-white text-[#2D2D2D]"
             >
               <Plus className="h-5 w-5" strokeWidth={2.3} />
