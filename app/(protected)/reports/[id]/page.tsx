@@ -85,7 +85,12 @@ function getStatusMeta(status: string) {
       className: "text-[#FF6B6B]",
     };
   }
-
+  if (status === "PENDING") {
+    return {
+      label: "Pending",
+      className: "text-[#F59E0B]",
+    };
+  }
   return {
     label: "",
     className: "text-[#98A0A7]",
@@ -356,7 +361,7 @@ export default function ReportDetailsPage({
       case "tiktok":
         return "/images/social-media/tiktok.svg";
       default:
-        return "/images/social-media/insta.svg";
+        return "/images/social-media/globe.svg";
     }
   };
 
@@ -485,14 +490,13 @@ export default function ReportDetailsPage({
             rel="noopener noreferrer"
             className="flex items-center gap-3 rounded-[22px] bg-[#F1F1F1] px-4 py-4"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[#14C3CF]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl ">
               <Image
                 src={getPlatformImage(report.platform)}
                 alt={report.platform}
-                width={16}
-                height={16}
-                className="object-contain brightness-0 invert"
-                unoptimized
+                width={24}
+                height={24}
+                className="object-contain"
               />
             </div>
             <p className="min-w-0 flex-1 truncate text-[15px] text-[#2D2D2D]">

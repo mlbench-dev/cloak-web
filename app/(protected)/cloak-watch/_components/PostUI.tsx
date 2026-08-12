@@ -82,7 +82,7 @@ function ProgressiveImage({
             loaded ? "opacity-0" : "opacity-100"
           }`}
           style={{
-            backgroundImage: `url(${thumbSrc})`,
+            backgroundImage: `url("${thumbSrc}")`,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
@@ -93,7 +93,7 @@ function ProgressiveImage({
           loaded ? "opacity-100" : "opacity-0"
         }`}
         style={{
-          backgroundImage: `url(${src})`,
+          backgroundImage: `url("${src}")`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
