@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import {
   BillingCard,
   CancelSubscriptionBlock,
+  ConfirmDialog,
   CurrentPlanCard,
   FeatureListCard,
   SectionLabel,
@@ -17,6 +18,7 @@ import { fetchSubscriptionStatus, formatPlanDate } from "../_lib/status";
 
 export default function BoostProtectionSubscriptionPage() {
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [accessUntilDate, setAccessUntilDate] = useState("—");
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function BoostProtectionSubscriptionPage() {
       toast.success(
         `Cancelled — you'll keep access until ${accessUntilDate}.`,
       );
+      setShowCancelConfirm(false);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to cancel subscription.",
@@ -72,10 +75,20 @@ export default function BoostProtectionSubscriptionPage() {
 
         <CancelSubscriptionBlock
           accessUntilDate={accessUntilDate}
-          onCancel={handleCancel}
-          isCancelling={isCancelling}
+          onCancel={() => setShowCancelConfirm(true)}
         />
       </div>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel Subscription"
+        message={`You'll keep access until ${accessUntilDate}, after which your plan will be downgraded to Freemium. This can't be undone once the period ends.`}
+        confirmLabel="Cancel Subscription"
+        confirmVariant="danger"
+        isConfirming={isCancelling}
+        onConfirm={() => void handleCancel()}
+        onClose={() => setShowCancelConfirm(false)}
+      />
     </SubscriptionScreenShell>
   );
 }

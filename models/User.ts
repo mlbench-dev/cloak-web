@@ -94,6 +94,11 @@ export interface ReportDoc {
   // Guards against awarding XP more than once for the same report, even if
   // its status is transitioned/re-fetched multiple times.
   xpAwarded?: boolean;
+  // The actual amount credited (base XP * reporter's plan multiplier at
+  // approval time). Stored so later displays (e.g. the Rewards alert feed)
+  // show what was really awarded, not a recomputation against whatever
+  // plan the reporter happens to be on now.
+  xpAwardedAmount?: number;
   createdAt: Date;
   updatedAt: Date;
 }

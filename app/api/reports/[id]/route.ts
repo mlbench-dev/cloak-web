@@ -118,6 +118,11 @@ export async function PATCH(
       _id: reporterId,
     })) as UserDoc | null;
 
+    // Reported back to the caller so the approval-result modal can show
+    // the actual amount credited (plan multiplier applied), not a hardcoded
+    // flat number.
+    let pointsAwarded = 0;
+
     if (reporter) {
       const updatedReporter: UserDoc = {
         ...reporter,
@@ -138,7 +143,8 @@ export async function PATCH(
         updatedReporter.verifiedReports += 1;
         const reporterPlan = await resolveUserPlan(db, reporterId);
         const multiplier = PLAN_LIMITS[reporterPlan].xpMultiplier;
-        updatedReporter.xp += Math.round(XP_CONFIG.REPORT_APPROVED * multiplier);
+        pointsAwarded = Math.round(XP_CONFIG.REPORT_APPROVED * multiplier);
+        updatedReporter.xp += pointsAwarded;
       }
 
       if (updatedReporter.totalReports > 0) {
@@ -166,9 +172,16 @@ export async function PATCH(
           },
         },
       );
+
+      if (status === "VERIFIED") {
+        await reportsCollection.updateOne(
+          { _id: new ObjectId(reportId) },
+          { $set: { xpAwardedAmount: pointsAwarded } },
+        );
+      }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, pointsAwarded });
   } catch (error) {
     console.error("Error updating report status:", error);
     return NextResponse.json(

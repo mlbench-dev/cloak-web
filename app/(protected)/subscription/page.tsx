@@ -6,6 +6,7 @@ import { Crown } from "lucide-react";
 import {
   BillingCard,
   CancelSubscriptionBlock,
+  ConfirmDialog,
   CurrentPlanCard,
   FeatureListCard,
   PlanUpsellCard,
@@ -28,9 +29,12 @@ import {
 } from "./_lib/status";
 
 type ActiveModal = "cloak-pro" | "boost-protection" | null;
+type PendingUpgrade = "cloak-pro" | "boost-protection" | null;
 
 export default function SubscriptionPage() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [pendingUpgrade, setPendingUpgrade] = useState<PendingUpgrade>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(
@@ -61,6 +65,7 @@ export default function SubscriptionPage() {
         error instanceof Error ? error.message : "Failed to start checkout.",
       );
       setIsRedirecting(false);
+      setPendingUpgrade(null);
     }
   };
 
@@ -72,6 +77,7 @@ export default function SubscriptionPage() {
       toast.success(
         "Subscription cancelled — you'll keep access until the end of this billing period.",
       );
+      setShowCancelConfirm(false);
       await loadStatus();
     } catch (error) {
       toast.error(
@@ -99,6 +105,8 @@ export default function SubscriptionPage() {
   const accessUntilDate = formatPlanDate(subscription?.currentPeriodEnd || null);
   const isCancelledButStillActive =
     currentPlanSummary !== null && Boolean(subscription?.cancelAtPeriodEnd);
+  const pendingUpgradePlan =
+    pendingUpgrade === "cloak-pro" ? cloakProPlan : pendingUpgrade === "boost-protection" ? boostProtectionPlan : null;
 
   return (
     <SubscriptionScreenShell>
@@ -160,8 +168,7 @@ export default function SubscriptionPage() {
         {currentPlanSummary && !isCancelledButStillActive && (
           <CancelSubscriptionBlock
             accessUntilDate={accessUntilDate}
-            onCancel={handleCancel}
-            isCancelling={isCancelling}
+            onCancel={() => setShowCancelConfirm(true)}
           />
         )}
 
@@ -172,18 +179,50 @@ export default function SubscriptionPage() {
         open={activeModal === "cloak-pro"}
         plan={cloakProPlan}
         title="Unlock everything with Cloak Pro"
-        ctaLabel={isRedirecting ? "Redirecting..." : "Upgrade To Cloak Pro- $11.99"}
+        ctaLabel="Upgrade To Cloak Pro- $11.99"
         onClose={() => setActiveModal(null)}
-        onConfirm={() => void handleUpgrade("cloak-pro")}
+        onConfirm={() => {
+          setActiveModal(null);
+          setPendingUpgrade("cloak-pro");
+        }}
       />
 
       <UpgradeModal
         open={activeModal === "boost-protection"}
         plan={boostProtectionPlan}
         title="Get more control with Protection Boost"
-        ctaLabel={isRedirecting ? "Redirecting..." : "Unlock Protection Boost - $4.99"}
+        ctaLabel="Unlock Protection Boost - $4.99"
         onClose={() => setActiveModal(null)}
-        onConfirm={() => void handleUpgrade("boost-protection")}
+        onConfirm={() => {
+          setActiveModal(null);
+          setPendingUpgrade("boost-protection");
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingUpgrade !== null}
+        title="Confirm Upgrade"
+        message={
+          pendingUpgradePlan
+            ? `You'll be redirected to PayFast to complete your ${pendingUpgradePlan.priceLine} payment (${pendingUpgradePlan.zarPriceLine}).`
+            : ""
+        }
+        confirmLabel={isRedirecting ? "Redirecting..." : "Proceed"}
+        confirmVariant="primary"
+        isConfirming={isRedirecting}
+        onConfirm={() => pendingUpgrade && void handleUpgrade(pendingUpgrade)}
+        onClose={() => setPendingUpgrade(null)}
+      />
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel Subscription"
+        message={`You'll keep access until ${accessUntilDate}, after which your plan will be downgraded to Freemium. This can't be undone once the period ends.`}
+        confirmLabel="Cancel"
+        confirmVariant="danger"
+        isConfirming={isCancelling}
+        onConfirm={() => void handleCancel()}
+        onClose={() => setShowCancelConfirm(false)}
       />
     </SubscriptionScreenShell>
   );

@@ -122,11 +122,17 @@ export async function getAllAlertsForUser(
       const targetUsername = String(report.targetUser?.username || "user");
       const createdAt =
         report.verifiedAt || report.updatedAt || report.createdAt || Date.now();
+      // Falls back to the flat base amount for reports approved before
+      // xpAwardedAmount started being recorded.
+      const pointsAwarded =
+        typeof report.xpAwardedAmount === "number"
+          ? report.xpAwardedAmount
+          : XP_CONFIG.REPORT_APPROVED;
 
       return {
         id: `rewards-${String(report._id)}`,
         title: `Report verified for @${targetUsername}`,
-        description: `+${XP_CONFIG.REPORT_APPROVED} points have been added`,
+        description: `+${pointsAwarded} points have been added`,
         createdAt: new Date(createdAt).toISOString(),
         filter: "Rewards",
         avatarType: "image",

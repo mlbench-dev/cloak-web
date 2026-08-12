@@ -360,3 +360,69 @@ export function UpgradeModal({
 export function FreemiumPlanIcon() {
   return <Crown className="h-5 w-5 text-white" />;
 }
+
+// Shared "are you sure" step for the two actions that actually change
+// billing — cancelling and starting checkout — matching the existing
+// centered-modal pattern used for Log Out / Delete Account in profile.
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = "Go Back",
+  isConfirming = false,
+  confirmVariant = "danger",
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  isConfirming?: boolean;
+  confirmVariant?: "danger" | "primary";
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-[340px] space-y-6 rounded-[32px] bg-white p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[20px] font-bold text-[#2D2D2D]">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isConfirming}
+            className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-50 disabled:opacity-60"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="text-[16px] leading-relaxed text-[#8F98A0]">{message}</p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isConfirming}
+            className="h-14 flex-1 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] disabled:opacity-60"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isConfirming}
+            className={`h-14 flex-1 rounded-full font-semibold text-white disabled:opacity-60 ${
+              confirmVariant === "danger" ? "bg-red-500" : "bg-[#14C3CF]"
+            }`}
+          >
+            {isConfirming ? "Please wait..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
