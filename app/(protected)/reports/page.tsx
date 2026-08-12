@@ -119,7 +119,7 @@ export default function ReportsPage() {
       case "tiktok":
         return "/images/social-media/tiktok.svg";
       default:
-        return "/images/social-media/insta.svg";
+        return "/images/social-media/globe.svg";
     }
   };
 

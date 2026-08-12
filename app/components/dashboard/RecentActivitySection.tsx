@@ -16,20 +16,27 @@ type RecentActivitySectionProps = {
   items: ActivityItem[];
 };
 
-function PlatformBadge({ platform }: Pick<ActivityItem, "platform">) {
-  const imageSrc =
-    platform === "instagram"
-      ? "/images/social-media/insta.svg"
-      : platform === "x"
-        ? "/images/social-media/twitter.svg"
-        : platform === "facebook"
-          ? "/images/social-media/facebook.svg"
-          : "/images/social-media/tiktok.svg";
+function getPlatformImage(platform: string) {
+  switch (platform) {
+    case "instagram":
+      return "/images/social-media/insta.svg";
+    case "twitter":
+    case "x":
+      return "/images/social-media/twitter.svg";
+    case "facebook":
+      return "/images/social-media/facebook.svg";
+    case "tiktok":
+      return "/images/social-media/tiktok.svg";
+    default:
+      return "/images/social-media/globe.svg";
+  }
+}
 
+function PlatformBadge({ platform }: Pick<ActivityItem, "platform">) {
   return (
     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white">
       <Image
-        src={imageSrc}
+        src={getPlatformImage(platform)}
         alt={platform}
         width={28}
         height={28}

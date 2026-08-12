@@ -38,7 +38,8 @@ const statusFilters = [
   { id: "APPROVED", label: "Approved" },
   { id: "FALSE_POSITIVE", label: "Rejected" },
 ];
-
+const truncateText = (text: string, maxChars: number) =>
+  text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}...` : text;
 export default function MyReportsPage() {
   const { status } = useSession();
   const router = useRouter();
@@ -198,7 +199,10 @@ export default function MyReportsPage() {
                       )}
                     </div>
                     <p className="text-[#8F98A0] text-sm">
-                      {report.user.name?.trim() || report.user.username}
+                      {truncateText(
+                        report.user.name || report.user.username || "",
+                        30,
+                      )}
                     </p>
                   </div>
                 </div>
