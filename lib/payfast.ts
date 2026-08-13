@@ -15,12 +15,34 @@ export const PAYFAST_MODE = (process.env.PAYFAST_MODE?.trim() ||
 // lib/mongodb.ts's own production-path console.log firing during this
 // project's builds), so a load-time throw here would break the build
 // itself the moment this file is imported anywhere, not just at runtime.
+//
+// Vercel sets NODE_ENV=production for EVERY deployment — Preview branches
+// included, not just the real production domain — so checking NODE_ENV
+// alone blocked sandbox testing on Vercel entirely, which defeats the
+// point. VERCEL_ENV ("production" | "preview" | "development") is what
+// actually distinguishes the live domain; fall back to NODE_ENV off
+// Vercel, where VERCEL_ENV won't exist.
+function isRealProductionDeploy(): boolean {
+  return process.env.VERCEL_ENV
+    ? process.env.VERCEL_ENV === "production"
+    : process.env.NODE_ENV === "production";
+}
+
 export function assertPayfastProductionReady() {
-  if (process.env.NODE_ENV === "production" && PAYFAST_MODE !== "live") {
-    throw new Error(
-      'PAYFAST_MODE must be "live" in production — refusing to process a payment with sandbox credentials active.',
-    );
-  }
+  if (!isRealProductionDeploy() || PAYFAST_MODE === "live") return;
+
+  // Explicit, deliberate escape hatch for testing sandbox mode against
+  // the real production domain before live PayFast credentials exist
+  // (e.g. pre-launch). Absent this, real production must use live
+  // credentials — remove this env var once you actually go live so this
+  // guard resumes protecting you.
+  if (process.env.PAYFAST_ALLOW_SANDBOX_IN_PRODUCTION === "true") return;
+
+  throw new Error(
+    'PAYFAST_MODE must be "live" in production — refusing to process a payment with sandbox credentials active. ' +
+      "If you're deliberately testing sandbox mode on this production deployment before going live, set " +
+      "PAYFAST_ALLOW_SANDBOX_IN_PRODUCTION=true (and remove it once you switch to live credentials).",
+  );
 }
 
 const PAYFAST_MERCHANT_ID =
