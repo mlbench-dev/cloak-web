@@ -2,7 +2,7 @@ import Image from "next/image";
 
 export default function SplashScreen() {
   return (
-    <main className="flex h-full flex-col bg-[#00BCD4] pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+    <main className="animate-fade-in flex h-full flex-col bg-[#00BCD4] pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
       <section className="flex flex-1 items-center justify-center px-6">
         <div className="flex flex-col items-center justify-center">
           <Image
