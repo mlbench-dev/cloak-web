@@ -14,6 +14,7 @@ import {
   refreshVerificationGate,
   shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
+import { notifyReportVerified } from "@/lib/notifications";
 
 // See app/api/reports/route.ts for why this matches the AI service's
 // 10-minute fetch timeout, and the caveat that your Vercel plan may still
@@ -178,6 +179,18 @@ export async function PATCH(
           { _id: new ObjectId(reportId) },
           { $set: { xpAwardedAmount: pointsAwarded } },
         );
+
+        const targetUser = await usersCollection.findOne(
+          { _id: report.targetUserId },
+          { projection: { username: 1, image: 1, profileImage: 1 } },
+        );
+
+        await notifyReportVerified(db, {
+          reporterId,
+          targetUser,
+          reportId: new ObjectId(reportId),
+          pointsAwarded,
+        });
       }
     }
 

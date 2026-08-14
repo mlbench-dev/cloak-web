@@ -3,7 +3,10 @@ import { getServerSession } from "next-auth/next";
 import { ObjectId } from "mongodb";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
-import { getAllAlertsForUser } from "@/lib/alerts";
+import {
+  ensureNotificationIndexes,
+  NOTIFICATIONS_COLLECTION,
+} from "@/lib/notifications";
 
 function safeObjectId(value: string) {
   try {
@@ -26,23 +29,20 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const [user, allAlerts] = await Promise.all([
-      db
-        .collection("users")
-        .findOne(
-          { _id: userId },
-          { projection: { lastAlertsViewedAt: 1 } },
-        ),
-      getAllAlertsForUser(db, userId),
-    ]);
+    await ensureNotificationIndexes(db);
+
+    const user = await db
+      .collection("users")
+      .findOne({ _id: userId }, { projection: { lastAlertsViewedAt: 1 } });
 
     const lastViewedAt = user?.lastAlertsViewedAt
-      ? new Date(user.lastAlertsViewedAt).getTime()
-      : 0;
+      ? new Date(user.lastAlertsViewedAt)
+      : new Date(0);
 
-    const count = allAlerts.filter(
-      (alert) => new Date(alert.createdAt).getTime() > lastViewedAt,
-    ).length;
+    const count = await db.collection(NOTIFICATIONS_COLLECTION).countDocuments({
+      userId,
+      createdAt: { $gt: lastViewedAt },
+    });
 
     return NextResponse.json({ success: true, count });
   } catch (error) {

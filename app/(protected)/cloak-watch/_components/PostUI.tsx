@@ -491,6 +491,11 @@ export function PostCard({
   const pendingViewerVoteRef = useRef<1 | -1 | 0>(post.viewerVote);
   const voteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voteDispatchIdRef = useRef(0);
+  // True from the moment a vote click is made until its request has settled
+  // (applied or given up on) — guards the prop-sync effect below from
+  // stomping an optimistic vote with stale server data (e.g. the parent
+  // list re-fetching while the debounced request is still pending).
+  const voteInFlightRef = useRef(false);
 
   const saveConfirmedRef = useRef({
     isSaved: post.isSaved,
@@ -499,6 +504,8 @@ export function PostCard({
   const pendingIsSavedRef = useRef(post.isSaved);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDispatchIdRef = useRef(0);
+  // Same purpose as voteInFlightRef, for the save toggle.
+  const saveInFlightRef = useRef(false);
 
   const shareCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -506,15 +513,35 @@ export function PostCard({
   const [isShareCoolingDown, setIsShareCoolingDown] = useState(false);
 
   useEffect(() => {
-    setLocalPost(post);
     setHidden(false);
     setActiveImageIndex(0);
-    voteConfirmedRef.current = {
-      up: post.up,
-      down: post.down,
-      viewerVote: post.viewerVote,
-    };
-    saveConfirmedRef.current = { isSaved: post.isSaved, saves: post.saves };
+
+    // A fresh `post` prop (e.g. the parent list re-fetching) can arrive
+    // while a vote/save request is still debouncing or in flight. That
+    // prop reflects pre-click server state, so applying it wholesale would
+    // silently revert the user's still-pending action. Keep our own
+    // vote/save fields in that case; everything else in the prop is still
+    // authoritative (images, deleted status, edited body, etc.).
+    setLocalPost((prev) => ({
+      ...post,
+      ...(voteInFlightRef.current
+        ? { up: prev.up, down: prev.down, viewerVote: prev.viewerVote }
+        : null),
+      ...(saveInFlightRef.current
+        ? { isSaved: prev.isSaved, saves: prev.saves }
+        : null),
+    }));
+
+    if (!voteInFlightRef.current) {
+      voteConfirmedRef.current = {
+        up: post.up,
+        down: post.down,
+        viewerVote: post.viewerVote,
+      };
+    }
+    if (!saveInFlightRef.current) {
+      saveConfirmedRef.current = { isSaved: post.isSaved, saves: post.saves };
+    }
   }, [post]);
 
   const time = useMemo(
@@ -531,29 +558,38 @@ export function PostCard({
   const sendVoteRequest = () => {
     const dispatchId = ++voteDispatchIdRef.current;
     const target = pendingViewerVoteRef.current;
+    // Lets the server enforce "last click wins" even if this request's
+    // response arrives out of order relative to a later one — see
+    // app/api/cloak-watch/posts/[id]/vote/route.ts.
+    const clientSeq = Date.now();
 
     fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: target }),
+      body: JSON.stringify({ value: target, clientSeq }),
     })
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || "Unable to update vote");
         }
+        // A newer click has already queued another request since this one
+        // was dispatched — ignore this response entirely rather than
+        // letting an out-of-order reply overwrite the confirmed snapshot
+        // with stale counts (the newer request's own response is what
+        // should win).
+        if (voteDispatchIdRef.current !== dispatchId) return;
         voteConfirmedRef.current = {
           up: data.up,
           down: data.down,
           viewerVote: data.viewerVote,
         };
-        // Only apply if no newer click has queued another request since
-        if (voteDispatchIdRef.current === dispatchId) {
-          setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
-        }
+        voteInFlightRef.current = false;
+        setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
       })
       .catch((error) => {
         if (voteDispatchIdRef.current === dispatchId) {
+          voteInFlightRef.current = false;
           setLocalPost((prev) => ({ ...prev, ...voteConfirmedRef.current }));
         }
         toast.error(
@@ -565,24 +601,28 @@ export function PostCard({
   const sendSaveRequest = () => {
     const dispatchId = ++saveDispatchIdRef.current;
     const target = pendingIsSavedRef.current;
+    const clientSeq = Date.now();
 
     fetch(`/api/cloak-watch/posts/${post.id}/save`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isSaved: target }),
+      body: JSON.stringify({ isSaved: target, clientSeq }),
     })
       .then(async (response) => {
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || "Unable to save post");
         }
+        // See sendVoteRequest above for why stale/out-of-order responses
+        // are ignored rather than applied.
+        if (saveDispatchIdRef.current !== dispatchId) return;
         saveConfirmedRef.current = { isSaved: data.isSaved, saves: data.saves };
-        if (saveDispatchIdRef.current === dispatchId) {
-          setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
-        }
+        saveInFlightRef.current = false;
+        setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
       })
       .catch((error) => {
         if (saveDispatchIdRef.current === dispatchId) {
+          saveInFlightRef.current = false;
           setLocalPost((prev) => ({ ...prev, ...saveConfirmedRef.current }));
           onSaveStateChange?.(
             { ...post, ...saveConfirmedRef.current },
@@ -616,38 +656,42 @@ export function PostCard({
   }
 
   const handleVote = (value: 1 | -1) => {
-    // 1. Optimistically update — mirrors the server's toggle logic exactly
-    let nextViewerVote: 1 | -1 | 0 = 0;
-    setLocalPost((prev) => {
-      let { up, down, viewerVote } = prev;
+    // 1. Optimistically update — mirrors the server's toggle logic exactly.
+    // Computed synchronously from `localPost` (this render's latest state,
+    // safe to read directly since nothing else updates it earlier in this
+    // handler) rather than mutating an outer variable from inside the
+    // setState updater — React doesn't guarantee that updater runs before
+    // the next line, so reading it back immediately after was reading a
+    // stale/default value more often than not.
+    let { up, down, viewerVote } = localPost;
 
-      if (viewerVote === value) {
-        // clicking the same arrow again -> remove vote
-        viewerVote = 0;
-        if (value === 1) up -= 1;
-        else down -= 1;
-      } else if (viewerVote === 0) {
-        // no prior vote -> add it
-        viewerVote = value;
-        if (value === 1) up += 1;
-        else down += 1;
+    if (viewerVote === value) {
+      // clicking the same arrow again -> remove vote
+      viewerVote = 0;
+      if (value === 1) up -= 1;
+      else down -= 1;
+    } else if (viewerVote === 0) {
+      // no prior vote -> add it
+      viewerVote = value;
+      if (value === 1) up += 1;
+      else down += 1;
+    } else {
+      // switching from up->down or down->up
+      viewerVote = value;
+      if (value === 1) {
+        up += 1;
+        down -= 1;
       } else {
-        // switching from up->down or down->up
-        viewerVote = value;
-        if (value === 1) {
-          up += 1;
-          down -= 1;
-        } else {
-          down += 1;
-          up -= 1;
-        }
+        down += 1;
+        up -= 1;
       }
+    }
 
-      nextViewerVote = viewerVote;
-      return { ...prev, up, down, viewerVote };
-    });
+    const nextViewerVote = viewerVote;
+    setLocalPost((prev) => ({ ...prev, up, down, viewerVote: nextViewerVote }));
 
     pendingViewerVoteRef.current = nextViewerVote;
+    voteInFlightRef.current = true;
 
     // 2. Debounce the actual network call — only the final state after the
     // click burst settles gets sent, as a single idempotent request.
@@ -656,22 +700,19 @@ export function PostCard({
   };
 
   const handleToggleSave = () => {
-    // 1. Optimistically flip save state
-    let nextIsSaved = false;
-    let optimisticPost: CloakWatchPost | null = null;
-    setLocalPost((prev) => {
-      nextIsSaved = !prev.isSaved;
-      optimisticPost = {
-        ...prev,
-        isSaved: nextIsSaved,
-        saves: prev.saves + (nextIsSaved ? 1 : -1),
-      };
-      return optimisticPost;
-    });
-    if (optimisticPost) {
-      onSaveStateChange?.(optimisticPost, nextIsSaved);
-    }
+    // 1. Optimistically flip save state — computed synchronously from
+    // `localPost` rather than inside the setState updater; see the same
+    // note in handleVote above for why that matters.
+    const nextIsSaved = !localPost.isSaved;
+    const optimisticPost: CloakWatchPost = {
+      ...localPost,
+      isSaved: nextIsSaved,
+      saves: localPost.saves + (nextIsSaved ? 1 : -1),
+    };
+    setLocalPost(optimisticPost);
+    onSaveStateChange?.(optimisticPost, nextIsSaved);
     pendingIsSavedRef.current = nextIsSaved;
+    saveInFlightRef.current = true;
 
     // 2. Debounce the actual network call — same reasoning as votes above.
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

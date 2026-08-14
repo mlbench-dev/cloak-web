@@ -21,6 +21,7 @@ import {
 } from "@/lib/planLimits";
 import { PLAN_LIMITS } from "@/lib/config";
 import type { PlanCode } from "@/models/Subscription";
+import { notifyReportReceived } from "@/lib/notifications";
 
 // The AI verification call (kicked off via after() below, both here and in
 // GET) can now take up to 10 minutes — the function instance has to stay
@@ -176,6 +177,12 @@ export async function POST(request: Request) {
     }
 
     await upsertRecentSearch(db, session.user.id, targetUser);
+
+    await notifyReportReceived(db, {
+      targetUserId: new ObjectId(targetUserId),
+      reporter: reporter || (await usersCollection.findOne({ _id: reporterId })),
+      reportId,
+    });
 
     after(() => computeAndStoreAiConfidence(reportId));
 

@@ -3,7 +3,12 @@ import { getServerSession } from "next-auth/next";
 import { ObjectId } from "mongodb";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
-import { getAllAlertsForUser, type AlertFilter } from "@/lib/alerts";
+import {
+  ensureNotificationIndexes,
+  NOTIFICATIONS_COLLECTION,
+  toAlertApiItem,
+} from "@/lib/notifications";
+import type { NotificationFilter } from "@/models/Notification";
 
 function safeObjectId(value: string) {
   try {
@@ -13,7 +18,7 @@ function safeObjectId(value: string) {
   }
 }
 
-function normalizeFilter(value: string | null): AlertFilter | "All" {
+function normalizeFilter(value: string | null): NotificationFilter | "All" {
   const normalized = String(value || "").toLowerCase();
   if (normalized === "community") return "Community";
   if (normalized === "rewards") return "Rewards";
@@ -37,13 +42,25 @@ export async function GET(request: Request) {
     const filterParam = normalizeFilter(searchParams.get("filter"));
 
     const db = await getDb();
-    const allAlerts = await getAllAlertsForUser(db, userId);
+    await ensureNotificationIndexes(db);
 
-    const merged = allAlerts
-      .filter((item) => filterParam === "All" || item.filter === filterParam)
-      .slice(0, 50);
+    const query: { userId: ObjectId; filter?: NotificationFilter } = {
+      userId,
+    };
+    if (filterParam !== "All") {
+      query.filter = filterParam;
+    }
 
-    return NextResponse.json({ success: true, alerts: merged });
+    const notifications = await db
+      .collection(NOTIFICATIONS_COLLECTION)
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray();
+
+    const alerts = notifications.map(toAlertApiItem);
+
+    return NextResponse.json({ success: true, alerts });
   } catch (error) {
     console.error("Error fetching alerts:", error);
     return NextResponse.json(
