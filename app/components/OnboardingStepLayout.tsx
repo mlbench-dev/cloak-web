@@ -30,7 +30,7 @@ export default function OnboardingStepLayout({
   totalSteps = 3,
 }: OnboardingStepLayoutProps) {
   return (
-    <main className="flex h-full flex-col bg-[#F5F5F5] text-[#2D2D2D]">
+    <main className="animate-fade-in flex h-full flex-col bg-[#F5F5F5] text-[#2D2D2D]">
       <section className="px-6 pt-[max(env(safe-area-inset-top),0.75rem)]">
         <div className="flex flex-col items-center gap-1.5 text-center">
           {logoSrc ? (
@@ -51,7 +51,19 @@ export default function OnboardingStepLayout({
       <section className="relative mt-2 flex flex-1 flex-col justify-end overflow-hidden">
         <div className="relative flex-1">
           {heroSrc ? (
-            <Image src={heroSrc} alt={heroAlt} fill priority className="object-cover object-top" />
+            <Image
+              src={heroSrc}
+              alt={heroAlt}
+              fill
+              priority
+              // The app shell caps out at 430px wide (see .app-mobile-screen);
+              // without this, Next's image optimizer has no idea and falls
+              // back to assuming this could render at full viewport width,
+              // shipping a needlessly large derivative of a 1440x2576
+              // source image on every load.
+              sizes="(min-width: 430px) 430px, 100vw"
+              className="object-cover object-top"
+            />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[linear-gradient(180deg,#ffffff_0%,#ececec_100%)]">
               <div className="rounded-3xl border border-dashed border-[#00BCD4]/35 bg-white/80 px-6 py-3 text-sm font-medium text-[#00BCD4] shadow-sm">
