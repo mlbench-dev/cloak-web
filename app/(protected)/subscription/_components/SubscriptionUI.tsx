@@ -313,7 +313,7 @@ export function UpgradeModal({
         onClick={onClose}
         className="absolute inset-0 bg-black/45"
       />
-      <div className="relative z-10 w-full rounded-t-[28px] bg-[#F8F8F8] px-4 pb-6 pt-2 font-sf-pro-display shadow-[0_-16px_40px_rgba(15,23,42,0.14)]">
+      <div className="relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-[28px] bg-[#F8F8F8] px-4 pb-6 pt-2 font-sf-pro-display shadow-[0_-16px_40px_rgba(15,23,42,0.14)]">
         <div className="mx-auto mb-8 h-1.5 w-[76px] rounded-full bg-[#9CB2BB]" />
         <button
           type="button"

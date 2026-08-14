@@ -571,6 +571,10 @@ function HomeFlowContent() {
 
   return (
     <OnboardingStepLayout
+      // Forces a remount per step so the fade-in re-triggers on every
+      // "Next" click too, not just the first entrance from the splash
+      // screen — otherwise only the initial mount would ever animate.
+      key={currentStepIndex}
       {...currentStep}
       onNext={() => {
         if (currentStepIndex === STEPS.length - 1) {

@@ -55,7 +55,7 @@ export default function RootLayout({
           <MobileOnly>
             <div
               className="app-mobile-screen mx-auto h-screen w-full max-w-[430px]"
-              style={{ height: "var(--app-height)" }}
+              style={{ height: "var(--app-height, 100dvh)" }}
             >
               {children}
             </div>
