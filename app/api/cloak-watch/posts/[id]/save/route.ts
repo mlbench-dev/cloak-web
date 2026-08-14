@@ -17,6 +17,15 @@ function normalizeIsSaved(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+// See app/api/cloak-watch/posts/[id]/vote/route.ts for why this exists — a
+// quick save/unsave switch can leave two requests in flight, and serverless
+// gives no ordering guarantee between them.
+function readClientSeq(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : Date.now();
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -32,6 +41,7 @@ export async function POST(
     const userId = safeObjectId(session.user.id);
     const body = await request.json().catch(() => null);
     const targetIsSaved = normalizeIsSaved(body?.isSaved);
+    const clientSeq = readClientSeq(body?.clientSeq);
 
     if (!postId || !userId || targetIsSaved === null) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -49,25 +59,39 @@ export async function POST(
     }
 
     const savesCollection = db.collection(CLOAK_WATCH_SAVES_COLLECTION);
-
-    // Set the save to its final state atomically instead of read-then-write —
-    // concurrent clicks can no longer race each other into a duplicate-key
-    // error on the unique {postId, userId} index.
+    // clientSeq-gated so a request that loses the race to reach the DB
+    // (e.g. save-then-quickly-unsave) can't overwrite a click that
+    // happened later — see the vote route for the full explanation.
+    const orderingFilter = {
+      $or: [{ clientSeq: { $exists: false } }, { clientSeq: { $lt: clientSeq } }],
+    };
     if (targetIsSaved) {
-      await savesCollection.updateOne(
-        { postId, userId },
-        {
-          $set: { active: true, updatedAt: new Date() },
-          $setOnInsert: { postId, userId, createdAt: new Date() },
-        },
-        { upsert: true },
-      );
+      try {
+        await savesCollection.updateOne(
+          { postId, userId, ...orderingFilter },
+          {
+            $set: { active: true, clientSeq, updatedAt: new Date() },
+            $setOnInsert: { postId, userId, createdAt: new Date() },
+          },
+          { upsert: true },
+        );
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        // A newer click already won this race — not a real error.
+      }
     } else {
+      // No matching doc (not yet saved, or a newer write already won) is
+      // a no-op, not an error — there's nothing to clear either way.
       await savesCollection.updateOne(
-        { postId, userId },
-        { $set: { active: false, updatedAt: new Date() } },
+        { postId, userId, ...orderingFilter },
+        { $set: { active: false, clientSeq, updatedAt: new Date() } },
       );
     }
+
+    // Re-read current truth rather than trusting this request's own
+    // intent — it may have lost the ordering race above.
+    const current = await savesCollection.findOne({ postId, userId });
+    const isSaved = Boolean(current?.active);
 
     const saves = await getSavesCountForPost(db, postId);
     await db.collection(CLOAK_WATCH_POSTS_COLLECTION).updateOne(
@@ -77,7 +101,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      isSaved: targetIsSaved,
+      isSaved,
       saves,
     });
   } catch (error) {

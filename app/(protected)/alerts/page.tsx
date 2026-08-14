@@ -1,7 +1,12 @@
 "use client";
 
 import { Crown, Info } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import {
+  useNotifications,
+  type ApiAlertItem,
+} from "@/app/components/NotificationsProvider";
 
 type AlertFilter = "All" | "Community" | "Rewards" | "System";
 
@@ -15,21 +20,10 @@ type AlertItem = {
   avatarUrl?: string;
   badgeLabel?: string;
   badgeTone?: "cyan" | "green";
+  href?: string;
 };
 
 const filters: AlertFilter[] = ["All", "Community", "Rewards", "System"];
-
-type ApiAlertItem = {
-  id: string;
-  title: string;
-  description: string;
-  createdAt: string;
-  filter: Exclude<AlertFilter, "All">;
-  avatarType: "image" | "crown" | "info";
-  avatarUrl?: string;
-  badgeLabel?: string;
-  badgeTone?: "cyan" | "green";
-};
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -97,9 +91,9 @@ function AlertBadge({
   );
 }
 
-function AlertCard({ item }: { item: AlertItem }) {
+function AlertCardContent({ item }: { item: AlertItem }) {
   return (
-    <article className="flex items-start gap-3 rounded-[20px] bg-[#F2F2F2] px-4 py-3.5">
+    <>
       <AlertAvatar avatarType={item.avatarType} avatarUrl={item.avatarUrl} />
 
       <div className="min-w-0 flex-1 pt-0.5">
@@ -119,11 +113,46 @@ function AlertCard({ item }: { item: AlertItem }) {
           {item.description}
         </p>
       </div>
+    </>
+  );
+}
+
+function AlertCard({ item }: { item: AlertItem }) {
+  if (item.href) {
+    return (
+      <Link
+        href={item.href}
+        className="flex items-start gap-3 rounded-[20px] bg-[#F2F2F2] px-4 py-3.5 active:bg-[#EAEAEA]"
+      >
+        <AlertCardContent item={item} />
+      </Link>
+    );
+  }
+
+  return (
+    <article className="flex items-start gap-3 rounded-[20px] bg-[#F2F2F2] px-4 py-3.5">
+      <AlertCardContent item={item} />
     </article>
   );
 }
 
+function toAlertItem(item: ApiAlertItem): AlertItem {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    time: formatTimeAgo(item.createdAt),
+    filter: item.filter,
+    avatarType: item.avatarType,
+    avatarUrl: item.avatarUrl,
+    badgeLabel: item.badgeLabel,
+    badgeTone: item.badgeTone,
+    href: item.href,
+  };
+}
+
 export default function AlertsPage() {
+  const { subscribe, markAllViewed } = useNotifications();
   const [activeFilter, setActiveFilter] = useState<AlertFilter>("All");
   const [items, setItems] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,20 +187,8 @@ export default function AlertsPage() {
         }
 
         const apiItems = (json.alerts || []) as ApiAlertItem[];
-        const nextItems: AlertItem[] = apiItems.map((item) => ({
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          time: formatTimeAgo(item.createdAt),
-          filter: item.filter,
-          avatarType: item.avatarType,
-          avatarUrl: item.avatarUrl,
-          badgeLabel: item.badgeLabel,
-          badgeTone: item.badgeTone,
-        }));
-
         if (!isStale()) {
-          setItems(nextItems);
+          setItems(apiItems.map(toAlertItem));
         }
       } catch {
         if (!isStale()) {
@@ -187,12 +204,22 @@ export default function AlertsPage() {
     void fetchAlerts();
   }, [activeFilter]);
 
+  // Live push — the shared SSE connection (see NotificationsProvider) hands
+  // us each new notification the instant it's created, so a newly arriving
+  // alert appears without re-fetching the whole list.
+  useEffect(() => {
+    return subscribe((alert) => {
+      if (activeFilter !== "All" && alert.filter !== activeFilter) return;
+      setItems((current) => [toAlertItem(alert), ...current]);
+    });
+  }, [subscribe, activeFilter]);
+
   const hasMarkedViewed = useRef(false);
   useEffect(() => {
     if (hasMarkedViewed.current) return;
     hasMarkedViewed.current = true;
-    fetch("/api/alerts", { method: "POST" }).catch(() => null);
-  }, []);
+    markAllViewed();
+  }, [markAllViewed]);
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">

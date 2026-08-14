@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
 import {
   AlertsNavIcon,
   CloakWatchNavIcon,
@@ -10,6 +9,7 @@ import {
   ProfileNavIcon,
   SubmitReportNavIcon,
 } from "../../public/svgIcons";
+import { useNotifications } from "./NotificationsProvider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: HomeNavIcon },
@@ -34,35 +34,7 @@ function isActivePath(pathname: string, href: string) {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const [unreadAlerts, setUnreadAlerts] = useState(0);
-  // Dev-only React Strict Mode runs effect->cleanup->effect once per mount
-  // to surface missing cleanup logic, which was firing this fetch twice for
-  // the same pathname. Keying the guard on the pathname itself (rather than
-  // a one-shot "already fetched" flag) skips that phantom second run while
-  // still refetching on every genuine navigation.
-  const lastFetchedPathnameRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (lastFetchedPathnameRef.current === pathname) return;
-    lastFetchedPathnameRef.current = pathname;
-
-    let cancelled = false;
-
-    fetch("/api/alerts/unread-count")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.success) {
-          setUnreadAlerts(data.count);
-        }
-      })
-      .catch(() => null);
-
-    return () => {
-      cancelled = true;
-    };
-    // Re-check whenever the route changes — e.g. right after leaving
-    // /alerts, once it's marked the current alerts as viewed.
-  }, [pathname]);
+  const { unreadCount: unreadAlerts } = useNotifications();
 
   return (
     <nav className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">

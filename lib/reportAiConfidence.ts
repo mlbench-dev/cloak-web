@@ -1,6 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { AiConfidenceStatus, ReportDoc } from "@/models/User";
+import { applyAiDetectionBadge } from "@/lib/notifications";
 
 const REPORT_AI_VERIFICATION_BASE_URL =
   process.env.VERIFICATION_API_URL?.trim() ||
@@ -391,6 +392,8 @@ export async function computeAndStoreAiConfidence(
         },
       },
     );
+
+    await applyAiDetectionBadge(db, reportId, result.confidence);
   } catch (error) {
     console.error(
       `Error computing AI confidence for report ${reportId}:`,

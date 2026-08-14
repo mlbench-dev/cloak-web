@@ -4,6 +4,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import BottomNav from "../components/BottomNav";
+import { NotificationsProvider } from "../components/NotificationsProvider";
 
 export default function ProtectedLayout({
   children,
@@ -68,13 +69,15 @@ export default function ProtectedLayout({
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-white text-slate-900 overflow-hidden font-sf-pro-display">
-      <main
-        className={`flex-1 relative min-h-0 overflow-y-auto no-scrollbar ${hideBottomNav ? "" : "px-4 py-4"}`}
-      >
-        {children}
-      </main>
-      {!hideBottomNav && <BottomNav />}
-    </div>
+    <NotificationsProvider>
+      <div className="flex h-[100dvh] flex-col bg-white text-slate-900 overflow-hidden font-sf-pro-display">
+        <main
+          className={`flex-1 relative min-h-0 overflow-y-auto no-scrollbar ${hideBottomNav ? "" : "px-4 py-4"}`}
+        >
+          {children}
+        </main>
+        {!hideBottomNav && <BottomNav />}
+      </div>
+    </NotificationsProvider>
   );
 }

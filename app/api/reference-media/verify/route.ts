@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { notifyVerificationResult } from "@/lib/notifications";
 
 // Without this, the platform's default function timeout (on Vercel, as low
 // as 10-15s depending on plan) can silently kill this request mid-flight —
@@ -457,6 +458,12 @@ export async function POST() {
             },
           },
         } as any);
+
+      await notifyVerificationResult(db, {
+        userId,
+        status: identityVerificationStatus,
+        failureReason: verificationFailureReason,
+      });
     }
 
     return NextResponse.json({
