@@ -5,6 +5,7 @@ import {
   Edit3,
   ChevronLeft,
   ChevronRight,
+  LifeBuoy,
   LogOut,
   Trash2,
   ShieldCheck,
@@ -20,6 +21,8 @@ import {
   Shield,
   Search,
 } from "lucide-react";
+import { PLAN_LIMITS } from "@/lib/config";
+import { showPlanLimitToast } from "@/app/components/planLimitToast";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -716,6 +719,21 @@ export default function ProfilePage() {
 
     return () => clearTimeout(timeout);
   }, [view, postsScope, postsQuery, postsViewTitle]);
+
+  // Contact Support is a Cloak Pro perk (see PLAN_LIMITS.canContactSupport)
+  // — same client-side gate + toast pattern as community posting in
+  // app/(protected)/cloak-watch/page.tsx. Real enforcement is server-side
+  // in POST /api/support.
+  const handleContactSupportClick = () => {
+    const plan: PlanCode = user?.plan || "FREEMIUM";
+    if (!PLAN_LIMITS[plan].canContactSupport) {
+      showPlanLimitToast(
+        "Contact Support is a Cloak Pro perk. Upgrade to Cloak Pro to reach our team directly.",
+      );
+      return;
+    }
+    router.push("/support");
+  };
 
   const handleVerificationClick = async () => {
     if (user?.identityVerificationStatus === "APPROVED") {
@@ -1433,6 +1451,12 @@ export default function ProfilePage() {
           </MenuGroup>
 
           <MenuGroup>
+            <MenuButton
+              icon={<LifeBuoy size={19} className="text-[#14C3CF]" />}
+              label="Contact Support"
+              onClick={handleContactSupportClick}
+              showDivider={true}
+            />
             <MenuButton
               icon={<Shield size={19} className="text-[#14C3CF]" />}
               label="Privacy Policy"
