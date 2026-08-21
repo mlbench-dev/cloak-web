@@ -56,7 +56,6 @@ function ReferenceMediaContent() {
     useState(false);
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const hasFetchedDbImages = useRef(false);
 
@@ -300,11 +299,6 @@ function ReferenceMediaContent() {
   }
 
   const totalImageCount = actualImages.length;
-  const canUploadMore = totalImageCount < 3;
-  const showExtraAddNew = mode === "profile" && totalImageCount >= 3;
-  const gridItems = showExtraAddNew
-    ? [...allImages, { addNew: true }]
-    : allImages;
 
   const handleHeaderBack = () => {
     if (mode === "onboarding") {
@@ -413,34 +407,10 @@ function ReferenceMediaContent() {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-4 mb-6">
-              {gridItems.map((item, index) => {
+              {allImages.map((item, index) => {
                 return (
                   <div key={index} className="relative aspect-square">
-                    {item?.addNew ? (
-                      <div
-                        onClick={() => setShowUpgradeDialog(true)}
-                        className={`h-full w-full rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center gap-1 transition-all ${
-                          canUploadMore
-                            ? "cursor-pointer hover:border-[#14C3CF] hover:bg-[#14C3CF]/5"
-                            : "cursor-pointer opacity-70"
-                        }`}
-                      >
-                        {isUploadingImages ? (
-                          <div className="h-8 w-8 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <div className="h-6 w-6 flex items-center justify-center">
-                              <span className="text-[#2D2D2D] text-2xl font-light">
-                                +
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-[#2D2D2D] font-medium">
-                              Add New
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    ) : item ? (
+                    {item ? (
                       <div
                         className="relative h-full w-full rounded-2xl overflow-hidden cursor-pointer shadow-sm border border-slate-100"
                         onClick={() => setSelectedImage(item.imageUrl)}
@@ -591,25 +561,6 @@ function ReferenceMediaContent() {
           </div>
         </div>
       )} */}
-
-      {showUpgradeDialog && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
-            <h3 className="text-xl font-bold mb-3 text-[#111827]">
-              Subscribe to add more
-            </h3>
-            <p className="text-[#2D2D2D] mb-6">
-              You need to subscribe to a plan to protect more images.
-            </p>
-            <button
-              onClick={() => setShowUpgradeDialog(false)}
-              className="w-full h-12 rounded-full bg-[#14C3CF] text-white font-medium"
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Image Preview Modal */}
       {selectedImage && (
