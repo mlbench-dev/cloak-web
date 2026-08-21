@@ -511,7 +511,7 @@ export default function ReportDetailsPage({
             Additional Notes
           </p>
           <div className="rounded-[22px] bg-[#F1F1F1] px-4 py-4">
-            <p className="text-[15px] text-[#2D2D2D]">
+            <p className="text-[15px] text-[#2D2D2D] break-words">
               {report.notes?.trim() || "No additional notes provided."}
             </p>
           </div>
@@ -578,7 +578,7 @@ export default function ReportDetailsPage({
             </div>
           )}
           {report.aiConfidenceMessage ? (
-            <p className="mt-3 text-[13px] leading-6 text-[#4F5A61]">
+            <p className="mt-3 text-[13px] leading-6 text-[#4F5A61] break-words">
               {report.aiConfidenceMessage}
             </p>
           ) : null}

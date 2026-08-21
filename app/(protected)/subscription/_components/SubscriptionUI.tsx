@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PlanFeature, PlanSummary, PlanTone } from "../_lib/plans";
-
+import { useRouter } from "next/navigation";
 const toneClasses: Record<
   PlanTone,
   {
@@ -66,9 +66,10 @@ export function SubscriptionScreenShell({
 }
 
 export function SubscriptionHeader() {
+  const router = useRouter();
   return (
     <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
-      <button onClick={() => window.history.back()} className="p-2">
+      <button onClick={() => router.push("/profile")} className="p-2">
         <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
       </button>
       <h1 className="text-lg font-semibold text-[#2D2D2D]">Subscription</h1>
@@ -108,7 +109,9 @@ export function CurrentPlanCard({
           <p className="text-[16px] font-semibold leading-5 text-[#2D2D2D]">
             {title}
           </p>
-          <p className="mt-1 text-[14px] leading-4 text-[#8F98A0]">{statusLabel}</p>
+          <p className="mt-1 text-[14px] leading-4 text-[#8F98A0]">
+            {statusLabel}
+          </p>
         </div>
       </div>
     </div>
