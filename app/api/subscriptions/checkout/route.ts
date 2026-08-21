@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       // field.
       itemName: `Cloak ${PLAN_DISPLAY_NAME[plan]} Monthly Subscription`,
       returnUrl: `${appUrl}/subscription/success`,
-      cancelUrl: `${appUrl}/subscription/cancelled`,
+      cancelUrl: `${appUrl}/subscription?checkout=cancelled`,
       notifyUrl: `${appUrl}/api/subscriptions/notify`,
       buyerEmail: user?.email,
       isRecurring: true,

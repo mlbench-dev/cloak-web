@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
 import { SubscriptionHeader, SubscriptionScreenShell } from "../_components/SubscriptionUI";
 
 export default function SubscriptionCancelledPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/subscription?checkout=cancelled");
+  }, [router]);
 
   return (
     <SubscriptionScreenShell>
@@ -16,7 +21,7 @@ export default function SubscriptionCancelledPage() {
         </div>
         <h1 className="text-[22px] font-semibold text-[#111827]">Checkout cancelled</h1>
         <p className="mt-3 max-w-[300px] text-[15px] leading-6 text-[#8F98A0]">
-          No payment was made. You're still on your current plan.
+          No payment was made. You&apos;re still on your current plan.
         </p>
         <button
           type="button"
