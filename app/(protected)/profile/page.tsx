@@ -1445,7 +1445,7 @@ export default function ProfilePage() {
             />
             <MenuButton
               icon={<Camera size={19} className="text-[#14C3CF]" />}
-              label="Reference Media"
+              label="Protected Media"
               onClick={() => router.push("/reference-media?mode=profile")}
             />
           </MenuGroup>
