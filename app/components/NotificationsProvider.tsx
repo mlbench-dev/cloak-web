@@ -8,6 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSession } from "next-auth/react";
+import { signInWithCustomToken, signOut as signOutFirebase } from "firebase/auth";
+import { onValue, ref } from "firebase/database";
+import { auth, database } from "@/lib/firebase";
 
 export type ApiAlertItem = {
   id: string;
@@ -27,10 +31,13 @@ type NotificationsContextValue = {
   // Resets the badge to 0 and tells the server the current alerts have been
   // seen — call this from the Alerts page on mount.
   markAllViewed: () => void;
-  // Lets any mounted component (currently just the Alerts page) react to a
-  // notification the instant it arrives over the shared SSE connection,
-  // without opening a second connection of its own.
-  subscribe: (handler: (alert: ApiAlertItem) => void) => () => void;
+  // Lets any mounted component (currently just the Alerts page) react the
+  // instant a live notification ping arrives, without opening a second
+  // Firebase connection of its own. No payload — Realtime Database only
+  // carries a "something changed" signal (see notificationPings/{userId}),
+  // not the notification's content, so subscribers refetch GET /api/alerts
+  // themselves rather than being handed an item directly.
+  subscribe: (handler: () => void) => () => void;
 };
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(
@@ -38,56 +45,88 @@ const NotificationsContext = createContext<NotificationsContextValue | null>(
 );
 
 // Mounted once at the protected layout level so the whole app shares a
-// single EventSource connection instead of every page/component opening
-// its own change-stream-backed request.
+// single Realtime Database listener instead of every page/component
+// opening its own.
 export function NotificationsProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { data: session, status } = useSession();
   const [unreadCount, setUnreadCount] = useState(0);
-  const subscribersRef = useRef(new Set<(alert: ApiAlertItem) => void>());
+  const subscribersRef = useRef(new Set<() => void>());
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const refreshUnreadCount = useCallback(() => {
     fetch("/api/alerts/unread-count")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.success) setUnreadCount(data.count);
+        if (data?.success) setUnreadCount(data.count);
       })
       .catch(() => null);
+  }, []);
 
-    // Native EventSource reconnects automatically on drop (server function
-    // duration limits, network blips) — no manual retry logic needed. Any
-    // notification created while briefly disconnected is still picked up
-    // next time the Alerts page does its own REST fetch.
-    const source = new EventSource("/api/alerts/stream");
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
 
-    source.addEventListener("alert", (event) => {
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.id || !database) {
+      return;
+    }
+    // Narrowed to a local const — `database` is module-level, so TS can't
+    // carry the null-check above through the async closure below.
+    const db = database;
+
+    let cancelled = false;
+    // onValue fires immediately with the ping path's *current* value the
+    // moment the listener attaches, not just on subsequent changes — that
+    // first firing isn't a new notification, so it's skipped here.
+    let isFirstSnapshot = true;
+    let detachListener: (() => void) | null = null;
+
+    const connect = async () => {
       try {
-        const alert = JSON.parse(
-          (event as MessageEvent).data,
-        ) as ApiAlertItem;
-        setUnreadCount((count) => count + 1);
-        subscribersRef.current.forEach((handler) => handler(alert));
-      } catch {
-        // ignore malformed payloads
+        const res = await fetch("/api/firebase/custom-token");
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.token) {
+          throw new Error(data?.error || "Could not mint Firebase token");
+        }
+        if (cancelled) return;
+
+        await signInWithCustomToken(auth, data.token);
+        if (cancelled) return;
+
+        const pingRef = ref(db, `notificationPings/${session.user.id}`);
+        detachListener = onValue(pingRef, () => {
+          if (isFirstSnapshot) {
+            isFirstSnapshot = false;
+            return;
+          }
+          refreshUnreadCount();
+          subscribersRef.current.forEach((handler) => handler());
+        });
+      } catch (error) {
+        // Firebase not configured yet, or the token mint failed — the app
+        // still works via the REST endpoints, just without live push.
+        console.warn("Live notification push unavailable:", error);
       }
-    });
+    };
+
+    void connect();
 
     return () => {
       cancelled = true;
-      source.close();
+      detachListener?.();
+      void signOutFirebase(auth).catch(() => null);
     };
-  }, []);
+  }, [status, session?.user?.id, refreshUnreadCount]);
 
   const markAllViewed = useCallback(() => {
     setUnreadCount(0);
     fetch("/api/alerts", { method: "POST" }).catch(() => null);
   }, []);
 
-  const subscribe = useCallback((handler: (alert: ApiAlertItem) => void) => {
+  const subscribe = useCallback((handler: () => void) => {
     subscribersRef.current.add(handler);
     return () => {
       subscribersRef.current.delete(handler);

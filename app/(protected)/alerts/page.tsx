@@ -2,7 +2,7 @@
 
 import { Crown, Info } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useNotifications,
   type ApiAlertItem,
@@ -162,57 +162,57 @@ export default function AlertsPage() {
   // effect re-runs before it resolves.
   const activeFilterRequestRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const requestFilter = activeFilter;
+  const fetchAlerts = useCallback(async (filter: AlertFilter) => {
+    const requestFilter = filter;
     activeFilterRequestRef.current = requestFilter;
     const isStale = () => activeFilterRequestRef.current !== requestFilter;
 
-    const fetchAlerts = async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (activeFilter !== "All") {
-          params.set("filter", activeFilter);
-        }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filter !== "All") {
+        params.set("filter", filter);
+      }
 
-        const res = await fetch(
-          `/api/alerts${params.toString() ? `?${params.toString()}` : ""}`,
-        );
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.success) {
-          if (!isStale()) {
-            setItems([]);
-          }
-          return;
-        }
-
-        const apiItems = (json.alerts || []) as ApiAlertItem[];
-        if (!isStale()) {
-          setItems(apiItems.map(toAlertItem));
-        }
-      } catch {
+      const res = await fetch(
+        `/api/alerts${params.toString() ? `?${params.toString()}` : ""}`,
+      );
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
         if (!isStale()) {
           setItems([]);
         }
-      } finally {
-        if (!isStale()) {
-          setLoading(false);
-        }
+        return;
       }
-    };
 
-    void fetchAlerts();
-  }, [activeFilter]);
+      const apiItems = (json.alerts || []) as ApiAlertItem[];
+      if (!isStale()) {
+        setItems(apiItems.map(toAlertItem));
+      }
+    } catch {
+      if (!isStale()) {
+        setItems([]);
+      }
+    } finally {
+      if (!isStale()) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
-  // Live push — the shared SSE connection (see NotificationsProvider) hands
-  // us each new notification the instant it's created, so a newly arriving
-  // alert appears without re-fetching the whole list.
   useEffect(() => {
-    return subscribe((alert) => {
-      if (activeFilter !== "All" && alert.filter !== activeFilter) return;
-      setItems((current) => [toAlertItem(alert), ...current]);
+    void fetchAlerts(activeFilter);
+  }, [activeFilter, fetchAlerts]);
+
+  // Live push — a Realtime Database ping (see NotificationsProvider) tells
+  // us the instant a new notification was created; RTDB only carries the
+  // "something changed" signal, not the notification itself, so refetch
+  // the current filtered list to pick it up.
+  useEffect(() => {
+    return subscribe(() => {
+      void fetchAlerts(activeFilter);
     });
-  }, [subscribe, activeFilter]);
+  }, [subscribe, activeFilter, fetchAlerts]);
 
   const hasMarkedViewed = useRef(false);
   useEffect(() => {

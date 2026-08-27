@@ -1,4 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
+import { ServerValue } from "firebase-admin/database";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import type {
   NotificationDoc,
   NotificationFilter,
@@ -166,19 +168,46 @@ export async function createNotification(
     createdAt: new Date(),
   }) as unknown as NotificationDoc;
 
+  let isNewNotification = true;
+
   if (input.dedupeKey) {
     // dedupeKey alone is the uniqueness scope (see the index comment
     // above) — every value already embeds enough context to be globally
     // unique, so no need to also filter on userId here.
-    await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
+    const result = await db.collection(NOTIFICATIONS_COLLECTION).updateOne(
       { dedupeKey: input.dedupeKey },
       { $setOnInsert: doc },
       { upsert: true },
     );
-    return;
+    // A duplicate fire matches the existing doc and upserts nothing new —
+    // don't wake up a live listener for a notification the user already has.
+    isNewNotification = Boolean(result.upsertedId);
+  } else {
+    await db.collection(NOTIFICATIONS_COLLECTION).insertOne(doc);
   }
 
-  await db.collection(NOTIFICATIONS_COLLECTION).insertOne(doc);
+  if (isNewNotification) {
+    await pingLiveNotification(input.userId);
+  }
+}
+
+// Touches the recipient's Realtime Database ping path so an already-open
+// browser tab refetches GET /api/alerts instead of waiting for its next
+// poll/visit — see app/components/NotificationsProvider.tsx for the
+// listening side. Best-effort: the Mongo write above is the actual
+// notification and must succeed regardless of whether Firebase is
+// configured yet (see lib/firebaseAdmin.ts's prerequisite check).
+async function pingLiveNotification(userId: ObjectId): Promise<void> {
+  try {
+    await getAdminDb()
+      .ref(`notificationPings/${userId.toString()}`)
+      .set({ updatedAt: ServerValue.TIMESTAMP });
+  } catch (error) {
+    console.warn(
+      "Could not push live notification ping (Firebase not configured?):",
+      error,
+    );
+  }
 }
 
 // The "AI Detection" badge isn't known yet at submission time — it resolves
