@@ -2,6 +2,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   serverExternalPackages: ["sharp"],
   outputFileTracingIncludes: {
     "/api/cloak-watch/posts": ["./node_modules/@img/**/*"],
