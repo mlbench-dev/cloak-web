@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { Crown } from "lucide-react";
 import {
@@ -32,6 +33,7 @@ type ActiveModal = "cloak-pro" | "boost-protection" | null;
 type PendingUpgrade = "cloak-pro" | "boost-protection" | null;
 
 export default function SubscriptionPage() {
+  const searchParams = useSearchParams();
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [pendingUpgrade, setPendingUpgrade] = useState<PendingUpgrade>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -49,8 +51,34 @@ export default function SubscriptionPage() {
   };
 
   useEffect(() => {
-    void loadStatus();
+    void fetchSubscriptionStatus().then((status) => {
+      setSubscription(status);
+      setLoading(false);
+    });
   }, []);
+
+  useEffect(() => {
+    const resetCheckoutState = () => {
+      setActiveModal(null);
+      setPendingUpgrade(null);
+      setIsRedirecting(false);
+    };
+
+    window.addEventListener("pageshow", resetCheckoutState);
+
+    return () => {
+      window.removeEventListener("pageshow", resetCheckoutState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("checkout") !== "cancelled") return;
+
+    toast.error("Checkout cancelled. No payment was made.", {
+      id: "checkout-cancelled",
+    });
+    window.history.replaceState(null, "", "/subscription");
+  }, [searchParams]);
 
   const handleUpgrade = async (plan: "boost-protection" | "cloak-pro") => {
     if (isRedirecting) return;
