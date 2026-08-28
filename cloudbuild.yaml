@@ -70,8 +70,7 @@ steps:
   # created (see the DATABASE_URL / NEXTAUTH_SECRET / etc. list from the
   # deployment runbook) before enabling this step.
   - id: deploy
-    name: gcr.io/google-cloud-sdk/slim
-    entrypoint: gcloud
+    name: gcr.io/cloud-builders/gcloud
     args:
       - run
       - deploy
