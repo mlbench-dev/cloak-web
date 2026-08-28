@@ -3,7 +3,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["sharp"],
+  // sharp: native bindings need to be traced into the standalone build (see
+  // outputFileTracingIncludes below) for the cloak-watch image upload route.
+  // firebase-admin: specifically firebase-admin/auth -> jwks-rsa -> jose
+  // mixes ESM and CJS in a way Next's bundler chokes on if it tries to
+  // inline it (ERR_REQUIRE_ESM in production). Both need to stay as real
+  // node_modules require()s at runtime instead of being bundled — this MUST
+  // stay a single array; a second `serverExternalPackages` key here would
+  // silently clobber this one instead of merging.
+  serverExternalPackages: ["sharp", "firebase-admin"],
   outputFileTracingIncludes: {
     "/api/cloak-watch/posts": ["./node_modules/@img/**/*"],
   },

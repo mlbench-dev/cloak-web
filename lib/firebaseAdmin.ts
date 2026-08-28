@@ -1,11 +1,19 @@
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 
 // Cached across the process (mirrors the pattern in lib/mongodb.ts) —
 // initializeApp() throws if called twice in the same process, which
 // Next.js dev's hot-reload would otherwise trigger repeatedly.
-function getAdminApp(): App {
+//
+// IMPORTANT: only import firebase-admin/app and firebase-admin/database
+// from this file, never firebase-admin/auth. The auth submodule pulls in
+// jwks-rsa -> jose (an ESM-only package), which broke every route that
+// merely imported this file in production — Next's bundler couldn't
+// require() it (ERR_REQUIRE_ESM), even for routes that only ever wanted
+// getAdminDb() and never touched auth. getAdminAuth() lives in
+// lib/firebaseAdminAuth.ts instead, so only the one route that actually
+// mints custom tokens is exposed to that dependency chain.
+export function getAdminApp(): App {
   const existing = getApps();
   if (existing.length > 0) {
     return existing[0];
@@ -29,14 +37,10 @@ function getAdminApp(): App {
   });
 }
 
-// Both getters throw synchronously if the Admin SDK isn't configured —
-// callers (lib/notifications.ts, the custom-token route) are responsible
-// for catching that so a missing/misconfigured Firebase setup never breaks
-// the Mongo-backed functionality it's layered on top of.
-export function getAdminAuth() {
-  return getAuth(getAdminApp());
-}
-
+// Throws synchronously if the Admin SDK isn't configured — callers
+// (lib/notifications.ts) are responsible for catching that so a
+// missing/misconfigured Firebase setup never breaks the Mongo-backed
+// functionality it's layered on top of.
 export function getAdminDb() {
   return getDatabase(getAdminApp());
 }
