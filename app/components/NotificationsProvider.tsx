@@ -70,12 +70,18 @@ export function NotificationsProvider({
   }, [refreshUnreadCount]);
 
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.id || !database) {
+    if (
+      status !== "authenticated" ||
+      !session?.user?.id ||
+      !database ||
+      !auth
+    ) {
       return;
     }
-    // Narrowed to a local const — `database` is module-level, so TS can't
-    // carry the null-check above through the async closure below.
+    // Narrowed to local consts — `database`/`auth` are module-level, so TS
+    // can't carry the null-checks above through the async closure below.
     const db = database;
+    const firebaseAuth = auth;
 
     let cancelled = false;
     // onValue fires immediately with the ping path's *current* value the
@@ -93,7 +99,7 @@ export function NotificationsProvider({
         }
         if (cancelled) return;
 
-        await signInWithCustomToken(auth, data.token);
+        await signInWithCustomToken(firebaseAuth, data.token);
         if (cancelled) return;
 
         const pingRef = ref(db, `notificationPings/${session.user.id}`);
@@ -117,7 +123,7 @@ export function NotificationsProvider({
     return () => {
       cancelled = true;
       detachListener?.();
-      void signOutFirebase(auth).catch(() => null);
+      void signOutFirebase(firebaseAuth).catch(() => null);
     };
   }, [status, session?.user?.id, refreshUnreadCount]);
 
