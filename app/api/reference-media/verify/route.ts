@@ -15,7 +15,7 @@ import { notifyVerificationResult } from "@/lib/notifications";
 export const maxDuration = 60;
 
 const VERIFICATION_API_BASE_URL =
-  process.env.VERIFICATION_API_URL ||
+  process.env.VERIFICATION_API_URL?.trim() ||
   "https://verification-739230282785.europe-west1.run.app";
 const VERIFICATION_API_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/verify`;
 const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/update`;
@@ -28,7 +28,7 @@ const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/ve
 // as a stopgap; swap to google-auth-library + a service account (which
 // mints and refreshes tokens automatically) before this is relied on
 // unattended.
-const VERIFICATION_API_BEARER_TOKEN = process.env.BEARER_TOKEN || "";
+const VERIFICATION_API_BEARER_TOKEN = process.env.BEARER_TOKEN?.trim() || "";
 
 function getVerificationApiHeaders(extra?: Record<string, string>) {
   const headers: Record<string, string> = { ...extra };
