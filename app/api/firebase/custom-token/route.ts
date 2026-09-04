@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { getAdminAuth } from "@/lib/firebaseAdmin";
+import { getAdminAuth } from "@/lib/firebaseAdminAuth";
 
 // Bridges the NextAuth session (this app's real auth) into a short-lived
 // Firebase credential, so the browser can sign into Firebase directly and

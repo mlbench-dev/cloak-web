@@ -14,8 +14,20 @@ import { notifyVerificationResult } from "@/lib/notifications";
 // min-instances > 0 to stay warm.
 export const maxDuration = 60;
 
+// Takes only the first line of an env var, then trims it — Secret Manager
+// values pasted from a .env file sometimes carry an extra newline plus a
+// trailing comment/line for a *different* variable (that's what actually
+// happened to BEARER_TOKEN in production: the header value included a
+// literal "\n# SUBMIT_REPORT_AI_VERIFICATION = ..." after the real token,
+// which fetch's Headers.append rejects outright since header values can't
+// contain a line break). A plain .trim() only strips the edges, so it
+// can't clean up garbage stuck in the middle like that — this can.
+function firstLine(value: string | undefined): string {
+  return (value || "").split(/\r?\n/)[0].trim();
+}
+
 const VERIFICATION_API_BASE_URL =
-  process.env.VERIFICATION_API_URL ||
+  firstLine(process.env.VERIFICATION_API_URL) ||
   "https://verification-739230282785.europe-west1.run.app";
 const VERIFICATION_API_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/verify`;
 const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/verification/update`;
@@ -28,7 +40,7 @@ const VERIFICATION_API_UPDATE_ENDPOINT = `${VERIFICATION_API_BASE_URL}/api/v1/ve
 // as a stopgap; swap to google-auth-library + a service account (which
 // mints and refreshes tokens automatically) before this is relied on
 // unattended.
-const VERIFICATION_API_BEARER_TOKEN = process.env.BEARER_TOKEN || "";
+const VERIFICATION_API_BEARER_TOKEN = firstLine(process.env.BEARER_TOKEN);
 
 function getVerificationApiHeaders(extra?: Record<string, string>) {
   const headers: Record<string, string> = { ...extra };
