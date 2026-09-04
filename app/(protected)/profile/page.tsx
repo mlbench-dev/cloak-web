@@ -20,6 +20,7 @@ import {
   Flag,
   Shield,
   Search,
+  Settings,
 } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/config";
 import { showPlanLimitToast } from "@/app/components/planLimitToast";
@@ -1403,6 +1404,12 @@ export default function ProfilePage() {
               icon={<Edit3 size={19} className="text-[#14C3CF]" />}
               label="Edit profile"
               onClick={() => router.push("/profile?view=edit")}
+              showDivider={true}
+            />
+            <MenuButton
+              icon={<UserIcon size={19} className="text-[#14C3CF]" />}
+              label="Identity Profile"
+              onClick={() => router.push("/identity-profile")}
               showDivider={true}
             />
             <MenuButton

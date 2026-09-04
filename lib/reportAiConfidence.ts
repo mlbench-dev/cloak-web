@@ -2,6 +2,11 @@ import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { AiConfidenceStatus, ReportDoc } from "@/models/User";
 import { applyAiDetectionBadge } from "@/lib/notifications";
+// Re-exported for existing importers (e.g. app/api/reports/route.ts) — the
+// function itself now lives in lib/platform.ts, which has zero server-only
+// dependencies, so client code can import it directly from there instead of
+// from this file (which pulls in Mongo/Firebase Admin transitively).
+export { detectPlatform } from "@/lib/platform";
 
 const REPORT_AI_VERIFICATION_BASE_URL =
   process.env.VERIFICATION_API_URL?.trim() ||
@@ -14,17 +19,6 @@ const REPORT_AI_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes;
 
 export const AI_CONFIDENCE_MAX_ATTEMPTS = 4;
 export const AI_CONFIDENCE_RETRY_COOLDOWN_MS = 60 * 1000;
-
-export function detectPlatform(link: string): string {
-  const lowerLink = link.toLowerCase();
-  if (lowerLink.includes("tiktok.com")) return "tiktok";
-  if (lowerLink.includes("instagram.com")) return "instagram";
-  if (lowerLink.includes("facebook.com") || lowerLink.includes("fb.com"))
-    return "facebook";
-  if (lowerLink.includes("twitter.com") || lowerLink.includes("x.com"))
-    return "twitter";
-  return "other";
-}
 
 function readNumericConfidence(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
