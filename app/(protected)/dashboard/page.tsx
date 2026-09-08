@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   Crosshair,
+  Fingerprint,
   Flag,
   Globe,
   Radar,
@@ -37,6 +38,12 @@ interface DashboardUser {
 
 interface DashboardStats {
   level: number;
+}
+
+interface IdentityProfileSummary {
+  fullName: string;
+  usernames: string[];
+  aliases: string[];
 }
 
 interface DashboardRecentActivity {
@@ -154,6 +161,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<DashboardRecentActivity[]>([]);
+  const [identityProfile, setIdentityProfile] = useState<IdentityProfileSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"reports" | "incidents">("incidents");
 
@@ -176,6 +184,19 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/identity-profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success) setIdentityProfile(data.profile);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -186,6 +207,13 @@ export default function DashboardPage() {
 
   const plan: PlanCode = user?.plan || "FREEMIUM";
   const schedule = SCAN_SCHEDULE[plan];
+  // Monitoring needs a name plus at least one username/alias to search
+  // against — Known Websites/Keywords are explicitly optional on that form,
+  // so they don't gate readiness here.
+  const hasRequiredIdentityDetails =
+    !!identityProfile?.fullName?.trim() &&
+    (identityProfile?.usernames?.length ?? 0) > 0 &&
+    (identityProfile?.aliases?.length ?? 0) > 0;
   const avatarUrl = user?.image || user?.profileImage;
   const isVerified = user?.identityVerificationStatus === "APPROVED" || user?.isVerified || false;
 
@@ -221,9 +249,13 @@ export default function DashboardPage() {
             <h2 className="text-[17px] font-medium text-[#2D2D2D]">{user?.username || "user"}</h2>
             {isVerified && <VerifiedBadge className="h-5 w-5 text-[#14C3CF]" />}
           </div>
-          <div className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#19C48A]">
+          <div
+            className={`mt-0.5 flex items-center gap-1 text-[13px] font-medium ${
+              hasRequiredIdentityDetails ? "text-[#19C48A]" : "text-[#8F98A0]"
+            }`}
+          >
             <Radar className="h-4 w-4" />
-            Monitoring Active
+            {hasRequiredIdentityDetails ? "Monitoring Active" : "Monitoring Disabled"}
           </div>
           <p className="mt-0.5 text-[13px] text-[#8F98A0]">
             {stats && stats.level > 0 ? `Level ${stats.level} Scout` : "Unranked"}
@@ -231,39 +263,62 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-[24px] bg-[#EEFFF2] p-5">
-        <div className="grid flex-1 grid-cols-2">
-          <div>
-            <p className="text-[13px] text-[#8F98A0]">Last scan</p>
-            <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">12 min ago</p>
-            <p className="mt-1 flex items-center gap-1 text-[12px] text-[#1FAE5C]">
-              <CheckCircle2 className="h-3.5 w-3.5 fill-[#1FAE5C] text-[#EEFFF2]" />
-              Completed
-            </p>
+      {hasRequiredIdentityDetails ? (
+        <div className="flex items-center gap-3 rounded-[24px] bg-[#EEFFF2] p-5">
+          <div className="grid flex-1 grid-cols-2">
+            <div>
+              <p className="text-[13px] text-[#8F98A0]">Last scan</p>
+              <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">12 min ago</p>
+              <p className="mt-1 flex items-center gap-1 text-[12px] text-[#1FAE5C]">
+                <CheckCircle2 className="h-3.5 w-3.5 fill-[#1FAE5C] text-[#EEFFF2]" />
+                Completed
+              </p>
+            </div>
+            <div className="border-l border-[#34C759]/25 pl-4">
+              <p className="text-[13px] text-[#8F98A0]">Next  scan</p>
+              <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">{schedule.frequencyLabel}</p>
+              <p className="mt-1 flex items-center gap-1 text-[12px] text-[#8F98A0]">
+                <Clock className="h-3.5 w-3.5" />
+                {schedule.countdownLabel}
+              </p>
+            </div>
           </div>
-          <div className="border-l border-[#34C759]/25 pl-4">
-            <p className="text-[13px] text-[#8F98A0]">Next  scan</p>
-            <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">{schedule.frequencyLabel}</p>
-            <p className="mt-1 flex items-center gap-1 text-[12px] text-[#8F98A0]">
-              <Clock className="h-3.5 w-3.5" />
-              {schedule.countdownLabel}
-            </p>
-          </div>
-        </div>
 
-        <div className="relative flex h-28 w-28 shrink-0 items-center justify-center">
-          <Image
-            src="/Sonar_Radar.svg"
-            alt=""
-            aria-hidden="true"
-            fill
-            className="absolute inset-0"
-          />
-          <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-[#34C759]">
-            <ShieldCheck className="h-6 w-6 text-white" />
+          <div className="relative flex h-28 w-28 shrink-0 items-center justify-center">
+            <Image
+              src="/Sonar_Radar.svg"
+              alt=""
+              aria-hidden="true"
+              fill
+              className="absolute inset-0"
+            />
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-[#34C759]">
+              <ShieldCheck className="h-6 w-6 text-white" />
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center gap-3 rounded-[24px] bg-[#E8FEFF] p-5">
+          <div className="flex-1">
+            <p className="text-[13px] text-[#8F98A0]">Monitoring Paused</p>
+            <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
+              Complete Your Identity Profile
+            </p>
+            <p className="mt-1 text-[12px] text-[#8F98A0]">
+              Add your name, usernames &amp; aliases so we know what to monitor for you.
+            </p>
+            <Link
+              href="/identity-profile"
+              className="mt-3 inline-flex h-10 items-center rounded-full bg-[#14C3CF] px-5 text-[14px] font-medium text-white"
+            >
+              Complete Profile
+            </Link>
+          </div>
+          <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#14C3CF]">
+            <Fingerprint className="h-8 w-8 text-white" />
+          </div>
+        </div>
+      )}
 
       {plan === "FREEMIUM" && (
         <div className="flex items-center gap-3 rounded-[20px] bg-[#F5F5F5] p-4">
@@ -292,34 +347,66 @@ export default function DashboardPage() {
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
           <div className="flex items-center justify-between">
             <Globe className="h-6 w-6 text-[#5AB8E0] " />
-            <span className="text-[12px] font-medium text-[#5AB8E0]">{MOCK_STATS.urlsDetected.delta}</span>
+            <span
+              className={`text-[12px] font-medium ${
+                hasRequiredIdentityDetails ? "text-[#5AB8E0]" : "text-[#8F98A0]"
+              }`}
+            >
+              {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.delta : "Monitoring disabled"}
+            </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">URLs Detected</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">{MOCK_STATS.urlsDetected.value}</p>
+          <p className="text-[22px] font-semibold text-[#2D2D2D]">
+            {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.value : "0"}
+          </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
           <div className="flex items-center justify-between">
             <Crosshair className="h-6 w-6 text-[#E88A3B]" />
-            <span className="text-[12px] font-medium text-[#E88A3B]">{MOCK_STATS.matchesIncidents.delta}</span>
+            <span
+              className={`text-[12px] font-medium ${
+                hasRequiredIdentityDetails ? "text-[#E88A3B]" : "text-[#8F98A0]"
+              }`}
+            >
+              {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.delta : "Monitoring disabled"}
+            </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">Matches / Incidents</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">{MOCK_STATS.matchesIncidents.value}</p>
+          <p className="text-[22px] font-semibold text-[#2D2D2D]">
+            {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.value : "0"}
+          </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
           <div className="flex items-center justify-between">
             <Flag className="h-6 w-6 text-[#E0577B]" />
-            <span className="text-[12px] font-medium text-[#D14343]">{MOCK_STATS.newIncidents.delta}</span>
+            <span
+              className={`text-[12px] font-medium ${
+                hasRequiredIdentityDetails ? "text-[#D14343]" : "text-[#8F98A0]"
+              }`}
+            >
+              {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.delta : "Monitoring disabled"}
+            </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">New Incidents</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">{MOCK_STATS.newIncidents.value}</p>
+          <p className="text-[22px] font-semibold text-[#2D2D2D]">
+            {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.value : "0"}
+          </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
           <div className="flex items-center justify-between">
             <BarChart3 className="h-6 w-6 text-[#4C7DF0]" />
-            <span className="text-[12px] font-medium text-[#4C7DF0]">{MOCK_STATS.avgConfidence.deltaLabel}</span>
+            <span
+              className={`text-[12px] font-medium ${
+                hasRequiredIdentityDetails ? "text-[#4C7DF0]" : "text-[#8F98A0]"
+              }`}
+            >
+              {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.deltaLabel : "Monitoring disabled"}
+            </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">Avg Match Confidence</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">{MOCK_STATS.avgConfidence.value}</p>
+          <p className="text-[22px] font-semibold text-[#2D2D2D]">
+            {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.value : "—"}
+          </p>
         </div>
       </div>
 
