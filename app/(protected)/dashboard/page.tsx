@@ -345,14 +345,14 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between">
-            <Globe className="h-6 w-6 text-[#5AB8E0] " />
+          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
+            <Globe className="h-6 w-6 shrink-0 text-[#5AB8E0]" />
             <span
-              className={`text-[12px] font-medium ${
-                hasRequiredIdentityDetails ? "text-[#5AB8E0]" : "text-[#8F98A0]"
+              className={`text-[12px] font-medium whitespace-nowrap ${
+                hasRequiredIdentityDetails ? "text-[#5AB8E0]" : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.delta : "Monitoring disabled"}
+              {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.delta : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">URLs Detected</p>
@@ -361,14 +361,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between">
-            <Crosshair className="h-6 w-6 text-[#E88A3B]" />
+          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
+            <Crosshair className="h-6 w-6 shrink-0 text-[#E88A3B]" />
             <span
-              className={`text-[12px] font-medium ${
-                hasRequiredIdentityDetails ? "text-[#E88A3B]" : "text-[#8F98A0]"
+              className={`text-[12px] font-medium whitespace-nowrap ${
+                hasRequiredIdentityDetails ? "text-[#E88A3B]" : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.delta : "Monitoring disabled"}
+              {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.delta : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">Matches / Incidents</p>
@@ -377,14 +377,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between">
-            <Flag className="h-6 w-6 text-[#E0577B]" />
+          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
+            <Flag className="h-6 w-6 shrink-0 text-[#E0577B]" />
             <span
-              className={`text-[12px] font-medium ${
-                hasRequiredIdentityDetails ? "text-[#D14343]" : "text-[#8F98A0]"
+              className={`text-[12px] font-medium whitespace-nowrap ${
+                hasRequiredIdentityDetails ? "text-[#D14343]" : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.delta : "Monitoring disabled"}
+              {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.delta : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">New Incidents</p>
@@ -393,14 +393,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between">
-            <BarChart3 className="h-6 w-6 text-[#4C7DF0]" />
+          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
+            <BarChart3 className="h-6 w-6 shrink-0 text-[#4C7DF0]" />
             <span
-              className={`text-[12px] font-medium ${
-                hasRequiredIdentityDetails ? "text-[#4C7DF0]" : "text-[#8F98A0]"
+              className={`text-[12px] font-medium whitespace-nowrap ${
+                hasRequiredIdentityDetails ? "text-[#4C7DF0]" : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.deltaLabel : "Monitoring disabled"}
+              {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.deltaLabel : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">Avg Match Confidence</p>
