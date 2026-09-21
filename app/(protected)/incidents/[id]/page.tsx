@@ -4,9 +4,9 @@ import { Check, ChevronLeft, X as XIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IncidentStatusPill, PlatformIcon } from "../_components/IncidentUI";
-import { getIncidentById, setIncidentStatus } from "../_lib/incidents";
+import { detectPlatform } from "@/lib/platform";
 
 const REJECTION_REASONS = [
   "Not me",
@@ -16,31 +16,128 @@ const REJECTION_REASONS = [
 ] as const;
 
 type ResultView = "detail" | "confirmed" | "reject-reason";
+type IncidentStatus = "New" | "Confirmed" | "Rejected";
 
+interface ScanResultsResponse {
+  success: boolean;
+  urls: string[];
+  updatedAt: string | null;
+}
+interface LinkPreview {
+  url: string;
+  domain: string;
+  title: string;
+  description: string | null;
+  image: string | null;
+}
+
+interface LinkPreviewResponse {
+  success: boolean;
+  preview: LinkPreview | null;
+  reachable: boolean;
+  statusCode: number | null;
+  finalUrl: string | null;
+}
 function ResultHeader({ children }: { children: React.ReactNode }) {
   return (
-    <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
+    <header className="flex items-center justify-between  bg-white z-10">
       {children}
       <div className="w-10" />
     </header>
   );
 }
 
+// Small helper so "Detected X ago" reads naturally instead of a raw ISO string.
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function IncidentDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const incident = getIncidentById(params.id);
-  const [view, setView] = useState<ResultView>("detail");
-  const [rejectionReason, setRejectionReason] = useState<string>(REJECTION_REASONS[0]);
+  const url = decodeURIComponent(params.id);
 
-  if (!incident) {
+  const [loading, setLoading] = useState(true);
+  const [found, setFound] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  const [view, setView] = useState<ResultView>("detail");
+  const [rejectionReason, setRejectionReason] = useState<string>(
+    REJECTION_REASONS[0],
+  );
+
+  // Local-only for now — there's no per-url review field in `fetchUrl` yet,
+  // so Confirm/Reject update this view's state but don't persist anywhere.
+  // Once a review collection exists (e.g. urlReviews keyed by userId+url),
+  // wire handleConfirm/handleReject to POST there instead of just setStatus.
+  const [status, setStatus] = useState<IncidentStatus>("New");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/scan-results")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ScanResultsResponse | null) => {
+        if (cancelled) return;
+        if (data?.success && data.urls.includes(url)) {
+          setFound(true);
+          setUpdatedAt(data.updatedAt);
+        }
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  const [preview, setPreview] = useState<LinkPreview | null>(null);
+  const [previewReachable, setPreviewReachable] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewLoading(true);
+    fetch(`/api/link-preview?url=${encodeURIComponent(url)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: LinkPreviewResponse | null) => {
+        if (cancelled || !data?.success) return;
+        setPreview(data.preview);
+        setPreviewReachable(data.reachable);
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-10 w-10 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
+      </div>
+    );
+  }
+
+  if (!found) {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <ResultHeader>
           <button type="button" onClick={() => router.back()} className="p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">Incident Details</h1>
+          <h1 className="text-lg font-semibold text-[#2D2D2D]">
+            Incident Details
+          </h1>
         </ResultHeader>
         <div className="flex flex-1 items-center justify-center text-[14px] text-[#8F98A0]">
           Incident not found
@@ -49,20 +146,30 @@ export default function IncidentDetailPage() {
     );
   }
 
-  // No real backend yet for incidents (see the Phase 2.0 plan — mock data
-  // only, same scope as the rest of this dashboard redesign). setIncidentStatus
-  // writes into the shared MOCK_INCIDENTS array by id (not the render-scoped
-  // `incident` reference) so it stays out of React Compiler's render-purity
-  // checks. Navigating back to the list or Dashboard re-reads the same array
-  // and reflects it. Wire this to the unified reports collection
-  // (source: "AI_DISCOVERY") once that exists.
+  // --- Real fields, sourced from the fetchUrl document ---
+  const platform = detectPlatform(url);
+  const platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
+  const urlLabel = url;
+  const sourceUrl = url;
+  const detectedAt = updatedAt ? new Date(updatedAt).toLocaleString() : "—";
+  const detectedAgo = updatedAt ? timeAgo(new Date(updatedAt)) : "recently";
+  const discoveryMethod = "Automated Web Scan"; // accurate today — this IS how it was found
+
+  // --- Placeholder fields, pending CV service support ---
+  // The scan currently only returns candidate URLs, not a verified match
+  // score or evidence crop. Swap these for real values (and drop the
+  // `matchPercent === null` / no-evidence branches below) once the
+  // face-verification step writes them per-url.
+  const matchPercent: number | null = null;
+  // const evidenceImageUrl: string | null = null;
+
   const handleConfirm = () => {
-    setIncidentStatus(incident.id, "Confirmed");
+    setStatus("Confirmed");
     setView("confirmed");
   };
 
   const handleReject = () => {
-    setIncidentStatus(incident.id, "Rejected");
+    setStatus("Rejected");
     setView("reject-reason");
   };
 
@@ -70,7 +177,11 @@ export default function IncidentDetailPage() {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <ResultHeader>
-          <button type="button" onClick={() => router.push("/incidents")} className="p-2">
+          <button
+            type="button"
+            onClick={() => router.push("/incidents")}
+            className="p-2"
+          >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
         </ResultHeader>
@@ -91,13 +202,15 @@ export default function IncidentDetailPage() {
 
           <div className="mt-8 rounded-2xl border border-[#F0F0F0]">
             <div className="flex items-center gap-3 border-b border-[#F0F0F0] p-4">
-              <PlatformIcon platform={incident.platform} />
+              <PlatformIcon platform={platform} />
               <div className="min-w-0">
                 <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
-                  {incident.urlLabel}
+                  {urlLabel}
                 </p>
                 <p className="mt-0.5 text-[13px] text-[#8F98A0]">
-                  {incident.matchPercent}% match
+                  {matchPercent !== null
+                    ? `${matchPercent}% match`
+                    : "Match pending"}
                 </p>
               </div>
             </div>
@@ -105,7 +218,7 @@ export default function IncidentDetailPage() {
               <div>
                 <p className="text-[13px] text-[#8F98A0]">Detected</p>
                 <p className="mt-0.5 text-[15px] font-semibold text-[#2D2D2D]">
-                  {incident.detectedAt}
+                  {detectedAt}
                 </p>
               </div>
             </div>
@@ -113,7 +226,7 @@ export default function IncidentDetailPage() {
               <div>
                 <p className="text-[13px] text-[#8F98A0]">Discovery Method</p>
                 <p className="mt-0.5 text-[15px] font-semibold text-[#2D2D2D]">
-                  {incident.discoveryMethod}
+                  {discoveryMethod}
                 </p>
               </div>
             </div>
@@ -143,7 +256,11 @@ export default function IncidentDetailPage() {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <ResultHeader>
-          <button type="button" onClick={() => setView("detail")} className="p-2">
+          <button
+            type="button"
+            onClick={() => setView("detail")}
+            className="p-2"
+          >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
         </ResultHeader>
@@ -198,6 +315,8 @@ export default function IncidentDetailPage() {
           <div className="mt-10">
             <button
               type="button"
+              // TODO: once a review-persistence collection exists, send
+              // { url, reason: rejectionReason } here before navigating away.
               onClick={() => router.push("/incidents")}
               className="h-14 w-full rounded-full bg-[#EF4444] text-[15px] font-medium text-white"
             >
@@ -215,40 +334,50 @@ export default function IncidentDetailPage() {
         <button type="button" onClick={() => router.back()} className="p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Incident Details</h1>
+        <h1 className="text-lg font-semibold text-[#2D2D2D]">
+          Incident Details
+        </h1>
       </ResultHeader>
 
       <main className="flex-1 min-h-0 overflow-y-auto py-4 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="flex items-center gap-3 pb-4">
-          <PlatformIcon platform={incident.platform} />
+          <PlatformIcon platform={platform} />
           <div className="min-w-0 flex-1">
-            <p className="text-[16px] font-medium text-[#2D2D2D]">{incident.platformLabel}</p>
-            <p className="mt-0.5 text-[13px] text-[#8F98A0]">Detected {incident.detectedAgo}</p>
+            <p className="text-[16px] font-medium text-[#2D2D2D]">
+              {platformLabel}
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#8F98A0]">
+              Detected {detectedAgo}
+            </p>
           </div>
-          <IncidentStatusPill status={incident.status} />
+          <IncidentStatusPill status={status} />
         </div>
         <div className="border-t border-[#F0F0F0]" />
 
         <div className="mt-5 rounded-[20px] bg-[#E8FEFF] p-5">
           <p className="text-[13px] text-[#8F98A0]">Match Confidence</p>
           <p className="mt-1 text-[20px] font-semibold text-[#2D2D2D]">
-            {incident.matchPercent}% Match
+            {matchPercent !== null ? `${matchPercent}% Match` : "Pending"}
           </p>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white">
             <div
               className="h-full rounded-full bg-[#14C3CF]"
-              style={{ width: `${incident.matchPercent}%` }}
+              style={{ width: `${matchPercent ?? 0}%` }}
             />
           </div>
         </div>
 
         <div className="mt-6 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[15px] font-semibold text-[#2D2D2D]">Source URL</p>
-            <p className="mt-1 truncate text-[13px] text-[#8F98A0]">{incident.urlLabel}</p>
+            <p className="text-[15px] font-semibold text-[#2D2D2D]">
+              Source URL
+            </p>
+            <p className="mt-1 truncate text-[13px] text-[#8F98A0]">
+              {urlLabel}
+            </p>
           </div>
           <Link
-            href={incident.sourceUrl}
+            href={sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="shrink-0 text-[13px] font-medium text-[#14C3CF]"
@@ -260,28 +389,61 @@ export default function IncidentDetailPage() {
         <div className="mt-6">
           <p className="text-[15px] font-semibold text-[#2D2D2D]">Evidence</p>
           <div className="relative mt-3 h-56 w-full overflow-hidden rounded-2xl bg-gray-100">
-            <Image
-              src={incident.evidenceImageUrl}
-              alt="Evidence"
-              fill
-              className="object-cover"
-            />
+            {previewLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="h-8 w-8 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
+              </div>
+            ) : preview?.image ? (
+              <Image
+                src={preview.image}
+                alt={preview.title || "Evidence"}
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-[#8F98A0]">
+                {previewReachable
+                  ? "No preview image available for this link."
+                  : "This link couldn't be reached — it may require login or have been taken down."}
+              </div>
+            )}
           </div>
+          {preview?.title && (
+            <div className="mt-3">
+              <p className="truncate text-[14px] font-medium text-[#2D2D2D]">
+                {preview.title}
+              </p>
+              {preview.description && (
+                <p className="mt-0.5 line-clamp-2 text-[12px] text-[#8F98A0]">
+                  {preview.description}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-6 space-y-3 rounded-2xl border border-[#F0F0F0] p-4">
-          <p className="text-[15px] font-semibold text-[#2D2D2D]">Detection Information</p>
+          <p className="text-[15px] font-semibold text-[#2D2D2D]">
+            Detection Information
+          </p>
           <div className="flex items-center justify-between">
             <p className="text-[13px] text-[#8F98A0]">Detected</p>
-            <p className="text-[13px] font-medium text-[#2D2D2D]">{incident.detectedAt}</p>
+            <p className="text-[13px] font-medium text-[#2D2D2D]">
+              {detectedAt}
+            </p>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-[13px] text-[#8F98A0]">Discovery Method</p>
-            <p className="text-[13px] font-medium text-[#2D2D2D]">{incident.discoveryMethod}</p>
+            <p className="text-[13px] font-medium text-[#2D2D2D]">
+              {discoveryMethod}
+            </p>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-[13px] text-[#8F98A0]">Source</p>
-            <p className="text-[13px] font-medium text-[#2D2D2D]">{incident.platformLabel}</p>
+            <p className="text-[13px] font-medium text-[#2D2D2D]">
+              {platformLabel}
+            </p>
           </div>
         </div>
 
