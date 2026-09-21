@@ -73,21 +73,6 @@ function readTitle(html: string) {
   return match?.[1]?.trim() || null;
 }
 
-function readFirstImage(html: string) {
-  const patterns = [
-    /<img[^>]+src=["']([^"']+)["'][^>]*>/i,
-    /<source[^>]+srcset=["']([^"'\s,]+)[^"']*["'][^>]*>/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) {
-      return match[1].trim();
-    }
-  }
-
-  return null;
-}
 
 async function fetchNoEmbedPreview(url: string) {
   try {
@@ -192,7 +177,18 @@ export async function GET(request: Request) {
         });
         statusCode = response.status;
         finalUrl = response.url || normalizedUrl.toString();
-        reachable = statusCode < 500 && statusCode !== 404;
+        // 400/401/403 mean the request was actively rejected (bot
+        // detection, login wall) — that's a meaningfully different case
+        // from "loaded fine but had nothing to show", and the UI has a
+        // specific "may require login" message for exactly this bucket.
+        // Folding them into "reachable" made e.g. Facebook's 400 show the
+        // misleading "no preview image available" message instead.
+        reachable =
+          statusCode < 500 &&
+          statusCode !== 404 &&
+          statusCode !== 400 &&
+          statusCode !== 401 &&
+          statusCode !== 403;
       } catch {
         reachable = false;
       }
@@ -201,11 +197,14 @@ export async function GET(request: Request) {
         const contentType = response.headers.get("content-type") || "";
         if (response.ok && contentType.includes("text/html")) {
           const html = await response.text();
+          // No "first <img> on the page" fallback here — tested against
+          // real profile URLs, it only ever fired when og:image/
+          // twitter:image were both absent, and the one time it did
+          // (Instagram) it returned a base64 `data:` URI for the page's
+          // own loading-placeholder graphic, not a real photo. Better to
+          // show "no preview image" than a misleading inline placeholder.
           const image =
-            readMetaTag(html, "og:image") ||
-            readMetaTag(html, "twitter:image") ||
-            readFirstImage(html) ||
-            null;
+            readMetaTag(html, "og:image") || readMetaTag(html, "twitter:image") || null;
 
           preview.title =
             readMetaTag(html, "og:title") ||
@@ -217,9 +216,13 @@ export async function GET(request: Request) {
             readMetaTag(html, "twitter:description") ||
             readMetaTag(html, "description") ||
             null;
-          preview.image = image
-            ? new URL(image, response.url || normalizedUrl).toString()
-            : null;
+          // Defensive: a data: URI is never a real photo/thumbnail —
+          // scraped HTML is untrusted input and shouldn't be trusted to
+          // only ever hand back a normal image URL.
+          preview.image =
+            image && !image.startsWith("data:")
+              ? new URL(image, response.url || normalizedUrl).toString()
+              : null;
         }
       }
     }
