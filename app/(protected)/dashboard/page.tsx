@@ -19,8 +19,11 @@ import {
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { detectPlatform } from "@/lib/platform";
 import type { PlanCode } from "@/models/Subscription";
-import { IncidentStatusPill, PlatformIcon } from "../incidents/_components/IncidentUI";
-import { MOCK_INCIDENTS } from "../incidents/_lib/incidents";
+// import {
+//   IncidentStatusPill,
+//   PlatformIcon,
+// } from "../incidents/_components/IncidentUI";
+// import { MOCK_INCIDENTS } from "../incidents/_lib/incidents";
 
 // --- Types matching the real /api/user/dashboard payload (unchanged from
 // before this redesign — only the achievements/XP-bar/old-3-stat UI that
@@ -96,14 +99,18 @@ const MOCK_STATS = {
 // Scan cadence per plan — display-only for now (no real scheduler yet).
 // Cloak Pro is provisionally daily per your call; explicitly a placeholder
 // pending real cost/volume data from Phase 2.0.
-const SCAN_SCHEDULE: Record<PlanCode, { frequencyLabel: string; countdownLabel: string }> = {
+const SCAN_SCHEDULE: Record<
+  PlanCode,
+  { frequencyLabel: string; countdownLabel: string }
+> = {
   FREEMIUM: { frequencyLabel: "Next Month", countdownLabel: "In 21 days" },
   BOOST: { frequencyLabel: "After 15 Days", countdownLabel: "In 7d 23h" },
   CLOAK_PRO: { frequencyLabel: "Daily", countdownLabel: "In 5h 26m" },
 };
 
 function StatusPill({ status }: { status: string }) {
-  const isPositive = status === "New" || status === "Verified" || status === "Approved";
+  const isPositive =
+    status === "New" || status === "Verified" || status === "Approved";
   const isNegative = status === "Rejected";
   const tone = isNegative
     ? "bg-[#FFEDED] text-[#D14343]"
@@ -111,7 +118,9 @@ function StatusPill({ status }: { status: string }) {
       ? "bg-[#E4F9EE] text-[#1FAE5C]"
       : "bg-[#FFEDED] text-[#D14343]";
   return (
-    <span className={`inline-flex h-6 items-center rounded-full px-3 text-[12px] font-medium ${tone}`}>
+    <span
+      className={`inline-flex h-6 items-center rounded-full px-3 text-[12px] font-medium ${tone}`}
+    >
       {status}
     </span>
   );
@@ -136,7 +145,9 @@ function ActivityRow({
         <Image src={iconSrc} alt="" width={22} height={22} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-[#2D2D2D]">{title}</p>
+        <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
+          {title}
+        </p>
         <p className="mt-0.5 text-[12px] text-[#8F98A0]">{subtitle}</p>
       </div>
       <StatusPill status={status} />
@@ -160,11 +171,86 @@ function ActivityRow({
 export default function DashboardPage() {
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<DashboardRecentActivity[]>([]);
-  const [identityProfile, setIdentityProfile] = useState<IdentityProfileSummary | null>(null);
+  const [recentActivity, setRecentActivity] = useState<
+    DashboardRecentActivity[]
+  >([]);
+  const [identityProfile, setIdentityProfile] =
+    useState<IdentityProfileSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"reports" | "incidents">("incidents");
+  // const [scanning, setScanning] = useState(false);
+  // const [scanError, setScanError] = useState<string | null>(null);
 
+  // const handleScanNow = async () => {
+  //   setScanning(true);
+  //   setScanError(null);
+  //   try {
+  //     const res = await fetch("/api/fetch-urls/", { method: "POST" });
+  //     const data = await res.json().catch(() => null);
+  //     if (!res.ok || !data?.success) {
+  //       throw new Error(data?.error || "Scan could not be started.");
+  //     }
+  //     // Once the backend actually returns updated last-scan info, refetch
+  //     // /api/user/dashboard (or /api/identity-profile) here to reflect it.
+  //   } catch (err) {
+  //     setScanError(
+  //       err instanceof Error ? err.message : "Scan could not be started.",
+  //     );
+  //   } finally {
+  //     setScanning(false);
+  //   }
+  // };
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // Shared by the mount effect below and handleScanNow, so a completed
+  // scan can refresh the same data without a full page reload.
+  const fetchScanResults = async () => {
+    try {
+      const res = await fetch("/api/scan-results");
+      const data = await res.json().catch(() => null);
+      if (data?.success) setDetectedUrls(data.urls || []);
+    } catch {
+      // leave detectedUrls as-is on a transient failure
+    }
+  };
+
+  const handleScanNow = async () => {
+    setScanning(true);
+    setScanError(null);
+    try {
+      const res = await fetch("/api/fetch-urls", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Scan could not be started.");
+      }
+      await fetchScanResults();
+    } catch (err) {
+      setScanError(
+        err instanceof Error ? err.message : "Scan could not be started.",
+      );
+    } finally {
+      setScanning(false);
+    }
+  };
+  const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
+
+  // add alongside your other useEffect calls
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   fetch("/api/scan-results")
+  //     .then((res) => (res.ok ? res.json() : null))
+  //     .then((data) => {
+  //       if (!cancelled && data?.success) setDetectedUrls(data.urls || []);
+  //     })
+  //     .catch(() => null);
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, []);
+  useEffect(() => {
+    fetchScanResults();
+  }, []);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/user/dashboard")
@@ -215,7 +301,10 @@ export default function DashboardPage() {
     (identityProfile?.usernames?.length ?? 0) > 0 &&
     (identityProfile?.aliases?.length ?? 0) > 0;
   const avatarUrl = user?.image || user?.profileImage;
-  const isVerified = user?.identityVerificationStatus === "APPROVED" || user?.isVerified || false;
+  const isVerified =
+    user?.identityVerificationStatus === "APPROVED" ||
+    user?.isVerified ||
+    false;
 
   const reportRows = recentActivity.map((activity) => {
     const status =
@@ -239,14 +328,21 @@ export default function DashboardPage() {
       <div className="flex items-center gap-3">
         <div className="relative h-[60px] w-[60px] shrink-0 overflow-hidden rounded-full bg-gray-200">
           {avatarUrl ? (
-            <Image src={avatarUrl} alt={user?.username || "user"} fill className="object-cover" />
+            <Image
+              src={avatarUrl}
+              alt={user?.username || "user"}
+              fill
+              className="object-cover"
+            />
           ) : (
             <UserIcon className="h-full w-full p-3 text-gray-400" />
           )}
         </div>
         <div>
           <div className="flex items-center gap-1.5">
-            <h2 className="text-[17px] font-medium text-[#2D2D2D]">{user?.username || "user"}</h2>
+            <h2 className="text-[17px] font-medium text-[#2D2D2D]">
+              {user?.username || "user"}
+            </h2>
             {isVerified && <VerifiedBadge className="h-5 w-5 text-[#14C3CF]" />}
           </div>
           <div
@@ -255,46 +351,81 @@ export default function DashboardPage() {
             }`}
           >
             <Radar className="h-4 w-4" />
-            {hasRequiredIdentityDetails ? "Monitoring Active" : "Monitoring Disabled"}
+            {hasRequiredIdentityDetails
+              ? "Monitoring Active"
+              : "Monitoring Disabled"}
           </div>
           <p className="mt-0.5 text-[13px] text-[#8F98A0]">
-            {stats && stats.level > 0 ? `Level ${stats.level} Scout` : "Unranked"}
+            {stats && stats.level > 0
+              ? `Level ${stats.level} Scout`
+              : "Unranked"}
           </p>
         </div>
       </div>
 
       {hasRequiredIdentityDetails ? (
-        <div className="flex items-center gap-3 rounded-[24px] bg-[#EEFFF2] p-5">
-          <div className="grid flex-1 grid-cols-2">
-            <div>
-              <p className="text-[13px] text-[#8F98A0]">Last scan</p>
-              <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">12 min ago</p>
-              <p className="mt-1 flex items-center gap-1 text-[12px] text-[#1FAE5C]">
-                <CheckCircle2 className="h-3.5 w-3.5 fill-[#1FAE5C] text-[#EEFFF2]" />
-                Completed
-              </p>
+        <div className="flex flex-col gap-4 rounded-[24px] bg-[#EEFFF2] p-5">
+          {/* Upper section: Info columns + Radar graphic */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="grid flex-1 grid-cols-2 gap-4">
+              <div>
+                <p className="text-[13px] text-[#8F98A0]">Last scan</p>
+                <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
+                  12 min ago
+                </p>
+                <p className="mt-1 flex items-center gap-1 text-[12px] text-[#1FAE5C]">
+                  <CheckCircle2 className="h-3.5 w-3.5 fill-[#1FAE5C] text-[#EEFFF2]" />
+                  Completed
+                </p>
+              </div>
+              <div className="border-l border-[#34C759]/25 pl-4">
+                <p className="text-[13px] text-[#8F98A0]">Next scan</p>
+                <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
+                  {schedule.frequencyLabel}
+                </p>
+                <p className="mt-1 flex items-center gap-1 text-[12px] text-[#8F98A0]">
+                  <Clock className="h-3.5 w-3.5" />
+                  {schedule.countdownLabel}
+                </p>
+              </div>
             </div>
-            <div className="border-l border-[#34C759]/25 pl-4">
-              <p className="text-[13px] text-[#8F98A0]">Next  scan</p>
-              <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">{schedule.frequencyLabel}</p>
-              <p className="mt-1 flex items-center gap-1 text-[12px] text-[#8F98A0]">
-                <Clock className="h-3.5 w-3.5" />
-                {schedule.countdownLabel}
-              </p>
+
+            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
+              <Image
+                src="/Sonar_Radar.svg"
+                alt=""
+                aria-hidden="true"
+                fill
+                className="absolute inset-0"
+              />
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-[#34C759]">
+                <ShieldCheck className="h-5 w-5 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="relative flex h-28 w-28 shrink-0 items-center justify-center">
-            <Image
-              src="/Sonar_Radar.svg"
-              alt=""
-              aria-hidden="true"
-              fill
-              className="absolute inset-0"
-            />
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-[#34C759]">
-              <ShieldCheck className="h-6 w-6 text-white" />
-            </div>
+          {/* Optional Action Area */}
+          <div>
+            <button
+              type="button"
+              onClick={handleScanNow}
+              disabled={scanning}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#14C3CF] text-[14px] font-medium text-white disabled:opacity-60"
+            >
+              {scanning ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Scanning…
+                </>
+              ) : (
+                "Scan Now"
+              )}
+            </button>
+            {scanError && (
+              <p className="mt-2 text-center text-[12px] text-[#D14343]">
+                {scanError}
+              </p>
+            )}
           </div>
         </div>
       ) : (
@@ -305,7 +436,8 @@ export default function DashboardPage() {
               Complete Your Identity Profile
             </p>
             <p className="mt-1 text-[12px] text-[#8F98A0]">
-              Add your name, usernames &amp; aliases so we know what to monitor for you.
+              Add your name, usernames &amp; aliases so we know what to monitor
+              for you.
             </p>
             <Link
               href="/identity-profile"
@@ -323,8 +455,12 @@ export default function DashboardPage() {
       {plan === "FREEMIUM" && (
         <div className="flex items-center gap-3 rounded-[20px] bg-[#F5F5F5] p-4">
           <div className="flex-1">
-            <p className="text-[15px] font-semibold text-[#2D2D2D]">Need faster monitoring?</p>
-            <p className="mt-0.5 text-[13px] text-[#8F98A0]">Get premium and unlock pro monitoring</p>
+            <p className="text-[15px] font-semibold text-[#2D2D2D]">
+              Need faster monitoring?
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#8F98A0]">
+              Get premium and unlock pro monitoring
+            </p>
             <Link
               href="/subscription"
               className="mt-3 inline-flex h-10 items-center rounded-full bg-[#14C3CF] px-5 text-[14px] font-medium text-white"
@@ -349,15 +485,19 @@ export default function DashboardPage() {
             <Globe className="h-6 w-6 shrink-0 text-[#5AB8E0]" />
             <span
               className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails ? "text-[#5AB8E0]" : "text-[11px] text-[#8F98A0]"
+                hasRequiredIdentityDetails
+                  ? "text-[#5AB8E0]"
+                  : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.delta : "Monitoring Disabled"}
+              {hasRequiredIdentityDetails
+                ? MOCK_STATS.urlsDetected.delta
+                : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">URLs Detected</p>
           <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails ? MOCK_STATS.urlsDetected.value : "0"}
+            {hasRequiredIdentityDetails ? detectedUrls.length : "0"}
           </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
@@ -365,15 +505,21 @@ export default function DashboardPage() {
             <Crosshair className="h-6 w-6 shrink-0 text-[#E88A3B]" />
             <span
               className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails ? "text-[#E88A3B]" : "text-[11px] text-[#8F98A0]"
+                hasRequiredIdentityDetails
+                  ? "text-[#E88A3B]"
+                  : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.delta : "Monitoring Disabled"}
+              {hasRequiredIdentityDetails
+                ? MOCK_STATS.matchesIncidents.delta
+                : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">Matches / Incidents</p>
           <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.value : "0"}
+            {hasRequiredIdentityDetails
+              ? MOCK_STATS.matchesIncidents.value
+              : "0"}
           </p>
         </div>
         <div className="rounded-2xl border border-[#F0F0F0] p-4">
@@ -381,10 +527,14 @@ export default function DashboardPage() {
             <Flag className="h-6 w-6 shrink-0 text-[#E0577B]" />
             <span
               className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails ? "text-[#D14343]" : "text-[11px] text-[#8F98A0]"
+                hasRequiredIdentityDetails
+                  ? "text-[#D14343]"
+                  : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.delta : "Monitoring Disabled"}
+              {hasRequiredIdentityDetails
+                ? MOCK_STATS.newIncidents.delta
+                : "Monitoring Disabled"}
             </span>
           </div>
           <p className="mt-4 text-[13px] text-[#8F98A0]">New Incidents</p>
@@ -397,13 +547,19 @@ export default function DashboardPage() {
             <BarChart3 className="h-6 w-6 shrink-0 text-[#4C7DF0]" />
             <span
               className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails ? "text-[#4C7DF0]" : "text-[11px] text-[#8F98A0]"
+                hasRequiredIdentityDetails
+                  ? "text-[#4C7DF0]"
+                  : "text-[11px] text-[#8F98A0]"
               }`}
             >
-              {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.deltaLabel : "Monitoring Disabled"}
+              {hasRequiredIdentityDetails
+                ? MOCK_STATS.avgConfidence.deltaLabel
+                : "Monitoring Disabled"}
             </span>
           </div>
-          <p className="mt-4 text-[13px] text-[#8F98A0]">Avg Match Confidence</p>
+          <p className="mt-4 text-[13px] text-[#8F98A0]">
+            Avg Match Confidence
+          </p>
           <p className="text-[22px] font-semibold text-[#2D2D2D]">
             {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.value : "—"}
           </p>
@@ -417,7 +573,9 @@ export default function DashboardPage() {
               type="button"
               onClick={() => setTab("reports")}
               className={`h-9 rounded-full px-4 text-[13px] font-medium transition-all ${
-                tab === "reports" ? "bg-[#14C3CF] text-white" : "bg-[#F3F3F3] text-[#4B4B4B]"
+                tab === "reports"
+                  ? "bg-[#14C3CF] text-white"
+                  : "bg-[#F3F3F3] text-[#4B4B4B]"
               }`}
             >
               Recent Reports
@@ -426,7 +584,9 @@ export default function DashboardPage() {
               type="button"
               onClick={() => setTab("incidents")}
               className={`h-9 rounded-full px-4 text-[13px] font-medium transition-all ${
-                tab === "incidents" ? "bg-[#14C3CF] text-white" : "bg-[#F3F3F3] text-[#4B4B4B]"
+                tab === "incidents"
+                  ? "bg-[#14C3CF] text-white"
+                  : "bg-[#F3F3F3] text-[#4B4B4B]"
               }`}
             >
               Recent Incidents
@@ -441,38 +601,56 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {tab === "incidents"
-            ? MOCK_INCIDENTS.slice(0, 4).map((incident) => (
-                <Link key={incident.id} href={`/incidents/${incident.id}`} className="block">
+          {tab === "incidents" ? (
+            detectedUrls.length > 0 ? (
+              detectedUrls.slice(0, 4).map((url) => (
+                <Link
+                  key={url}
+                  href={`/incidents/${encodeURIComponent(url)}`}
+                  className="block"
+                >
                   <div className="flex items-center gap-3 rounded-2xl bg-[#F5F5F5] px-3.5 py-3">
-                    <PlatformIcon platform={incident.platform} />
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white">
+                      <Image
+                        src={iconForLink(url)}
+                        alt=""
+                        width={22}
+                        height={22}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
-                        {incident.urlLabel}
+                        {url}
                       </p>
                       <p className="mt-0.5 text-[12px] text-[#8F98A0]">
-                        Detected {incident.detectedAgo} • {incident.matchPercent}% match
+                        Pending review
                       </p>
                     </div>
-                    <IncidentStatusPill status={incident.status} />
                     <ChevronRight className="h-4 w-4 shrink-0 text-[#B5BEC4]" />
                   </div>
                 </Link>
               ))
-            : reportRows.length > 0
-              ? reportRows.map((row) => (
-                  <ActivityRow
-                    key={row.key}
-                    iconSrc={row.iconSrc}
-                    title={row.title}
-                    subtitle={row.subtitle}
-                    status={row.status}
-                    href={row.href}
-                  />
-                ))
-              : (
-                <p className="py-6 text-center text-[13px] text-[#8F98A0]">No reports yet</p>
-              )}
+            ) : (
+              <p className="py-6 text-center text-[13px] text-[#8F98A0]">
+                No links detected yet
+              </p>
+            )
+          ) : reportRows.length > 0 ? (
+            reportRows.map((row) => (
+              <ActivityRow
+                key={row.key}
+                iconSrc={row.iconSrc}
+                title={row.title}
+                subtitle={row.subtitle}
+                status={row.status}
+                href={row.href}
+              />
+            ))
+          ) : (
+            <p className="py-6 text-center text-[13px] text-[#8F98A0]">
+              No reports yet
+            </p>
+          )}
         </div>
       </div>
     </div>
