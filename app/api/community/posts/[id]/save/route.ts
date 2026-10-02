@@ -17,7 +17,7 @@ function normalizeIsSaved(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-// See app/api/cloak-watch/posts/[id]/vote/route.ts for why this exists — a
+// See app/api/community/posts/[id]/vote/route.ts for why this exists — a
 // quick save/unsave switch can leave two requests in flight, and serverless
 // gives no ordering guarantee between them.
 function readClientSeq(value: unknown): number {

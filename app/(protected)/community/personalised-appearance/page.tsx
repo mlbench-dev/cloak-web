@@ -37,20 +37,20 @@ export default function PersonalisedAppearancePage() {
           <button type="button" onClick={() => router.back()} className="p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">
             Personalised Appearance
           </h1>
           <div className="w-10" />
         </div>
 
         <div className="px-4 pt-4 pb-2">
-          <div className="flex items-center gap-3 rounded-full bg-[#F3F3F3] px-4 py-3">
-            <Search className="h-5 w-5 text-[#98A0A7]" />
+          <div className="flex h-10 items-center gap-2 rounded-full bg-[#F6F6F6] px-3.5">
+            <Search className="h-[18px] w-[18px] shrink-0 text-[#839297]" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search posts,people,topics..."
-              className="w-full bg-transparent text-[14px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7]"
+              className="w-full bg-transparent text-base text-[#2B2B2B] outline-none placeholder:text-[14px] placeholder:text-[#839297]"
             />
           </div>
         </div>
@@ -70,12 +70,12 @@ export default function PersonalisedAppearancePage() {
             No posts found
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-5">
             {posts.map((item) => (
               <PostCard
                 key={item.id}
                 post={item}
-                onOpenPost={(post) => router.push(`/cloak-watch/post/${post.id}`)}
+                onOpenPost={(post) => router.push(`/community/post/${post.id}`)}
                 onDeleted={(postId) =>
                   setPosts((prev) => prev.filter((post) => post.id !== postId))
                 }

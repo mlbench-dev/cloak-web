@@ -60,7 +60,7 @@ export function safeObjectId(value?: string | null) {
 }
 
 // createIndex is idempotent but still costs a DB round trip per call, and
-// this used to run on every cloak-watch request. Cache the promise so index
+// this used to run on every community request. Cache the promise so index
 // creation only happens once per server process instead of once per request.
 let indexesEnsuredPromise: Promise<void> | null = null;
 

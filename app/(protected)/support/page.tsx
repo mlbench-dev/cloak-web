@@ -54,14 +54,14 @@ export default function SupportPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button type="button" onClick={() => router.back()} className="p-2">
+        <button type="button" onClick={() => router.back()} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Contact Support</h1>
-        <div className="w-10" />
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Contact Support</h1>
+        <div className="-mr-3 w-10" />
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+      <main className="flex-1 min-h-0 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         {status === "loading" ? (
           <div className="flex items-center justify-center py-16">
             <div className="h-10 w-10 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
@@ -72,7 +72,7 @@ export default function SupportPage() {
               <Crown className="h-7 w-7 text-[#14C3CF]" />
             </div>
             <div className="space-y-1.5">
-              <p className="text-[17px] font-semibold text-[#2D2D2D]">
+              <p className="text-[16px] font-semibold text-[#2D2D2D]">
                 Contact Support is a Cloak Pro perk
               </p>
               <p className="mx-auto max-w-[280px] text-[14px] leading-6 text-[#8F98A0]">
@@ -82,7 +82,7 @@ export default function SupportPage() {
             <button
               type="button"
               onClick={() => router.push("/subscription/cloak-pro")}
-              className="mt-2 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-3.5 text-[15px] font-medium text-white"
+              className="mt-2 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
             >
               View Cloak Pro
             </button>
@@ -107,7 +107,7 @@ export default function SupportPage() {
                   className="w-full bg-[#F5F5F5] rounded-2xl px-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 text-base"
                 />
               </div>
-              <div className="mt-2 flex justify-end text-sm text-[#8F98A0]">
+              <div className="mt-2 flex justify-end text-[12px] text-[#8F98A0]">
                 {subject.length}/{MAX_SUPPORT_SUBJECT_LENGTH}
               </div>
             </div>
@@ -126,7 +126,7 @@ export default function SupportPage() {
                   className="w-full bg-[#F5F5F5] rounded-2xl px-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 resize-none text-base"
                 />
               </div>
-              <div className="mt-2 flex justify-end text-sm text-[#8F98A0]">
+              <div className="mt-2 flex justify-end text-[12px] text-[#8F98A0]">
                 {message.length}/{MAX_SUPPORT_MESSAGE_LENGTH}
               </div>
             </div>
@@ -135,7 +135,7 @@ export default function SupportPage() {
               type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="mt-4 flex h-14 w-full items-center justify-center rounded-full bg-[#14C3CF] text-[16px] font-medium text-white disabled:opacity-50"
+              className="mt-4 flex h-11 w-full items-center justify-center rounded-full bg-[#14C3CF] text-[16px] font-medium text-white disabled:opacity-50"
             >
               {isSending ? "Sending..." : "Send Message"}
             </button>

@@ -210,7 +210,7 @@ export default function NewPostPage() {
         formData.append("images", item.file);
       });
 
-      const response = await fetch("/api/cloak-watch/posts", {
+      const response = await fetch("/api/community/posts", {
         method: "POST",
         body: formData,
       });
@@ -229,7 +229,7 @@ export default function NewPostPage() {
       // underneath the post detail page. This way the back button (which
       // uses router.back()) returns straight to the Cloak Watch feed instead
       // of back into the now-stale, already-submitted form.
-      router.replace(`/cloak-watch/post/${data.post.id}`);
+      router.replace(`/community/post/${data.post.id}`);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Unable to post right now",
@@ -260,7 +260,7 @@ export default function NewPostPage() {
         <button type="button" onClick={handleBack} className="p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">New Post</h1>
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">New Post</h1>
         <div className="w-10" />
       </header>
 

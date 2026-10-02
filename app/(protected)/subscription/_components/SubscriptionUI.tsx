@@ -72,7 +72,7 @@ export function SubscriptionHeader() {
       <button onClick={() => router.push("/profile")} className="p-2">
         <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
       </button>
-      <h1 className="text-lg font-semibold text-[#2D2D2D]">Subscription</h1>
+      <h1 className="text-[16px] font-medium text-[#2B2B2B]">Subscription</h1>
       <div className="w-10" />
     </header>
   );
@@ -143,7 +143,7 @@ export function FeatureListCard({
               <Icon className={`h-5 w-5 ${styles.iconColor}`} />
             </div>
             <span
-              className={`flex-1 text-[15px] leading-5 ${styles.featureText}`}
+              className={`flex-1 text-[14px] leading-5 ${styles.featureText}`}
             >
               {feature.label}
             </span>
@@ -172,10 +172,10 @@ export function PlanUpsellCard({
       className="flex w-full items-center gap-3 rounded-[28px] border border-[#EAEAEA] bg-white px-4 py-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.02)]"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-semibold leading-5 text-[#2D2D2D]">
+        <p className="text-[14px] font-semibold leading-5 text-[#2D2D2D]">
           {plan.name}
         </p>
-        <p className="mt-1 text-[15px] font-medium leading-5 text-[#14C3CF]">
+        <p className="mt-1 text-[14px] font-medium leading-5 text-[#14C3CF]">
           {plan.priceLine}
         </p>
         <p className="mt-0.5 text-[12px] leading-4 text-[#B0B5BB]">
@@ -207,7 +207,7 @@ export function BillingCard({
   return (
     <div className="overflow-hidden rounded-[28px] border border-[#EAEAEA] bg-white px-4">
       <div className="flex items-center justify-between border-b border-[#EFEFEF] py-4">
-        <span className="text-[15px] leading-5 text-[#2D2D2D]">
+        <span className="text-[14px] leading-5 text-[#2D2D2D]">
           Payment Method
         </span>
         <span className="inline-flex items-center gap-1.5 text-[16px] font-semibold leading-5 text-black">
@@ -222,11 +222,11 @@ export function BillingCard({
         </span>
       </div>
       <div className="flex items-center justify-between py-4">
-        <span className="text-[15px] leading-5 text-[#2D2D2D]">
+        <span className="text-[14px] leading-5 text-[#2D2D2D]">
           Next Charge:{" "}
           <span className="font-medium text-[#14C3CF]">{price}</span>
         </span>
-        <span className="text-[15px] leading-5 text-[#9CA3AF]">
+        <span className="text-[14px] leading-5 text-[#9CA3AF]">
           {nextChargeDate}
         </span>
       </div>
@@ -249,7 +249,7 @@ export function CancelSubscriptionBlock({
         type="button"
         onClick={onCancel}
         disabled={isCancelling}
-        className="w-full rounded-full border border-[#ECECEC] bg-white px-4 py-4 text-[15px] font-medium text-[#F05B5B] disabled:opacity-60"
+        className="w-full rounded-full border border-[#ECECEC] bg-white px-4 py-2.5 text-[16px] font-medium text-[#F05B5B] disabled:opacity-60"
       >
         {isCancelling ? "Cancelling..." : "Cancel Subscription"}
       </button>
@@ -314,44 +314,44 @@ export function UpgradeModal({
         type="button"
         aria-label="Close modal"
         onClick={onClose}
-        className="absolute inset-0 bg-black/45"
+        className="absolute inset-0 bg-black/40"
       />
-      <div className="relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-[28px] bg-[#F8F8F8] px-4 pb-6 pt-2 font-sf-pro-display shadow-[0_-16px_40px_rgba(15,23,42,0.14)]">
-        <div className="mx-auto mb-8 h-1.5 w-[76px] rounded-full bg-[#9CB2BB]" />
+      <div className="relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5 font-sf-pro-display shadow-[0_-16px_40px_rgba(15,23,42,0.14)]">
+        <div className="mx-auto mb-6 h-1 w-10 rounded-full bg-[#E0E0E0]" />
         <button
           type="button"
           onClick={onClose}
           aria-label="Close modal"
-          className="absolute right-4 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-[#D8D8D8]"
+          className="absolute right-2 top-3.5 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
         <div
-          className={`mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-[14px] ${styles.iconBox}`}
+          className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[14px] ${styles.iconBox}`}
         >
           <Icon className={`h-7 w-7 ${styles.iconColor}`} />
         </div>
-        <h2 className="mx-auto max-w-[290px] text-center text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111827]">
+        <h2 className="mx-auto max-w-[290px] text-center text-[24px] font-medium leading-[30px] text-[#2B2B2B]">
           {title}
         </h2>
-        <p className="mx-auto mt-2 text-center text-[13px] leading-5 text-[#9CA3AF]">
+        <p className="mx-auto mt-2 text-center text-[12px] leading-4 text-[#839297]">
           {plan.zarPriceLine}
         </p>
-        <p className="mb-3 mt-10 text-[14px] font-medium text-[#8F98A0]">
+        <p className="mb-2 mt-6 text-[14px] leading-5 text-[#2B2B2B]">
           What You Will Get
         </p>
         <FeatureListCard features={plan.features} tone={plan.tone} />
         <button
           type="button"
           onClick={onConfirm}
-          className={`mt-7 w-full rounded-full px-4 py-4 text-[15px] font-medium ${styles.button}`}
+          className={`mt-6 h-[45px] w-full rounded-full px-4 text-[14px] ${styles.button}`}
         >
           {ctaLabel}
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="mt-4 w-full rounded-full bg-[#EEEEEE] px-4 py-4 text-[15px] font-medium text-[#9AA3AA]"
+          className="mt-2.5 h-[45px] w-full rounded-full bg-[#F6F6F6] px-4 text-[14px] text-[#839297]"
         >
           Not Now
         </button>
@@ -394,7 +394,7 @@ export function ConfirmDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-[340px] space-y-6 rounded-[32px] bg-white p-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-[20px] font-bold text-[#2D2D2D]">{title}</h3>
+          <h3 className="text-[16px] font-bold text-[#2D2D2D]">{title}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -410,7 +410,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onClose}
             disabled={isConfirming}
-            className="h-14 flex-1 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] disabled:opacity-60"
+            className="h-11 flex-1 rounded-full bg-[#F5F5F5] font-medium text-[#2D2D2D] disabled:opacity-60"
           >
             {cancelLabel}
           </button>
@@ -418,7 +418,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={isConfirming}
-            className={`h-14 flex-1 rounded-full font-semibold text-white disabled:opacity-60 ${
+            className={`h-11 flex-1 rounded-full font-medium text-white disabled:opacity-60 ${
               confirmVariant === "danger" ? "bg-red-500" : "bg-[#14C3CF]"
             }`}
           >

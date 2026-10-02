@@ -35,7 +35,7 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
 
       {/* Sheet */}
       <div
-        className={`absolute bottom-0 left-0 right-0 flex flex-col h-[95dvh] w-full bg-white font-sf-pro-display rounded-t-3xl overflow-hidden shadow-[0_-4px_24px_rgba(0,0,0,0.12)] transition-transform duration-250 ease-out ${
+        className={`absolute bottom-0 left-0 right-0 flex flex-col h-[95dvh] w-full bg-white font-sf-pro-display rounded-t-[30px] overflow-hidden shadow-[0_-4px_24px_rgba(0,0,0,0.12)] transition-transform duration-250 ease-out ${
           mounted ? "translate-y-0" : "translate-y-full"
         }`}
         style={{
@@ -43,33 +43,33 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
           height: "min(95dvh, calc(var(--app-height, 100dvh) * 0.9))",
         }}
       >
-        <div className="flex justify-center pt-3">
-          <div className="w-10 h-1 bg-slate-200 rounded-full" />
+        <div className="flex justify-center pt-2.5">
+          <div className="w-10 h-1 bg-[#E0E0E0] rounded-full" />
     </div>
         <header className="flex items-center p-2 justify-between bg-white z-10">
           <button onClick={handleClose} className="p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">
+          <h1 className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
             How to choose the right photos
           </h1>
           <div className="w-10" />
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="space-y-6">
-            <p className="text-[#8F98A0] text-[15px] leading-relaxed">
+        <div className="flex-1 overflow-y-auto px-4 py-3.5">
+          <div className="space-y-5">
+            <p className="text-[#839297] text-[14px] leading-5">
               Make sure your face is clearly visible in recent, solo photos with
               good lighting. Avoid group shots, heavy filters & inappropriate
               backgrounds.
             </p>
 
-            <div className="space-y-4">
-              <h3 className="font-bold text-[#2D2D2D] text-[16px]">
+            <div className="space-y-2.5">
+              <h3 className="font-medium text-[#2B2B2B] text-[16px] leading-[22px]">
                 Correct way of uploading photos
               </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="relative aspect-[3/4] rounded-[20px] overflow-hidden">
                   <Image
                     src="/images/referenceMedia/image_3.png"
                     alt="Correct 1"
@@ -77,7 +77,7 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
                     className="object-cover"
                   />
                 </div>
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-sm">
+                <div className="relative aspect-[3/4] rounded-[20px] overflow-hidden">
                   <Image
                     src="/images/referenceMedia/image_4.png"
                     alt="Correct 2"
@@ -88,12 +88,12 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
               </div>
             </div>
 
-            <div className="space-y-4 pt-2 pb-8">
-              <h3 className="font-bold text-[#2D2D2D] text-[16px]">
+            <div className="space-y-2.5 pb-8">
+              <h3 className="font-medium text-[#2B2B2B] text-[16px] leading-[22px]">
                 Incorrect way of uploading photos
               </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-sm">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="relative aspect-[3/4] rounded-[20px] overflow-hidden">
                   <Image
                     src="/images/referenceMedia/image_1.png"
                     alt="Incorrect 1"
@@ -101,7 +101,7 @@ export default function InfoScreen({ onClose }: InfoScreenProps) {
                     className="object-cover"
                   />
                 </div>
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-sm">
+                <div className="relative aspect-[3/4] rounded-[20px] overflow-hidden">
                   <Image
                     src="/images/referenceMedia/image_2.png"
                     alt="Incorrect 2"

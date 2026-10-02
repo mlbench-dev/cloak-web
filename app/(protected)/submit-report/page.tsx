@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, X, MessageCircle } from "lucide-react";
+import { Link2, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
@@ -29,26 +29,14 @@ type RecentSearch = {
 
 const platforms = [
   {
-    id: "tiktok",
-    label: "TikTok",
-    icon: (
-      <Image
-        src="/images/social-media/tiktok.svg"
-        alt="TikTok"
-        width={24}
-        height={24}
-      />
-    ),
-  },
-  {
     id: "instagram",
     label: "Instagram",
     icon: (
       <Image
         src="/images/social-media/insta.svg"
         alt="Instagram"
-        width={24}
-        height={24}
+        width={20}
+        height={20}
       />
     ),
   },
@@ -59,8 +47,8 @@ const platforms = [
       <Image
         src="/images/social-media/facebook.svg"
         alt="Facebook"
-        width={24}
-        height={24}
+        width={20}
+        height={20}
       />
     ),
   },
@@ -71,8 +59,20 @@ const platforms = [
       <Image
         src="/images/social-media/twitter.svg"
         alt="Twitter"
-        width={24}
-        height={24}
+        width={20}
+        height={20}
+      />
+    ),
+  },
+  {
+    id: "tiktok",
+    label: "TikTok",
+    icon: (
+      <Image
+        src="/images/social-media/tiktok.svg"
+        alt="TikTok"
+        width={20}
+        height={20}
       />
     ),
   },
@@ -87,7 +87,7 @@ const platforms = [
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="h-6 w-6"
+        className="h-5 w-5"
       >
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
@@ -430,296 +430,214 @@ export default function SubmitReportPage() {
     );
   }
 
+  const renderUser = (user: User) => (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="h-[42px] w-[42px] shrink-0 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+        <img
+          src={
+            user.image || user.profileImage || "/images/placeholder_avatar.png"
+          }
+          alt={user.username || user.name || "User"}
+          className="h-full w-full object-cover"
+        />
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">
+            {user.username || "User"}
+          </p>
+          {user.identityVerificationStatus === "APPROVED" && (
+            <VerifiedBadge className="h-4 w-4 shrink-0 text-[#14C3CF]" />
+          )}
+        </div>
+        <p className="mt-0.5 truncate text-[12px] leading-4 text-[#839297]">
+          {truncateText(user.name || "", 20)}
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full bg-white">
+      <header className="shrink-0 flex items-center justify-between gap-3 bg-white pt-2 pb-1">
+        <div className="min-w-0">
+          <h1 className="text-[24px] font-medium leading-[30px] text-[#2B2B2B]">
+            Submit Report
+          </h1>
+          <p className="mt-1 text-[14px] leading-5 text-[#839297]">
+            Fill in the details below
+          </p>
+        </div>
+        {step === 1 && (
+          <button
+            onClick={() => router.push("/my-reports")}
+            className="h-[30px] shrink-0 rounded-full bg-[#01C3CF] px-[15px] text-[12px] text-white"
+          >
+            My Reports
+          </button>
+        )}
+      </header>
+
       {step === 1 ? (
-        <>
-          <header className="shrink-0 flex items-center justify-between py-4 px-4 bg-white">
-            <div>
-              <h1 className="text-2xl font-bold text-[#2D2D2D]">
-                Submit Report
-              </h1>
-              <p className="text-[#8F98A0] text-[14px] font-medium">
-                Fill in the detail below.
-              </p>
-            </div>
-            <button
-              onClick={() => router.push("/my-reports")}
-              className="px-4 py-2 bg-[#14C3CF] text-white rounded-full text-sm font-medium"
-            >
-              My Reports
-            </button>
-          </header>
+        <div className="-mx-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pt-5 pb-4">
+          <p className="mb-2 text-[14px] leading-5 text-[#2B2B2B]">
+            Target User
+          </p>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
-            <div className="mb-6">
-              <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
-                Target User
-              </p>
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[#839297]" />
+            <input
+              type="text"
+              placeholder="Search target user via username"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-11 bg-[#F6F6F6] rounded-full pl-11 pr-11 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 text-base text-[#2B2B2B] placeholder:text-[14px] placeholder:text-[#839297]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+              >
+                <X className="h-[18px] w-[18px] text-[#839297]" />
+              </button>
+            )}
+          </div>
 
-              {/* Search input */}
-              <div className="relative mb-6">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search target user via username"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-12 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 text-base placeholder:text-[14px] placeholder:text-[#8F98A0]"
-                />
-                {searchQuery && (
+          {/* Recent searches - now below input */}
+          {!searchQuery && (
+            <div className="mt-5">
+              <div className="mb-3.5 flex items-center justify-between">
+                <p className="text-[14px] leading-5 text-[#2B2B2B]">
+                  Recent Searches
+                </p>
+                {recentSearches.length > 0 && (
                   <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-1"
+                    onClick={clearAllRecentSearches}
+                    disabled={isClearingSearches}
+                    className="text-[14px] leading-5 text-[#839297] disabled:opacity-50"
                   >
-                    <X className="h-5 w-5 text-slate-400" />
+                    {isClearingSearches ? "Clearing..." : "Clear All"}
                   </button>
                 )}
               </div>
 
-              {/* Recent searches - now below input */}
-              {!searchQuery && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[#2D2D2D] text-[15px] font-medium">
-                      Recent Searches
-                    </p>
-                    {recentSearches.length > 0 && (
-                      <button
-                        onClick={clearAllRecentSearches}
-                        disabled={isClearingSearches}
-                        className="text-[#8F98A0] text-sm disabled:opacity-50"
-                      >
-                        {isClearingSearches ? "Clearing..." : "Clear All"}
-                      </button>
-                    )}
-                  </div>
-
-                  {recentSearches.length > 0 ? (
-                    <div className="space-y-3">
-                      {recentSearches
-                        .filter((search) => search.targetUser)
-                        .map((search) => (
-                          <div
-                            key={search._id}
-                            onClick={() =>
-                              void handleSelectUser(search.targetUser, false)
-                            }
-                            className="cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                                {search.targetUser?.image ||
-                                search.targetUser?.profileImage ? (
-                                  <img
-                                    src={
-                                      search.targetUser.image ||
-                                      search.targetUser.profileImage
-                                    }
-                                    alt={
-                                      search.targetUser.username ||
-                                      search.targetUser.name ||
-                                      "User"
-                                    }
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                                )}
-                              </div>
-                              <div>
-                                <div className="flex items-center space-x-1">
-                                  <p className="text-[#2D2D2D] font-semibold text-base">
-                                    {search.targetUser.username || "User"}
-                                  </p>
-                                  {search.targetUser
-                                    .identityVerificationStatus ===
-                                    "APPROVED" && (
-                                    <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
-                                  )}
-                                </div>
-                                <p className="text-[#8F98A0] text-sm">
-                                  {truncateText(
-                                    search.targetUser.name || "",
-                                    20,
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={(e) => deleteRecentSearch(search._id, e)}
-                              className="p-2 hover:bg-slate-100 rounded-full"
-                            >
-                              <X className="h-5 w-5 text-slate-400" />
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <p className="text-[#8F98A0] text-sm">
-                        You have no recent searches
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Search results */}
-              {searchQuery.trim().length > 0 && (
-                <div className="space-y-2">
-                  {isSearchingUsers ? (
-                    <div className="flex items-center justify-center py-10">
-                      <div className="h-6 w-6 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
-                    </div>
-                  ) : searchResults.length > 0 ? (
-                    searchResults.map((user) => (
+              {recentSearches.length > 0 ? (
+                <div className="space-y-4">
+                  {recentSearches
+                    .filter((search) => search.targetUser)
+                    .map((search) => (
                       <div
-                        key={user._id}
-                        onClick={() => void handleSelectUser(user, true)}
-                        className="p-4 bg-[#F5F5F5] rounded-2xl cursor-pointer hover:bg-[#EBEBEB] transition-colors flex items-center"
+                        key={search._id}
+                        onClick={() =>
+                          void handleSelectUser(search.targetUser, false)
+                        }
+                        className="cursor-pointer flex items-center justify-between gap-3"
                       >
-                        <div className="flex items-center space-x-3">
-                          <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                            {user.image || user.profileImage ? (
-                              <img
-                                src={user.image || user.profileImage}
-                                alt={user.username || user.name || "User"}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-1">
-                              <p className="text-[#2D2D2D] font-semibold text-base">
-                                {user.username || "User"}
-                              </p>
-                              {user.identityVerificationStatus ===
-                                "APPROVED" && (
-                                <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
-                              )}
-                            </div>
-                            <p className="text-[#8F98A0] text-sm">
-                              {truncateText(user.name || "", 20)}
-                            </p>
-                          </div>
-                        </div>
+                        {renderUser(search.targetUser)}
+                        <button
+                          onClick={(e) => deleteRecentSearch(search._id, e)}
+                          className="shrink-0 py-1 pl-1"
+                        >
+                          <X
+                            className="h-[22px] w-[22px] text-[#839297]"
+                            strokeWidth={1.5}
+                          />
+                        </button>
                       </div>
-                    ))
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <p className="text-[#8F98A0] text-sm">User not found</p>
-                    </div>
-                  )}
+                    ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <p className="text-[#839297] text-[12px]">
+                    You have no recent searches
+                  </p>
                 </div>
               )}
             </div>
-          </div>
-        </>
+          )}
+
+          {/* Search results */}
+          {searchQuery.trim().length > 0 && (
+            <div className="mt-4 space-y-2.5">
+              {isSearchingUsers ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="h-6 w-6 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
+                </div>
+              ) : searchResults.length > 0 ? (
+                searchResults.map((user) => (
+                  <div
+                    key={user._id}
+                    onClick={() => void handleSelectUser(user, true)}
+                    className="flex cursor-pointer items-center rounded-[20px] bg-[#F6F6F6] px-3.5 py-3 transition-colors hover:bg-[#EBEBEB]"
+                  >
+                    {renderUser(user)}
+                  </div>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <p className="text-[#839297] text-[12px]">User not found</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       ) : (
-        <>
-          <header className="shrink-0 flex items-center justify-center py-4 px-4 bg-white">
-            <h1 className="text-2xl font-bold text-[#2D2D2D]">Submit Report</h1>
-          </header>
-
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
-            <p className="text-[#666666] text-lg mb-6">
-              Fill in the details below
-            </p>
-
+        <div className="-mx-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pt-5 pb-4">
+          <div className="flex min-h-full flex-col">
             {/* Selected target user */}
             {selectedUser && (
-              <div className="mb-6">
-                <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
+              <div className="mb-5">
+                <p className="mb-2 text-[14px] leading-5 text-[#2B2B2B]">
                   Target User
                 </p>
-                <div className="p-4 bg-[#F5F5F5] rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                      {selectedUser.image || selectedUser.profileImage ? (
-                        <img
-                          src={selectedUser.image || selectedUser.profileImage}
-                          alt={
-                            selectedUser.username || selectedUser.name || "User"
-                          }
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-1">
-                        <p className="text-[#2D2D2D] font-semibold text-base">
-                          {selectedUser.username || "User"}
-                        </p>
-                        {selectedUser.identityVerificationStatus ===
-                          "APPROVED" && (
-                          <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
-                        )}
-                      </div>
-                      <p className="text-[#8F98A0] text-sm">
-                        {truncateText(selectedUser.name || "", 20)}
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between gap-3 rounded-[20px] bg-[#F6F6F6] px-3.5 py-3">
+                  {renderUser(selectedUser)}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setStep(1);
                     }}
-                    className="p-2 hover:bg-slate-200 rounded-full"
+                    className="-mr-1 shrink-0 p-1"
                   >
-                    <X className="h-5 w-5 text-slate-400" />
+                    <X
+                      className="h-[22px] w-[22px] text-[#839297]"
+                      strokeWidth={1.5}
+                    />
                   </button>
                 </div>
               </div>
             )}
 
             {/* Source Link */}
-            <div className="mb-6">
-              <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
+            <div className="mb-5">
+              <p className="mb-2 text-[14px] leading-5 text-[#2B2B2B]">
                 Source Link
               </p>
-              <div className="relative mb-4">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-5 w-5 text-slate-400 mr-2"
-                  >
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                </div>
+              <div className="relative">
+                <Link2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[#839297]" />
                 <input
                   type="text"
                   placeholder="Paste social media link"
                   value={sourceLink}
                   onChange={(e) => setSourceLink(e.target.value)}
-                  className={`w-full h-14 rounded-2xl px-12 outline-none focus:ring-2 text-base ${
+                  className={`w-full h-11 rounded-full pl-11 pr-4 outline-none focus:ring-2 text-base text-[#2B2B2B] placeholder:text-[14px] placeholder:text-[#839297] ${
                     hasInvalidSourceLink
-                      ? "bg-[#FFF5F5] text-[#2D2D2D] focus:ring-[#FF6B6B]/20"
-                      : "bg-[#F5F5F5] focus:ring-[#14C3CF]/20"
+                      ? "bg-[#FFF5F5] focus:ring-[#FF6B6B]/20"
+                      : "bg-[#F6F6F6] focus:ring-[#14C3CF]/20"
                   }`}
                 />
               </div>
               {hasInvalidSourceLink && (
-                <p className="-mt-1 text-sm text-[#FF6B6B]">
+                <p className="mt-1.5 text-[12px] text-[#FF6B6B]">
                   Please enter a valid link
                 </p>
               )}
               {!hasInvalidSourceLink && validSourceUrl && (
                 <p
-                  className={`-mt-1 text-sm ${
+                  className={`mt-1.5 text-[12px] ${
                     isCheckingLink
-                      ? "text-[#8F98A0]"
+                      ? "text-[#839297]"
                       : isReachableLink
                         ? "text-[#14C3CF]"
                         : "text-[#FF6B6B]"
@@ -737,12 +655,13 @@ export default function SubmitReportPage() {
             </div>
 
             {/* Select Platform */}
-            <div className="mb-6">
-              <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
+            <div className="mb-5">
+              <p className="mb-2 text-[14px] leading-5 text-[#2B2B2B]">
                 Select Platform
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2.5">
                 {platforms.map((p) => {
+                  const isActive = platform === p.id;
                   const isDisabled =
                     isPlatformLocked && detectedPlatform !== p.id;
 
@@ -752,25 +671,20 @@ export default function SubmitReportPage() {
                       type="button"
                       disabled={isDisabled}
                       onClick={() => setPlatform(p.id as Platform)}
-                      className={`flex items-center space-x-2 px-5 py-3 rounded-2xl border-2 transition-all ${
-                        platform === p.id
-                          ? "border-[#14C3CF] bg-[#14C3CF]/10"
-                          : "border-slate-200 bg-[#F5F5F5]"
+                      className={`flex h-10 items-center gap-2 rounded-2xl px-3.5 text-[14px] transition-all ${
+                        isActive
+                          ? "bg-[#E6FEFF] text-[#00C2CE]"
+                          : "bg-[#F6F6F6] text-[#2B2B2B]"
                       } ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
-                      style={{
-                        color: platform === p.id ? "#14C3CF" : "#2D2D2D",
-                      }}
                     >
-                      <div
-                        className={
-                          platform === p.id
-                            ? "text-[#14C3CF]"
-                            : "text-slate-400"
-                        }
+                      <span
+                        className={`shrink-0 ${
+                          isActive ? "text-[#00C2CE]" : "text-slate-400"
+                        }`}
                       >
                         {p.icon}
-                      </div>
-                      <span className="text-sm font-medium">{p.label}</span>
+                      </span>
+                      <span>{p.label}</span>
                     </button>
                   );
                 })}
@@ -778,33 +692,30 @@ export default function SubmitReportPage() {
             </div>
 
             {/* Additional Notes */}
-            <div className="mb-6">
-              <p className="text-[#2D2D2D] text-[15px] font-medium mb-3">
+            <div>
+              <p className="mb-2 text-[14px] leading-5 text-[#2B2B2B]">
                 Additional Notes
               </p>
-              <div className="relative">
-                <MessageCircle className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                <textarea
-                  placeholder="Add notes (optional)"
-                  value={notes}
-                  onChange={(e) =>
-                    setNotes(e.target.value.slice(0, MAX_NOTES_LENGTH))
-                  }
-                  rows={4}
-                  className="w-full bg-[#F5F5F5] rounded-2xl px-12 pr-5 py-4 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 resize-none text-base"
-                />
-              </div>
-              <div className="mt-2 flex justify-end text-sm text-[#8F98A0]">
+              <textarea
+                placeholder="Add notes (optional)"
+                value={notes}
+                onChange={(e) =>
+                  setNotes(e.target.value.slice(0, MAX_NOTES_LENGTH))
+                }
+                className="block h-[120px] w-full resize-none rounded-[20px] bg-[#F6F6F6] px-4 py-3 outline-none focus:ring-2 focus:ring-[#14C3CF]/20 text-base text-[#2B2B2B] placeholder:text-[14px] placeholder:text-[#839297]"
+              />
+              <div className="mt-1.5 flex justify-end text-[12px] text-[#839297]">
                 {notes.length}/{MAX_NOTES_LENGTH}
               </div>
             </div>
 
-            {/* Bottom buttons now in scrollable area */}
-            <div className="flex items-center gap-3 pb-6 w-full">
+            {/* Bottom buttons stay in the scrollable area, pushed to the
+                bottom of the screen when there's room */}
+            <div className="mt-auto flex w-full items-center gap-2.5 pt-7">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="w-[32%] h-14 bg-[#F8F9FA] text-[#8E9AA0] rounded-full font-medium text-base active:scale-[0.98] transition-all"
+                className="h-[45px] w-[117px] shrink-0 rounded-full bg-[#F6F6F6] text-[14px] text-[#839297] active:scale-[0.98] transition-all"
               >
                 Back
               </button>
@@ -820,12 +731,12 @@ export default function SubmitReportPage() {
                   void handleSubmitReport();
                 }}
                 aria-disabled={Boolean(submitRequirementMessage) || loading}
-                className={`flex-1 h-14 rounded-full font-semibold text-base active:scale-[0.98] transition-all flex items-center justify-center ${
+                className={`flex-1 h-[45px] rounded-full text-[14px] active:scale-[0.98] transition-all flex items-center justify-center ${
                   validSourceUrl &&
                   selectedUser &&
                   !isCheckingLink &&
                   isReachableLink === true
-                    ? "bg-[#14C3CF] text-white shadow-sm"
+                    ? "bg-[#01C3CF] text-white"
                     : "bg-[#839297] text-[#FFFFFF] cursor-not-allowed"
                 }`}
               >
@@ -837,7 +748,7 @@ export default function SubmitReportPage() {
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

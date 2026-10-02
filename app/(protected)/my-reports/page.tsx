@@ -129,15 +129,15 @@ export default function MyReportsPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.push("/profile")} className="p-2">
+        <button onClick={() => router.push("/profile")} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">My Reports</h1>
-        <div className="w-10" />
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">My Reports</h1>
+        <div className="-mr-3 w-10" />
       </header>
 
       {/* Status filters */}
-      <div className="shrink-0 bg-white px-4 py-3">
+      <div className="shrink-0 bg-white py-3">
         <div className="flex flex-nowrap gap-1.5">
           {statusFilters.map((filter) => (
             <button
@@ -153,20 +153,20 @@ export default function MyReportsPage() {
             </button>
           ))}
         </div>
-        <p className="mt-3 text-sm text-[#8F98A0]">
+        <p className="mt-3 text-[12px] text-[#8F98A0]">
           Showing {getStatusCount(activeFilter)}{" "}
           {getStatusCount(activeFilter) === 1 ? "result" : "results"}
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+      <div className="flex-1 min-h-0 overflow-y-auto py-4">
         {loading ? (
           <div className="flex items-center justify-center pt-10">
             <div className="h-8 w-8 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
           </div>
         ) : filteredReports.length === 0 ? (
           <div className="flex flex-col items-center justify-center pt-20 text-center">
-            <p className="text-[#8F98A0] text-base">No reports yet</p>
+            <p className="text-[#8F98A0] text-[12px]">No reports yet</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -178,19 +178,19 @@ export default function MyReportsPage() {
               >
                 <div className="flex items-center space-x-3">
                   <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                    {report.user.image || report.user.profileImage ? (
-                      <img
-                        src={report.user.image || report.user.profileImage}
-                        alt={report.user.username || report.user.name || "User"}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-6 w-6 bg-slate-400 rounded-full" />
-                    )}
+                    <img
+                      src={
+                        report.user.image ||
+                        report.user.profileImage ||
+                        "/images/placeholder_avatar.png"
+                      }
+                      alt={report.user.username || report.user.name || "User"}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                   <div>
                     <div className="flex items-center gap-1">
-                      <p className="text-[#2D2D2D] font-semibold text-base">
+                      <p className="text-[#2D2D2D] font-medium text-[16px]">
                         {report.user.username}
                       </p>
                       {report.user.identityVerificationStatus ===
@@ -198,7 +198,7 @@ export default function MyReportsPage() {
                         <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                       )}
                     </div>
-                    <p className="text-[#8F98A0] text-sm">
+                    <p className="text-[#8F98A0] text-[12px]">
                       {truncateText(
                         report.user.name || report.user.username || "",
                         30,
@@ -207,7 +207,7 @@ export default function MyReportsPage() {
                   </div>
                 </div>
                 <p
-                  className="text-sm font-medium"
+                  className="text-[12px] font-medium"
                   style={{ color: getStatusPresentation(report.status).color }}
                 >
                   {getStatusPresentation(report.status).label}

@@ -15,6 +15,7 @@ type AlertItem = {
   title: string;
   description: string;
   time: string;
+  group: string;
   filter: Exclude<AlertFilter, "All">;
   avatarType: "image" | "crown" | "info";
   avatarUrl?: string;
@@ -25,18 +26,31 @@ type AlertItem = {
 
 const filters: AlertFilter[] = ["All", "Community", "Rewards", "System"];
 
-function formatTimeAgo(dateString: string) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+// Alerts are grouped under a day heading, so each row only needs the time
+// of day.
+function formatTime(dateString: string) {
+  return new Date(dateString).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-  if (diffDays > 0) return `${diffDays}d ago`;
-  if (diffHours > 0) return `${diffHours}h ago`;
-  if (diffMinutes > 0) return `${diffMinutes}m ago`;
-  return "Just now";
+// "Today" / "Yesterday" / "12 August 2026"
+function formatGroupLabel(dateString: string) {
+  const date = new Date(dateString);
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round(
+    (startOfDay(new Date()) - startOfDay(date)) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function AlertAvatar({
@@ -46,11 +60,13 @@ function AlertAvatar({
   avatarType: AlertItem["avatarType"];
   avatarUrl?: string;
 }) {
-  if (avatarType === "image" && avatarUrl) {
+  if (avatarType === "image") {
     return (
       <div
-        className="h-10 w-10 shrink-0 rounded-full bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${avatarUrl})` }}
+        className="h-9 w-9 shrink-0 rounded-full bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `url(${avatarUrl || "/images/placeholder_avatar.png"})`,
+        }}
         aria-hidden="true"
       />
     );
@@ -58,15 +74,15 @@ function AlertAvatar({
 
   if (avatarType === "crown") {
     return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#15C3CF] text-white">
-        <Crown className="h-6 w-6" strokeWidth={1.8} />
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#01C3CF] to-[#03B3C0] text-white">
+        <Crown className="h-5 w-5" strokeWidth={1.5} />
       </div>
     );
   }
 
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E6E6E6] text-[#98A0A7]">
-      <Info className="h-6 w-6" strokeWidth={1.8} />
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E8E8E8] text-[#839297]">
+      <Info className="h-[18px] w-[18px]" strokeWidth={1.5} />
     </div>
   );
 }
@@ -82,7 +98,7 @@ function AlertBadge({
 
   return (
     <span
-      className={`inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-normal ${
+      className={`inline-flex h-4 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-normal ${
         tone === "green" ? "bg-[#19C48A] text-white" : "bg-[#1FC8D5] text-white"
       }`}
     >
@@ -96,20 +112,20 @@ function AlertCardContent({ item }: { item: AlertItem }) {
     <>
       <AlertAvatar avatarType={item.avatarType} avatarUrl={item.avatarUrl} />
 
-      <div className="min-w-0 flex-1 pt-0.5">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5 text-[#2D2D2D]">
+            <p className="min-w-0 flex-1 truncate text-[12px] font-medium leading-4 text-[#2B2B2B]">
               {item.title}
             </p>
             <AlertBadge label={item.badgeLabel} tone={item.badgeTone} />
           </div>
-          <span className="shrink-0 whitespace-nowrap text-[12px] font-medium text-[#98A0A7]">
+          <span className="shrink-0 whitespace-nowrap text-[12px] leading-4 text-[#8A8A8C]">
             {item.time}
           </span>
         </div>
 
-        <p className="mt-1 text-[12px] leading-5 text-[#98A0A7]">
+        <p className="mt-[7px] text-[12px] leading-4 text-[#839297]">
           {item.description}
         </p>
       </div>
@@ -117,20 +133,20 @@ function AlertCardContent({ item }: { item: AlertItem }) {
   );
 }
 
-function AlertCard({ item }: { item: AlertItem }) {
+// One row inside a day's card; rows are separated by the card's dividers.
+function AlertRow({ item }: { item: AlertItem }) {
+  const rowClass = "flex min-h-[62px] items-center gap-3.5 py-[11px]";
+
   if (item.href) {
     return (
-      <Link
-        href={item.href}
-        className="flex items-start gap-3 rounded-[20px] bg-[#F2F2F2] px-4 py-3.5 active:bg-[#EAEAEA]"
-      >
+      <Link href={item.href} className={`${rowClass} active:opacity-70`}>
         <AlertCardContent item={item} />
       </Link>
     );
   }
 
   return (
-    <article className="flex items-start gap-3 rounded-[20px] bg-[#F2F2F2] px-4 py-3.5">
+    <article className={rowClass}>
       <AlertCardContent item={item} />
     </article>
   );
@@ -141,7 +157,8 @@ function toAlertItem(item: ApiAlertItem): AlertItem {
     id: item.id,
     title: item.title,
     description: item.description,
-    time: formatTimeAgo(item.createdAt),
+    time: formatTime(item.createdAt),
+    group: formatGroupLabel(item.createdAt),
     filter: item.filter,
     avatarType: item.avatarType,
     avatarUrl: item.avatarUrl,
@@ -221,21 +238,24 @@ export default function AlertsPage() {
     markAllViewed();
   }, [markAllViewed]);
 
+  // Alerts arrive newest-first, so the groups come out in the same order.
+  const groups = Array.from(new Set(items.map((item) => item.group)));
+
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
-      <header className="flex items-center justify-between px-4 pb-4 bg-white z-10">
+      <header className="flex items-center justify-between pb-5 bg-white z-10">
         <div className="w-10" />
-        <h1 className="flex-1 text-center text-lg font-semibold text-[#2D2D2D]">
+        <h1 className="flex-1 text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
           Alerts
         </h1>
         <div className="w-10" />
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-white no-scrollbar">
-        <div className="w-full space-y-5 px-1 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <section className="pt-1">
+        <div className="w-full pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+          <section>
             <div className="overflow-x-auto no-scrollbar">
-              <div className="flex w-max min-w-full flex-nowrap items-center justify-between gap-1 min-[412px]:gap-3 min-[430px]:gap-4">
+              <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
                 {filters.map((filter) => {
                   const isActive = activeFilter === filter;
 
@@ -244,10 +264,10 @@ export default function AlertsPage() {
                       key={filter}
                       type="button"
                       onClick={() => setActiveFilter(filter)}
-                      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-medium transition-all min-[375px]:px-3.5 min-[390px]:px-4 ${
+                      className={`h-[30px] min-w-[68px] shrink-0 whitespace-nowrap rounded-full px-2.5 text-[14px] transition-all ${
                         isActive
-                          ? "bg-[#15C3CF] text-white shadow-[0_8px_18px_rgba(21,195,207,0.18)]"
-                          : "bg-[#F3F3F3] text-[#4B4B4B]"
+                          ? "bg-[#01C3CF] text-white"
+                          : "bg-[#F6F6F6] text-[#2B2B2B]"
                       }`}
                     >
                       {filter}
@@ -258,17 +278,30 @@ export default function AlertsPage() {
             </div>
           </section>
 
-          <section className="space-y-3.5">
+          <section>
             {loading ? (
               <div className="flex items-center justify-center py-10">
                 <div className="h-10 w-10 rounded-full border-4 border-[#15C3CF]/20 border-t-[#15C3CF] animate-spin" />
               </div>
             ) : items.length === 0 ? (
-              <div className="py-10 text-center text-[13px] text-[#98A0A7]">
+              <div className="py-10 text-center text-[12px] text-[#98A0A7]">
                 No alerts yet
               </div>
             ) : (
-              items.map((item) => <AlertCard key={item.id} item={item} />)
+              groups.map((group) => (
+                <div key={group} className="mt-3.5">
+                  <p className="mb-2 text-[14px] leading-5 text-[#839297]">
+                    {group}
+                  </p>
+                  <div className="divide-y divide-[#E7E7E7] rounded-[20px] bg-[#F6F6F6] px-3.5 py-px">
+                    {items
+                      .filter((item) => item.group === group)
+                      .map((item) => (
+                        <AlertRow key={item.id} item={item} />
+                      ))}
+                  </div>
+                </div>
+              ))
             )}
           </section>
         </div>

@@ -34,9 +34,9 @@ export default function ProtectedLayout({
     pathname === "/subscription" ||
     pathname.startsWith("/subscription/") ||
     pathname === "/verification" ||
-    pathname === "/cloak-watch/personalised-appearance" ||
-    pathname.startsWith("/cloak-watch/new-post") ||
-    pathname.startsWith("/cloak-watch/post/");
+    pathname === "/community/personalised-appearance" ||
+    pathname.startsWith("/community/new-post") ||
+    pathname.startsWith("/community/post/");
 
   useEffect(() => {
     if (status === "unauthenticated") {

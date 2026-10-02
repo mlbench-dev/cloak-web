@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   BarChart3,
   CheckCircle2,
   ChevronRight,
@@ -14,16 +16,13 @@ import {
   Globe,
   Radar,
   ShieldCheck,
+  TrendingUp,
   User as UserIcon,
 } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
-import { detectPlatform } from "@/lib/platform";
+import ScrapingProgress from "./_components/ScrapingProgress";
+import { DetectiveIcon } from "@/public/svgIcons";
 import type { PlanCode } from "@/models/Subscription";
-// import {
-//   IncidentStatusPill,
-//   PlatformIcon,
-// } from "../incidents/_components/IncidentUI";
-// import { MOCK_INCIDENTS } from "../incidents/_lib/incidents";
 
 // --- Types matching the real /api/user/dashboard payload (unchanged from
 // before this redesign — only the achievements/XP-bar/old-3-stat UI that
@@ -49,45 +48,10 @@ interface IdentityProfileSummary {
   aliases: string[];
 }
 
-interface DashboardRecentActivity {
-  _id: string;
-  platform: string;
-  sourceLink: string;
-  reportedByUser: {
-    username: string;
-    name?: string;
-    image?: string;
-    profileImage?: string;
-  };
-  status: string;
-  createdAt: string;
-}
-
 // --- Mock monitoring data ---------------------------------------------
 // This dashboard isn't wired to a real scanning pipeline yet — there's no
 // CV<->MERN discovery contract to call (see the Phase 2.0 plan). Numbers
-// below match the Figma reference exactly for visual QA. The "Recent
-// Reports" tab below IS real data (reused from the existing
-// /api/user/dashboard endpoint); only monitoring stats + incidents are mock.
-
-// Incident types/mock data now live in ../incidents/_lib/incidents.ts,
-// shared with the Incidents list/detail pages so this preview never drifts
-// out of sync with the full list.
-
-const PLATFORM_ICON: Record<string, string> = {
-  instagram: "/images/social-media/insta.svg",
-  tiktok: "/images/social-media/tiktok.svg",
-  twitter: "/images/social-media/twitter.svg",
-  facebook: "/images/social-media/facebook.svg",
-  other: "/images/social-media/globe.svg",
-};
-
-// Derives the icon straight from the report's actual URL (same detection
-// used at submission time in app/api/reports/route.ts) rather than trusting
-// a possibly-stale stored platform field.
-function iconForLink(link: string): string {
-  return PLATFORM_ICON[detectPlatform(link)] || PLATFORM_ICON.other;
-}
+// below match the Figma reference exactly for visual QA.
 
 const MOCK_STATS = {
   urlsDetected: { value: "1,284", delta: "+124 this week" },
@@ -108,100 +72,63 @@ const SCAN_SCHEDULE: Record<
   CLOAK_PRO: { frequencyLabel: "Daily", countdownLabel: "In 5h 26m" },
 };
 
-function StatusPill({ status }: { status: string }) {
-  const isPositive =
-    status === "New" || status === "Verified" || status === "Approved";
-  const isNegative = status === "Rejected";
-  const tone = isNegative
-    ? "bg-[#FFEDED] text-[#D14343]"
-    : isPositive
-      ? "bg-[#E4F9EE] text-[#1FAE5C]"
-      : "bg-[#FFEDED] text-[#D14343]";
-  return (
-    <span
-      className={`inline-flex h-6 items-center rounded-full px-3 text-[12px] font-medium ${tone}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function ActivityRow({
-  iconSrc,
-  title,
-  subtitle,
-  status,
-  href,
+function StatCard({
+  bgClassName,
+  circleClassName,
+  iconColorClassName,
+  Icon,
+  label,
+  value,
+  trendLabel,
+  trendColorClassName,
+  showTrendIcon,
 }: {
-  iconSrc: string;
-  title: string;
-  subtitle: string;
-  status: string;
-  href?: string;
+  bgClassName: string;
+  circleClassName: string;
+  iconColorClassName: string;
+  Icon: typeof Globe;
+  label: string;
+  value: string | number;
+  trendLabel: string;
+  trendColorClassName: string;
+  showTrendIcon: boolean;
 }) {
-  const content = (
-    <div className="flex items-center gap-3 rounded-2xl bg-[#F5F5F5] px-3.5 py-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white">
-        <Image src={iconSrc} alt="" width={22} height={22} />
+  return (
+    <div className={`rounded-[20px] px-2.5 pb-3.5 pt-2.5 ${bgClassName}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] leading-4 text-[#839297]">{label}</p>
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${circleClassName}`}
+        >
+          <Icon className={`h-4 w-4 ${iconColorClassName}`} />
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
-          {title}
+      <div className="mt-[18px] flex items-end justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
+        <p
+          className={`flex items-center gap-0.5 text-[10px] font-medium leading-6 whitespace-nowrap ${trendColorClassName}`}
+        >
+          {showTrendIcon && <TrendingUp className="h-6 w-6 shrink-0" />}
+          {trendLabel}
         </p>
-        <p className="mt-0.5 text-[12px] text-[#8F98A0]">{subtitle}</p>
+        <p className="text-[20px] font-medium leading-6 text-[#2B2B2B]">{value}</p>
       </div>
-      <StatusPill status={status} />
-      <ChevronRight className="h-4 w-4 shrink-0 text-[#B5BEC4]" />
     </div>
-  );
-
-  return href ? (
-    // `Link` renders an <a>, which is inline by default — without `block`
-    // it and its siblings can end up flowing together instead of each
-    // fully claiming their own row, which is what was collapsing the
-    // space-y-3 gap between these cards.
-    <Link href={href} className="block">
-      {content}
-    </Link>
-  ) : (
-    <div>{content}</div>
   );
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentActivity, setRecentActivity] = useState<
-    DashboardRecentActivity[]
-  >([]);
   const [identityProfile, setIdentityProfile] =
     useState<IdentityProfileSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"reports" | "incidents">("incidents");
-  // const [scanning, setScanning] = useState(false);
-  // const [scanError, setScanError] = useState<string | null>(null);
-
-  // const handleScanNow = async () => {
-  //   setScanning(true);
-  //   setScanError(null);
-  //   try {
-  //     const res = await fetch("/api/fetch-urls/", { method: "POST" });
-  //     const data = await res.json().catch(() => null);
-  //     if (!res.ok || !data?.success) {
-  //       throw new Error(data?.error || "Scan could not be started.");
-  //     }
-  //     // Once the backend actually returns updated last-scan info, refetch
-  //     // /api/user/dashboard (or /api/identity-profile) here to reflect it.
-  //   } catch (err) {
-  //     setScanError(
-  //       err instanceof Error ? err.message : "Scan could not be started.",
-  //     );
-  //   } finally {
-  //     setScanning(false);
-  //   }
-  // };
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  // Full-screen "Scraping Posts" takeover — shown for the real Scan Now
+  // action (not replayed for every already-discovered link the way it used
+  // to be under Cloak Watch's per-link pages).
+  const [showScrapingOverlay, setShowScrapingOverlay] = useState(false);
 
   // Shared by the mount effect below and handleScanNow, so a completed
   // scan can refresh the same data without a full page reload.
@@ -218,6 +145,7 @@ export default function DashboardPage() {
   const handleScanNow = async () => {
     setScanning(true);
     setScanError(null);
+    setShowScrapingOverlay(true);
     try {
       const res = await fetch("/api/fetch-urls", { method: "POST" });
       const data = await res.json().catch(() => null);
@@ -229,25 +157,43 @@ export default function DashboardPage() {
       setScanError(
         err instanceof Error ? err.message : "Scan could not be started.",
       );
+      // No point leaving the overlay up over an error state it doesn't
+      // know how to show — the existing inline scanError message below
+      // the button already covers that.
+      setShowScrapingOverlay(false);
     } finally {
       setScanning(false);
     }
   };
   const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
 
-  // add alongside your other useEffect calls
-  // useEffect(() => {
-  //   let cancelled = false;
-  //   fetch("/api/scan-results")
-  //     .then((res) => (res.ok ? res.json() : null))
-  //     .then((data) => {
-  //       if (!cancelled && data?.success) setDetectedUrls(data.urls || []);
-  //     })
-  //     .catch(() => null);
-  //   return () => {
-  //     cancelled = true;
-  //   };
-  // }, []);
+  // Swipeable scan-status/upsell carousel — tracks which slide is centered
+  // so the dot indicator can reflect it (native CSS scroll-snap, no carousel
+  // library needed for just two slides).
+  const scanCarouselRef = useRef<HTMLDivElement>(null);
+  const [activeScanSlide, setActiveScanSlide] = useState(0);
+  const handleScanCarouselScroll = () => {
+    const el = scanCarouselRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setActiveScanSlide(Math.round(el.scrollLeft / el.clientWidth));
+  };
+
+  // Auto-advance the carousel every 3s (Freemium only — paid plans show a
+  // single card). Keyed on activeScanSlide so a manual swipe restarts the
+  // wait, and on identityProfile because the carousel only mounts once the
+  // profile has loaded.
+  const isFreemiumPlan = (user?.plan || "FREEMIUM") === "FREEMIUM";
+  useEffect(() => {
+    if (loading || !isFreemiumPlan) return;
+    const timeout = setTimeout(() => {
+      const el = scanCarouselRef.current;
+      if (!el || el.clientWidth === 0) return;
+      const next = (activeScanSlide + 1) % el.children.length;
+      el.scrollTo({ left: next * el.clientWidth, behavior: "smooth" });
+    }, 6000);
+    return () => clearTimeout(timeout);
+  }, [loading, isFreemiumPlan, activeScanSlide, identityProfile]);
+
   useEffect(() => {
     fetchScanResults();
   }, []);
@@ -259,7 +205,6 @@ export default function DashboardPage() {
         if (cancelled || !data?.success) return;
         setUser(data.user);
         setStats(data.stats);
-        setRecentActivity(data.recentActivity || []);
       })
       .catch(() => null)
       .finally(() => {
@@ -300,33 +245,30 @@ export default function DashboardPage() {
     !!identityProfile?.fullName?.trim() &&
     (identityProfile?.usernames?.length ?? 0) > 0 &&
     (identityProfile?.aliases?.length ?? 0) > 0;
-  const avatarUrl = user?.image || user?.profileImage;
+  // Placeholder only once the user has loaded and is known to have no image.
+  const avatarUrl = user
+    ? user.image || user.profileImage || "/images/placeholder_avatar.png"
+    : undefined;
   const isVerified =
     user?.identityVerificationStatus === "APPROVED" ||
     user?.isVerified ||
     false;
 
-  const reportRows = recentActivity.map((activity) => {
-    const status =
-      activity.status === "VERIFIED" || activity.status === "APPROVED"
-        ? "Verified"
-        : activity.status === "FALSE_POSITIVE" || activity.status === "REJECTED"
-          ? "Rejected"
-          : "Pending";
-    return {
-      key: activity._id,
-      iconSrc: iconForLink(activity.sourceLink),
-      title: activity.sourceLink,
-      subtitle: `Reported by @${activity.reportedByUser?.username || "user"}`,
-      status,
-      href: `/reports/${activity._id}`,
-    };
-  });
-
   return (
-    <div className="space-y-6 pb-2">
-      <div className="flex items-center gap-3">
-        <div className="relative h-[60px] w-[60px] shrink-0 overflow-hidden rounded-full bg-gray-200">
+    <>
+      {showScrapingOverlay && (
+        <ScrapingProgress
+          isComplete={!scanning}
+          onBack={() => setShowScrapingOverlay(false)}
+          onOk={() => router.push("/cloak-watch")}
+        />
+      )}
+      <div className="space-y-4 pb-2">
+      {/* Username block is absolutely centered on the screen (not just in
+          the space between the avatar and the Scout label, which have
+          different widths) — matches the reference. */}
+      <div className="relative flex min-h-10 items-start justify-between">
+        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200">
           {avatarUrl ? (
             <Image
               src={avatarUrl}
@@ -335,324 +277,326 @@ export default function DashboardPage() {
               className="object-cover"
             />
           ) : (
-            <UserIcon className="h-full w-full p-3 text-gray-400" />
+            <UserIcon className="h-full w-full p-1.5 text-gray-400" />
           )}
         </div>
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h2 className="text-[17px] font-medium text-[#2D2D2D]">
+        <div className="absolute left-1/2 top-0 max-w-[56%] -translate-x-1/2 text-center">
+          <div className="flex items-center justify-center gap-1.5">
+            <h2 className="truncate text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
               {user?.username || "user"}
             </h2>
-            {isVerified && <VerifiedBadge className="h-5 w-5 text-[#14C3CF]" />}
+            {isVerified && <VerifiedBadge className="h-3 w-3 shrink-0 text-[#33C757]" />}
           </div>
           <div
-            className={`mt-0.5 flex items-center gap-1 text-[13px] font-medium ${
-              hasRequiredIdentityDetails ? "text-[#19C48A]" : "text-[#8F98A0]"
+            className={`mt-px flex items-center justify-center gap-1 text-[13px] leading-[18px] ${
+              hasRequiredIdentityDetails ? "text-[#0FB87F]" : "text-[#839297]"
             }`}
           >
-            <Radar className="h-4 w-4" />
-            {hasRequiredIdentityDetails
-              ? "Monitoring Active"
-              : "Monitoring Disabled"}
+            <Radar className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {hasRequiredIdentityDetails
+                ? "Monitoring Active"
+                : "Monitoring Disabled"}
+            </span>
           </div>
-          <p className="mt-0.5 text-[13px] text-[#8F98A0]">
-            {stats && stats.level > 0
-              ? `Level ${stats.level} Scout`
-              : "Unranked"}
-          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 pt-0.5 text-[12px] leading-4 text-[#839297]">
+          <DetectiveIcon className="h-3.5 w-3.5" />
+          {stats && stats.level > 0 ? `Level ${stats.level}` : "Scout"}
         </div>
       </div>
 
       {hasRequiredIdentityDetails ? (
-        <div className="flex flex-col gap-4 rounded-[24px] bg-[#EEFFF2] p-5">
-          {/* Upper section: Info columns + Radar graphic */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="grid flex-1 grid-cols-2 gap-4">
-              <div>
-                <p className="text-[13px] text-[#8F98A0]">Last scan</p>
-                <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
-                  12 min ago
-                </p>
-                <p className="mt-1 flex items-center gap-1 text-[12px] text-[#1FAE5C]">
-                  <CheckCircle2 className="h-3.5 w-3.5 fill-[#1FAE5C] text-[#EEFFF2]" />
-                  Completed
-                </p>
-              </div>
-              <div className="border-l border-[#34C759]/25 pl-4">
-                <p className="text-[13px] text-[#8F98A0]">Next scan</p>
-                <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
-                  {schedule.frequencyLabel}
-                </p>
-                <p className="mt-1 flex items-center gap-1 text-[12px] text-[#8F98A0]">
-                  <Clock className="h-3.5 w-3.5" />
-                  {schedule.countdownLabel}
-                </p>
-              </div>
-            </div>
-
-            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
-              <Image
-                src="/Sonar_Radar.svg"
-                alt=""
-                aria-hidden="true"
-                fill
-                className="absolute inset-0"
+        <div
+          className={`rounded-3xl bg-gradient-to-r from-[#02C4D0] to-[#21DBE7] px-1 pb-1 ${
+            plan === "FREEMIUM" ? "pt-3" : "pt-1"
+          }`}
+        >
+          {plan === "FREEMIUM" && (
+            <div className="mb-3 flex h-1.5 items-center justify-center gap-1">
+              <span
+                className={`h-1.5 rounded-full transition-all ${
+                  activeScanSlide === 0 ? "w-3 bg-white" : "w-1.5 bg-white/50"
+                }`}
               />
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-[#34C759]">
-                <ShieldCheck className="h-5 w-5 text-white" />
+              <span
+                className={`h-1.5 rounded-full transition-all ${
+                  activeScanSlide === 1 ? "w-3 bg-white" : "w-1.5 bg-white/50"
+                }`}
+              />
+            </div>
+          )}
+
+          <div
+            ref={scanCarouselRef}
+            onScroll={plan === "FREEMIUM" ? handleScanCarouselScroll : undefined}
+            className={
+              plan === "FREEMIUM"
+                ? "flex items-stretch snap-x snap-mandatory overflow-x-auto no-scrollbar"
+                : "flex items-stretch"
+            }
+          >
+            {/* No extra wrapper div around this card on purpose — a plain
+                flex item stretches to match its tallest sibling automatically
+                (align-items: stretch is the default). Putting `h-full` on a
+                wrapper *around* this card instead relied on percentage-height
+                resolving through an auto-height ancestor, which is exactly
+                the kind of circular case browsers don't reliably stretch —
+                that's why the two slides ended up different heights even
+                with h-full applied. Making the visible card itself the flex
+                item sidesteps that entirely. */}
+            <div
+              className={`flex w-full flex-col justify-between gap-3 rounded-[20px] bg-white p-3.5 ${
+                plan === "FREEMIUM" ? "shrink-0 snap-center snap-always" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center">
+                  <div className="min-w-0">
+                    <p className="text-[12px] leading-4 text-[#A7ADB2]">Last scan</p>
+                    <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">12 min ago</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 fill-[#33C757] text-white" />
+                      Completed
+                    </p>
+                  </div>
+                  <div className="mx-2.5 h-[53px] w-px shrink-0 bg-[#F4F4F4]" />
+                  <div className="min-w-0">
+                    <p className="text-[12px] leading-4 text-[#A7ADB2]">Next scheduled scan</p>
+                    <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">
+                      {schedule.frequencyLabel}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      {schedule.countdownLabel}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="relative flex h-[72px] w-[72px] shrink-0 items-center justify-center">
+                  <Image
+                    src="/Sonar_Radar.svg"
+                    alt=""
+                    aria-hidden="true"
+                    fill
+                    className="absolute inset-0"
+                  />
+                  <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#34C759]">
+                    <ShieldCheck className="h-[18px] w-[18px] text-white" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleScanNow}
+                  disabled={scanning}
+                  className="flex h-7 min-w-[89px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
+                >
+                  {scanning ? (
+                    <>
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                      Scanning…
+                    </>
+                  ) : (
+                    "Scan"
+                  )}
+                </button>
+                {scanError && (
+                  <p className="mt-2 text-center text-[12px] text-[#D14343]">
+                    {scanError}
+                  </p>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* Optional Action Area */}
-          <div>
-            <button
-              type="button"
-              onClick={handleScanNow}
-              disabled={scanning}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#14C3CF] text-[14px] font-medium text-white disabled:opacity-60"
-            >
-              {scanning ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                  Scanning…
-                </>
-              ) : (
-                "Scan Now"
-              )}
-            </button>
-            {scanError && (
-              <p className="mt-2 text-center text-[12px] text-[#D14343]">
-                {scanError}
-              </p>
+            {plan === "FREEMIUM" && (
+              <div className="flex w-full shrink-0 snap-center snap-always items-center gap-3 rounded-[20px] bg-white p-3.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+                    Need faster monitoring?
+                  </p>
+                  <p className="text-[12px] leading-4 text-[#839297]">
+                    Get premium and unlock pro monitoring
+                  </p>
+                  <Link
+                    href="/subscription"
+                    className="mt-3 inline-flex h-[30px] min-w-[89px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
+                  >
+                    Subscribe
+                  </Link>
+                </div>
+                <Image
+                  src="/subscription.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 shrink-0"
+                />
+              </div>
             )}
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-3 rounded-[24px] bg-[#E8FEFF] p-5">
-          <div className="flex-1">
-            <p className="text-[13px] text-[#8F98A0]">Monitoring Paused</p>
-            <p className="mt-1 text-[16px] font-semibold text-[#2D2D2D]">
-              Complete Your Identity Profile
-            </p>
-            <p className="mt-1 text-[12px] text-[#8F98A0]">
-              Add your name, usernames &amp; aliases so we know what to monitor
-              for you.
-            </p>
-            <Link
-              href="/identity-profile"
-              className="mt-3 inline-flex h-10 items-center rounded-full bg-[#14C3CF] px-5 text-[14px] font-medium text-white"
-            >
-              Complete Profile
-            </Link>
+        <>
+          <div className="flex items-center gap-3 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] leading-4 text-[#839297]">Monitoring Paused</p>
+              <p className="mt-0.5 text-[14px] font-medium leading-5 text-[#2B2B2B]">
+                Complete Your Identity Profile
+              </p>
+              <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
+                Add your name, usernames &amp; aliases so we know what to
+                monitor for you.
+              </p>
+              <Link
+                href="/identity-profile"
+                className="mt-3 inline-flex h-[30px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
+              >
+                Complete Profile
+              </Link>
+            </div>
+            <div className="relative flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#00C3D0]">
+              <Fingerprint className="h-5 w-5 text-white" />
+            </div>
           </div>
-          <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#14C3CF]">
-            <Fingerprint className="h-8 w-8 text-white" />
-          </div>
-        </div>
-      )}
 
-      {plan === "FREEMIUM" && (
-        <div className="flex items-center gap-3 rounded-[20px] bg-[#F5F5F5] p-4">
-          <div className="flex-1">
-            <p className="text-[15px] font-semibold text-[#2D2D2D]">
-              Need faster monitoring?
-            </p>
-            <p className="mt-0.5 text-[13px] text-[#8F98A0]">
-              Get premium and unlock pro monitoring
-            </p>
-            <Link
-              href="/subscription"
-              className="mt-3 inline-flex h-10 items-center rounded-full bg-[#14C3CF] px-5 text-[14px] font-medium text-white"
-            >
-              Subscribe
-            </Link>
-          </div>
-          <Image
-            src="/subscription.svg"
-            alt=""
-            aria-hidden="true"
-            width={74}
-            height={74}
-            className="h-[74px] w-[74px] shrink-0"
-          />
-        </div>
+          {plan === "FREEMIUM" && (
+            <div className="flex items-center gap-3 rounded-[20px] bg-[#F5F5F7] p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+                  Need faster monitoring?
+                </p>
+                <p className="text-[12px] leading-4 text-[#839297]">
+                  Get premium and unlock pro monitoring
+                </p>
+                <Link
+                  href="/subscription"
+                  className="mt-3 inline-flex h-[30px] min-w-[89px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
+                >
+                  Subscribe
+                </Link>
+              </div>
+              <Image
+                src="/subscription.svg"
+                alt=""
+                aria-hidden="true"
+                width={74}
+                height={74}
+                className="h-[74px] w-[74px] shrink-0"
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
-            <Globe className="h-6 w-6 shrink-0 text-[#5AB8E0]" />
-            <span
-              className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails
-                  ? "text-[#5AB8E0]"
-                  : "text-[11px] text-[#8F98A0]"
-              }`}
-            >
-              {hasRequiredIdentityDetails
-                ? MOCK_STATS.urlsDetected.delta
-                : "Monitoring Disabled"}
-            </span>
-          </div>
-          <p className="mt-4 text-[13px] text-[#8F98A0]">URLs Detected</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails ? detectedUrls.length : "0"}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
-            <Crosshair className="h-6 w-6 shrink-0 text-[#E88A3B]" />
-            <span
-              className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails
-                  ? "text-[#E88A3B]"
-                  : "text-[11px] text-[#8F98A0]"
-              }`}
-            >
-              {hasRequiredIdentityDetails
-                ? MOCK_STATS.matchesIncidents.delta
-                : "Monitoring Disabled"}
-            </span>
-          </div>
-          <p className="mt-4 text-[13px] text-[#8F98A0]">Matches / Incidents</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails
-              ? MOCK_STATS.matchesIncidents.value
-              : "0"}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
-            <Flag className="h-6 w-6 shrink-0 text-[#E0577B]" />
-            <span
-              className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails
-                  ? "text-[#D14343]"
-                  : "text-[11px] text-[#8F98A0]"
-              }`}
-            >
-              {hasRequiredIdentityDetails
-                ? MOCK_STATS.newIncidents.delta
-                : "Monitoring Disabled"}
-            </span>
-          </div>
-          <p className="mt-4 text-[13px] text-[#8F98A0]">New Incidents</p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.value : "0"}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[#F0F0F0] p-4">
-          <div className="flex items-center justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
-            <BarChart3 className="h-6 w-6 shrink-0 text-[#4C7DF0]" />
-            <span
-              className={`text-[12px] font-medium whitespace-nowrap ${
-                hasRequiredIdentityDetails
-                  ? "text-[#4C7DF0]"
-                  : "text-[11px] text-[#8F98A0]"
-              }`}
-            >
-              {hasRequiredIdentityDetails
-                ? MOCK_STATS.avgConfidence.deltaLabel
-                : "Monitoring Disabled"}
-            </span>
-          </div>
-          <p className="mt-4 text-[13px] text-[#8F98A0]">
-            Avg Match Confidence
-          </p>
-          <p className="text-[22px] font-semibold text-[#2D2D2D]">
-            {hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.value : "—"}
-          </p>
-        </div>
+        <StatCard
+          bgClassName="bg-[#E9F9F6]"
+          circleClassName="bg-[#D4EFE8]"
+          iconColorClassName="text-[#209066]"
+          Icon={Globe}
+          label="URLs Detected"
+          value={hasRequiredIdentityDetails ? detectedUrls.length : "0"}
+          trendLabel={
+            hasRequiredIdentityDetails
+              ? MOCK_STATS.urlsDetected.delta
+              : "Monitoring Disabled"
+          }
+          trendColorClassName={
+            hasRequiredIdentityDetails ? "text-[#209066]" : "text-[#839297]"
+          }
+          showTrendIcon={hasRequiredIdentityDetails}
+        />
+        <StatCard
+          bgClassName="bg-[#FFF1E6]"
+          circleClassName="bg-[#FFE6D0]"
+          iconColorClassName="text-[#FE8D27]"
+          Icon={Crosshair}
+          label="Matches"
+          value={hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.value : "0"}
+          trendLabel={
+            hasRequiredIdentityDetails
+              ? MOCK_STATS.matchesIncidents.delta
+              : "Monitoring Disabled"
+          }
+          trendColorClassName={
+            hasRequiredIdentityDetails ? "text-[#FE8D27]" : "text-[#839297]"
+          }
+          showTrendIcon={hasRequiredIdentityDetails}
+        />
+        <StatCard
+          bgClassName="bg-[#FFF0F3]"
+          circleClassName="bg-[#FFD7E0]"
+          iconColorClassName="text-[#F30131]"
+          Icon={Flag}
+          label="New Incidents"
+          value={hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.value : "0"}
+          trendLabel={
+            hasRequiredIdentityDetails
+              ? MOCK_STATS.newIncidents.delta
+              : "Monitoring Disabled"
+          }
+          trendColorClassName={
+            hasRequiredIdentityDetails ? "text-[#F30131]" : "text-[#839297]"
+          }
+          showTrendIcon={hasRequiredIdentityDetails}
+        />
+        <StatCard
+          bgClassName="bg-[#ECF2FE]"
+          circleClassName="bg-[#D5E5FF]"
+          iconColorClassName="text-[#0A63FB]"
+          Icon={BarChart3}
+          label="AVG Match Conf"
+          value={hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.value : "—"}
+          trendLabel={
+            hasRequiredIdentityDetails
+              ? MOCK_STATS.avgConfidence.deltaLabel
+              : "Monitoring Disabled"
+          }
+          trendColorClassName={
+            hasRequiredIdentityDetails ? "text-[#0A63FB]" : "text-[#839297]"
+          }
+          showTrendIcon={hasRequiredIdentityDetails}
+        />
       </div>
 
       <div>
-        <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTab("reports")}
-              className={`h-9 rounded-full px-4 text-[13px] font-medium transition-all ${
-                tab === "reports"
-                  ? "bg-[#14C3CF] text-white"
-                  : "bg-[#F3F3F3] text-[#4B4B4B]"
-              }`}
-            >
-              Recent Reports
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("incidents")}
-              className={`h-9 rounded-full px-4 text-[13px] font-medium transition-all ${
-                tab === "incidents"
-                  ? "bg-[#14C3CF] text-white"
-                  : "bg-[#F3F3F3] text-[#4B4B4B]"
-              }`}
-            >
-              Recent Incidents
-            </button>
-          </div>
-          <Link
-            href={tab === "reports" ? "/reports" : "/incidents"}
-            className="text-[13px] font-medium text-[#14C3CF]"
-          >
-            View All
+        <p className="mb-2.5 text-[16px] font-medium leading-[22px] text-[#2B2B2B]">Your Activity</p>
+        <div className="space-y-3">
+          <Link href="/reports" className="block">
+            <div className="flex h-[60px] items-center gap-3 rounded-2xl bg-[#F5F5F7] px-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
+                <AlertTriangle className="h-4 w-4 text-[#F30131]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[16px] leading-[22px] text-[#2B2B2B]">Reports</p>
+                <p className="truncate text-[12px] leading-4 text-[#839297]">
+                  Reports from other users
+                </p>
+              </div>
+              <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
+            </div>
+          </Link>
+          <Link href="/cloak-watch" className="block">
+            <div className="flex h-[60px] items-center gap-3 rounded-2xl bg-[#F5F5F7] px-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
+                <Radar className="h-4 w-4 text-[#33C757]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[16px] leading-[22px] text-[#2B2B2B]">Cloak Watch</p>
+                <p className="truncate text-[12px] leading-4 text-[#839297]">
+                  Matches found by Cloak
+                </p>
+              </div>
+              <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
+            </div>
           </Link>
         </div>
-
-        <div className="mt-4 space-y-3">
-          {tab === "incidents" ? (
-            detectedUrls.length > 0 ? (
-              detectedUrls.slice(0, 4).map((url) => (
-                <Link
-                  key={url}
-                  href={`/incidents/${encodeURIComponent(url)}`}
-                  className="block"
-                >
-                  <div className="flex items-center gap-3 rounded-2xl bg-[#F5F5F5] px-3.5 py-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white">
-                      <Image
-                        src={iconForLink(url)}
-                        alt=""
-                        width={22}
-                        height={22}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
-                        {url}
-                      </p>
-                      <p className="mt-0.5 text-[12px] text-[#8F98A0]">
-                        Pending review
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[#B5BEC4]" />
-                  </div>
-                </Link>
-              ))
-            ) : (
-              <p className="py-6 text-center text-[13px] text-[#8F98A0]">
-                No links detected yet
-              </p>
-            )
-          ) : reportRows.length > 0 ? (
-            reportRows.map((row) => (
-              <ActivityRow
-                key={row.key}
-                iconSrc={row.iconSrc}
-                title={row.title}
-                subtitle={row.subtitle}
-                status={row.status}
-                href={row.href}
-              />
-            ))
-          ) : (
-            <p className="py-6 text-center text-[13px] text-[#8F98A0]">
-              No reports yet
-            </p>
-          )}
-        </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -29,14 +29,14 @@ function BottomSheet({
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/20"
+      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/40"
       onClick={onClose}
     >
       <div
-        className={`w-full rounded-t-[30px] bg-white pt-2 ${panelClassName}`}
+        className={`w-full rounded-t-[30px] bg-white pt-2.5 font-sf-pro-display ${panelClassName}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto h-2 w-16 rounded-full bg-[#DADADA]" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
         {children}
       </div>
     </div>
@@ -571,20 +571,20 @@ export default function IdentityVerificationStep({
                 open={showDocTypeMenu}
                 onClose={() => setShowDocTypeMenu(false)}
               >
-                <div className="relative flex items-center justify-center px-6 pt-2">
-                  <p className="text-[16px] font-semibold text-[#2D2D2D]">
+                <div className="relative mt-3.5 flex items-center justify-center px-4">
+                  <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
                     Select document type to verify
                   </p>
                   <button
                     type="button"
                     onClick={() => setShowDocTypeMenu(false)}
-                    className="absolute right-3 top-1 flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+                    className="absolute -top-[7px] right-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
-                <div className="mt-3 border-t border-[#E8E8E8]" />
-                <div className="px-4 py-2 pb-6">
+                <div className="mx-4 mt-3.5 border-t border-[#E7E7E7]" />
+                <div className="px-4 pt-1.5 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
                   {DOCUMENT_TYPES.map((type) => (
                     <button
                       key={type}
@@ -593,7 +593,7 @@ export default function IdentityVerificationStep({
                         setShowDocTypeMenu(false);
                         setFieldError(null);
                       }}
-                      className="w-full rounded-xl px-4 py-3 text-left text-[15px] break-words hover:bg-[#F5F5F5] transition-colors"
+                      className="w-full rounded-2xl px-3 py-3 text-left text-[14px] leading-5 text-[#2B2B2B] break-words hover:bg-[#F6F6F6] transition-colors"
                     >
                       {type}
                     </button>
@@ -752,16 +752,16 @@ export default function IdentityVerificationStep({
         open={showGuidelineSheet}
         onClose={() => setShowGuidelineSheet(false)}
       >
-        <div className="flex justify-end px-4 pt-1">
+        <div className="flex justify-end px-2 pt-1">
           <button
             type="button"
             onClick={() => setShowGuidelineSheet(false)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="px-6 pb-8">
+        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
           <div className="relative w-full aspect-[4/3]">
             <Image
               src="/images/ID-card/Id-card.png"
