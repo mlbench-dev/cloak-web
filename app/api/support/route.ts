@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     // Contact Support is a Cloak Pro perk — enforced here regardless of
     // what the client-side menu gate already did, same pattern as
-    // canPostCommunity in POST /api/cloak-watch/posts.
+    // canPostCommunity in POST /api/community/posts.
     const plan = (user.plan as PlanCode) || "FREEMIUM";
     if (!PLAN_LIMITS[plan].canContactSupport) {
       return NextResponse.json(

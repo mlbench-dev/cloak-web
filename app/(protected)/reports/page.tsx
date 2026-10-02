@@ -149,15 +149,15 @@ export default function ReportsPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.push("/dashboard")} className="p-2">
+        <button onClick={() => router.push("/dashboard")} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Reports</h1>
-        <div className="w-10" />
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Reports</h1>
+        <div className="-mr-3 w-10" />
       </header>
 
       {/* Filters */}
-      <div className="border-b border-slate-100 px-4 py-3">
+      <div className="border-b border-slate-100 py-3">
         <div className="flex flex-nowrap gap-1.5">
           {[
             { key: "all", label: "All" },
@@ -186,13 +186,13 @@ export default function ReportsPage() {
             </button>
           ))}
         </div>
-        <p className="mt-3 text-sm text-[#8F98A0]">
+        <p className="mt-3 text-[12px] text-[#8F98A0]">
           Showing {getFilterCount(activeFilter)}{" "}
           {getFilterCount(activeFilter) === 1 ? "result" : "results"}
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="h-10 w-10 border-4 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin"></div>

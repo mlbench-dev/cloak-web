@@ -2,9 +2,10 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ExternalLink, FileSearch } from "lucide-react";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import { AiMatchIcon } from "@/public/svgIcons";
 
 type ReportUser = {
   username: string;
@@ -56,6 +57,9 @@ function isAiConfidencePending(status?: AiConfidenceStatus) {
     status === undefined
   );
 }
+
+// Same limit the submit-report form enforces on input.
+const MAX_NOTES_LENGTH = 300;
 
 type ResultModalStatus = "VERIFIED" | "FALSE_POSITIVE" | null;
 
@@ -119,11 +123,11 @@ function DecisionResultModal({
     "/images/placeholder_avatar.png";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/20">
-      <div className="w-full rounded-t-[30px] bg-white px-8 pb-8 pt-3">
-        <div className="mx-auto h-2 w-16 rounded-full bg-[#DADADA]" />
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40">
+      <div className="w-full rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5">
+        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
 
-        <div className="pt-8">
+        <div className="pt-6">
           {isApproved ? (
             <svg
               width="34"
@@ -167,16 +171,16 @@ function DecisionResultModal({
             </svg>
           )}
 
-          <h3 className="mt-6 text-[28px] font-semibold leading-tight text-[#2D2D2D]">
+          <h3 className="mt-4 text-[24px] font-medium leading-[30px] text-[#2B2B2B]">
             {isApproved ? "Report Verified" : "Report Not Verified"}
           </h3>
 
           {isApproved ? (
             <>
-              <p className="mt-4 text-[18px] leading-8 text-[#8D979E]">
+              <p className="mt-2 text-[14px] leading-5 text-[#839297]">
                 +{pointsAwarded} points have been awarded to reporter
               </p>
-              <div className="mt-4 flex items-center gap-2">
+              <div className="mt-3.5 flex items-center gap-2">
                 <div className="relative h-8 w-8 overflow-hidden rounded-full bg-slate-200">
                   <Image
                     src={avatarUrl}
@@ -186,33 +190,33 @@ function DecisionResultModal({
                     unoptimized
                   />
                 </div>
-                <p className="text-[20px] font-medium text-[#2D2D2D]">
+                <p className="text-[16px] leading-[22px] text-[#2B2B2B]">
                   {reporter?.username || "reporter"}
                 </p>
                 {reporter?.identityVerificationStatus === "APPROVED" && (
-                  <VerifiedBadge className="h-7 w-7 text-[#17C2CE]" />
+                  <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                 )}
               </div>
-              <p className="mt-6 max-w-[520px] text-[18px] leading-8 text-[#8D979E]">
+              <p className="mt-3.5 text-[14px] leading-5 text-[#839297]">
                 We&apos;re happy that platform is helping you stay protected
               </p>
             </>
           ) : (
             <>
-              <p className="mt-4 text-[18px] leading-8 text-[#8D979E]">
+              <p className="mt-2 text-[14px] leading-5 text-[#839297]">
                 This report was marked as a false positive
               </p>
-              <p className="mt-1 max-w-[560px] text-[18px] leading-8 text-[#8D979E]">
+              <p className="mt-1 text-[14px] leading-5 text-[#839297]">
                 Keep contributing, every report improves the system
               </p>
             </>
           )}
 
-          <div className="mt-8 flex justify-end">
+          <div className="mt-6">
             <button
               type="button"
               onClick={onDone}
-              className="h-14 min-w-[230px] rounded-full bg-[#17C2CE] px-10 text-[18px] font-medium text-white"
+              className="h-[45px] w-full rounded-full bg-[#01C3CF] text-[14px] text-white"
             >
               Done
             </button>
@@ -236,7 +240,14 @@ export default function ReportDetailsPage({
   const [report, setReport] = useState<ReportDetails | null>(null);
   const [preview, setPreview] = useState<LinkPreview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewReachable, setPreviewReachable] = useState(false);
+  // The source link the current preview state belongs to — until it matches
+  // the report's link, the preview is still loading.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Scraped og:image URLs (Instagram/Facebook CDNs especially) often expire
+  // or refuse hotlinking, so the <img> itself can fail after a "successful"
+  // preview lookup.
+  const [previewImageFailed, setPreviewImageFailed] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [resultModal, setResultModal] = useState<ResultModalStatus>(null);
   const [pointsAwarded, setPointsAwarded] = useState(0);
@@ -244,7 +255,6 @@ export default function ReportDetailsPage({
     initialViewType,
   );
   const fetchedReportKeyRef = useRef<string | null>(null);
-  const fetchedPreviewUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const key = `${id}:${initialViewType}`;
@@ -301,29 +311,28 @@ export default function ReportDetailsPage({
   }, [id, initialViewType, report?.aiConfidenceStatus]);
 
   useEffect(() => {
-    if (!report?.sourceLink) {
-      return;
-    }
+    const sourceLink = report?.sourceLink;
+    if (!sourceLink) return;
 
-    if (fetchedPreviewUrlRef.current === report.sourceLink) return;
-    fetchedPreviewUrlRef.current = report.sourceLink;
-
-    const fetchPreview = async () => {
-      setPreviewLoading(true);
-      try {
-        const params = new URLSearchParams({ url: report.sourceLink });
-        const response = await fetch(`/api/link-preview?${params.toString()}`);
-        const data = await response.json().catch(() => null);
+    let cancelled = false;
+    fetch(`/api/link-preview?url=${encodeURIComponent(sourceLink)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
         setPreview(data?.success ? (data.preview ?? null) : null);
-      } catch (error) {
+        setPreviewReachable(Boolean(data?.success && data.reachable));
+        setPreviewImageFailed(false);
+      })
+      .catch((error) => {
         console.error("Failed to fetch preview:", error);
-        setPreview(null);
-      } finally {
-        setPreviewLoading(false);
-      }
-    };
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewUrl(sourceLink);
+      });
 
-    void fetchPreview();
+    return () => {
+      cancelled = true;
+    };
   }, [report?.sourceLink]);
 
   const updateStatus = async (status: string) => {
@@ -389,7 +398,10 @@ export default function ReportDetailsPage({
         }
       })()
     : "";
-  const activePreview = report?.sourceLink ? preview : null;
+  const previewLoading =
+    Boolean(report?.sourceLink) && previewUrl !== report?.sourceLink;
+  const previewImage =
+    !previewLoading && !previewImageFailed ? preview?.image : null;
 
   const statusMeta = getStatusMeta(report?.status || "");
 
@@ -422,30 +434,30 @@ export default function ReportDetailsPage({
           onClick={() =>
             router.push(reportViewType === "sent" ? "/my-reports" : "/reports")
           }
-          className="p-2"
+          className="-ml-3 p-2"
         >
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Report Details</h1>
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Report Details</h1>
         <div className="min-w-[78px] pr-2 text-right">
           {statusMeta.label ? (
-            <p className={`text-[15px] font-medium ${statusMeta.className}`}>
+            <p className={`text-[14px] font-medium ${statusMeta.className}`}>
               {statusMeta.label}
             </p>
           ) : (
-            <div className="w-10" />
+            <div className="-mr-3 w-10" />
           )}
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-5">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-3.5">
         <section>
-          <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
+          <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
             {personSectionTitle}
           </p>
-          <div className="flex items-center justify-between rounded-[22px] bg-[#F1F1F1] px-4 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-slate-200">
+          <div className="flex items-center justify-between gap-3 rounded-[20px] bg-[#F6F6F6] px-[13px] py-2.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-slate-200">
                 <Image
                   src={getAvatarUrl(detailUser)}
                   alt={detailUser.username}
@@ -456,153 +468,168 @@ export default function ReportDetailsPage({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate text-[15px] font-medium text-[#2D2D2D]">
+                  <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">
                     {detailUser.username}
                   </p>
                   {detailUser.identityVerificationStatus === "APPROVED" && (
-                    <VerifiedBadge className="h-[18px] w-[18px] shrink-0 text-[#14C3CF]" />
+                    <VerifiedBadge className="h-4 w-4 shrink-0 text-[#14C3CF]" />
                   )}
                 </div>
-                <p className="truncate text-[14px] text-[#99A0A7]">
+                <p className="mt-0.5 truncate text-[12px] leading-4 text-[#839297]">
                   {detailUser.name?.trim() || detailUser.username}
                 </p>
               </div>
             </div>
 
-            <div className="shrink-0 text-right">
-              <p className="text-[15px] font-medium text-[#14C3CF]">
-                Level {detailUser.level ?? 1}
-              </p>
-              <p className="mt-1 text-[14px] text-[#99A0A7]">
-                {formatTimeAgo(report.createdAt)}
-              </p>
-            </div>
+            {/* Level + age only make sense for the reporter, not the target */}
+            {reportViewType !== "sent" && (
+              <div className="shrink-0 text-right">
+                <p className="text-[12px] leading-4 text-[#01C3CF]">
+                  Level {detailUser.level ?? 1}
+                </p>
+                <p className="mt-1.5 text-[12px] leading-4 text-[#839297]">
+                  {formatTimeAgo(report.createdAt)}
+                </p>
+              </div>
+            )}
           </div>
         </section>
 
-        <section className="mt-6">
-          <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
+        <section className="mt-3.5">
+          <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
             Source Link
           </p>
           <a
             href={report.sourceLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 rounded-[22px] bg-[#F1F1F1] px-4 py-4"
+            className="flex h-10 items-center gap-2 rounded-full bg-[#F6F6F6] pl-3.5 pr-2.5"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl ">
-              <Image
-                src={getPlatformImage(report.platform)}
-                alt={report.platform}
-                width={24}
-                height={24}
-                className="object-contain"
-              />
-            </div>
-            <p className="min-w-0 flex-1 truncate text-[15px] text-[#2D2D2D]">
+            <Image
+              src={getPlatformImage(report.platform)}
+              alt={report.platform}
+              width={18}
+              height={18}
+              className="shrink-0 object-contain"
+            />
+            <p className="min-w-0 flex-1 truncate text-[14px] leading-5 text-[#2B2B2B]">
               {sourceLinkLabel}
             </p>
-            <ExternalLink className="h-5 w-5 shrink-0 text-[#98A0A7]" />
+            <ExternalLink
+              className="h-[18px] w-[18px] shrink-0 text-[#839297]"
+              strokeWidth={1.5}
+            />
           </a>
         </section>
 
-        <section className="mt-6">
-          <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
+        <section className="mt-3.5">
+          <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
             Additional Notes
           </p>
-          <div className="rounded-[22px] bg-[#F1F1F1] px-4 py-4">
-            <p className="text-[15px] text-[#2D2D2D] break-words">
-              {report.notes?.trim() || "No additional notes provided."}
+          {/* Grows with the text; notes are capped at MAX_NOTES_LENGTH */}
+          <div className="rounded-[20px] bg-[#F6F6F6] px-3 py-2.5">
+            <p className="text-[14px] leading-5 text-[#2B2B2B] break-words">
+              {report.notes?.trim().slice(0, MAX_NOTES_LENGTH) ||
+                "No additional notes provided."}
             </p>
           </div>
         </section>
 
-        <section className="mt-8">
-          <p className="mb-3 text-[16px] font-medium text-[#2D2D2D]">
+        <section className="mt-6">
+          <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
             Link Preview
           </p>
-          <div className="overflow-hidden rounded-[28px] bg-[#F1F1F1]">
+          <div className="overflow-hidden rounded-[20px] bg-[#F6F6F6]">
             {previewLoading ? (
-              <div className="flex h-[260px] items-center justify-center">
+              <div className="flex h-[206px] items-center justify-center">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
               </div>
-            ) : activePreview?.image ? (
-              <div className="flex h-[260px] items-center justify-center bg-[#F1F1F1]">
+            ) : previewImage ? (
+              <div className="flex h-[206px] items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={activePreview.image}
-                  alt={activePreview.title || "Link preview"}
+                  src={previewImage}
+                  alt={preview?.title || "Link preview"}
+                  referrerPolicy="no-referrer"
+                  onError={() => setPreviewImageFailed(true)}
                   className="h-full w-auto max-w-full object-contain"
                 />
               </div>
             ) : (
-              <div className="flex h-[260px] flex-col items-center justify-center px-6 text-center">
-                <FileSearch className="h-10 w-10 text-[#B0B5BB]" />
-                <p className="mt-4 text-[16px] font-medium text-[#2D2D2D]">
-                  {activePreview?.title || "Preview unavailable"}
-                </p>
-                <p className="mt-2 text-[14px] text-[#99A0A7]">
-                  {activePreview?.domain || sourceLinkLabel}
+              <div className="flex h-[206px] flex-col items-center justify-center gap-3 px-6 text-center">
+                <Image
+                  src={getPlatformImage(report.platform)}
+                  alt={report.platform}
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                />
+                <p className="text-[12px] leading-4 text-[#839297]">
+                  {previewReachable
+                    ? "No preview image available for this link."
+                    : "This link couldn't be reached — it may require login or have been taken down."}
                 </p>
               </div>
             )}
           </div>
         </section>
 
-        <section className="mt-5 rounded-[24px] bg-[#DFF4F6] px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileSearch className="h-5 w-5 text-[#12BCC8]" />
-              <p className="text-[16px] font-semibold text-[#2D2D2D]">
+        {/* Shown for both received reports and the user's own (sent) ones */}
+        <section className="mt-[18px] rounded-[20px] bg-[#E6FEFF] px-2.5 pb-4 pt-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <AiMatchIcon className="h-[18px] w-[18px] shrink-0 text-[#01C3CF]" />
+              <p className="truncate text-[14px] font-medium leading-5 text-[#2B2B2B]">
                 AI Confidence Match
               </p>
             </div>
             {isAiConfidencePending(report.aiConfidenceStatus) ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#12C6D1]/30 border-t-[#12C6D1]" />
+              <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#01C3CF]/30 border-t-[#01C3CF]" />
             ) : (
-              <p className="text-[16px] font-semibold text-[#2D2D2D]">
+              <p className="shrink-0 text-[14px] font-medium leading-5 text-[#2B2B2B]">
                 {report.aiConfidence}%
               </p>
             )}
           </div>
-          {isAiConfidencePending(report.aiConfidenceStatus) ? (
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-[#12C6D1]/60" />
-            </div>
-          ) : (
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#D5D7D8]">
+          <div className="mt-3 h-[7px] overflow-hidden rounded-full bg-[#E0E0E0]">
+            {isAiConfidencePending(report.aiConfidenceStatus) ? (
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-[#01C3CF]/60" />
+            ) : (
               <div
-                className="h-full rounded-full bg-[#12C6D1]"
+                className="h-full rounded-full bg-[#01C3CF]"
                 style={{ width: `${report.aiConfidence}%` }}
               />
-            </div>
-          )}
+            )}
+          </div>
           {report.aiConfidenceMessage ? (
-            <p className="mt-3 text-[13px] leading-6 text-[#4F5A61] break-words">
+            <p className="mt-2.5 text-[12px] leading-[18px] text-[#839297] break-words">
               {report.aiConfidenceMessage}
             </p>
           ) : null}
         </section>
+      </div>
 
-        {report.status === "PENDING" && reportViewType !== "sent" && (
-          <div className="mt-8 flex items-center gap-4">
+      {/* Pinned outside the scroll area so the decision is always visible */}
+      {report.status === "PENDING" && reportViewType !== "sent" && (
+        <div className="shrink-0 bg-white pt-3">
+          <div className="flex items-center gap-[11px]">
             <button
               onClick={() => void updateStatus("FALSE_POSITIVE")}
               disabled={updating}
-              className="h-14 flex-1 rounded-full bg-[#ECECEC] px-4 text-[15px] font-medium text-[#9AA0A6] disabled:opacity-60"
+              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#F6F6F6] px-3 text-[14px] text-[#839297] transition-all active:scale-[0.98] disabled:opacity-60"
             >
               Mark as False Positive
             </button>
             <button
               onClick={() => void updateStatus("VERIFIED")}
               disabled={updating}
-              className="h-14 flex-1 rounded-full bg-[#16C1CD] px-4 text-[15px] font-medium text-white disabled:opacity-60"
+              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#01C3CF] px-3 text-[14px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
             >
               {updating ? "Saving..." : "Verify Report"}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <DecisionResultModal
         open={Boolean(resultModal)}

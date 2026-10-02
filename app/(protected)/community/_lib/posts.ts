@@ -54,7 +54,7 @@ export async function fetchPosts(
     params.set("scope", options.scope);
   }
   const res = await fetch(
-    `/api/cloak-watch/posts${params.toString() ? `?${params.toString()}` : ""}`,
+    `/api/community/posts${params.toString() ? `?${params.toString()}` : ""}`,
     { cache: "no-store" },
   );
   const json = await res.json().catch(() => null);
@@ -65,7 +65,7 @@ export async function fetchPosts(
 }
 
 export async function fetchPostById(id: string) {
-  const res = await fetch(`/api/cloak-watch/posts/${id}`, {
+  const res = await fetch(`/api/community/posts/${id}`, {
     cache: "no-store",
   });
   const json = await res.json().catch(() => null);

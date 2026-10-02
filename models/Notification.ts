@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 
 export type NotificationType =
   | "REPORT_RECEIVED" // someone filed a report against you
-  | "POST_VOTE" // your cloak-watch post got up/downvoted
+  | "POST_VOTE" // your community post got up/downvoted
   | "POST_RAPID_ACTION" // your post crossed 2 upvotes (fires once)
   | "REPORT_VERIFIED" // a report you filed got verified -> XP
   | "SUBSCRIPTION_EXPIRING" // plan expires within N days (multiple checkpoints)

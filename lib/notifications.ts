@@ -47,7 +47,7 @@ function buildAlertHref(doc: any): string | undefined {
     case "POST_VOTE":
     case "POST_RAPID_ACTION":
       return typeof postId === "string"
-        ? `/cloak-watch/post/${postId}`
+        ? `/community/post/${postId}`
         : undefined;
     case "VERIFICATION_RESULT":
       return "/verification";

@@ -50,26 +50,15 @@ function ActivityAvatar({
   username,
   profileImage,
 }: Pick<ActivityItem, "username" | "profileImage">) {
-  if (profileImage) {
-    return (
-      <div
-        className="h-5 w-5 rounded-full bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${profileImage})` }}
-        aria-label={`${username} profile image`}
-        role="img"
-      />
-    );
-  }
-
   return (
     <div
-      className="flex h-5 w-5 items-center justify-center rounded-full  text-slate-500"
-      aria-label="Default profile avatar"
+      className="h-5 w-5 rounded-full bg-cover bg-center bg-no-repeat"
+      style={{
+        backgroundImage: `url(${profileImage || "/images/placeholder_avatar.png"})`,
+      }}
+      aria-label={`${username} profile image`}
       role="img"
-    >
-      <img src="/images/placeholder_avatar.png" className="h-4 w-4" />
-      {/* <User className="h-3.5 w-3.5" strokeWidth={2} /> */}
-    </div>
+    />
   );
 }
 

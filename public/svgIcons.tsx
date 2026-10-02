@@ -160,6 +160,39 @@ export function ProfileNavIcon({
   );
 }
 
+// Iconify's ph:detective-fill (https://icon-sets.iconify.design/ph/detective-fill/).
+// Uses currentColor like lucide-react's icons, so a `className="text-..."`
+// on the call site controls its color the same way Award/other lucide
+// icons already do elsewhere in this app.
+export function DetectiveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true" {...props}>
+      <path
+        fill="currentColor"
+        d="M256 120a8 8 0 0 1-8 8H8a8 8 0 0 1 0-16h27.92l47.5-65.41a16 16 0 0 1 25.31-.72l12.85 14.9l.2.23a7.95 7.95 0 0 0 12.44 0l.2-.23l12.85-14.9a16 16 0 0 1 25.31.72l47.5 65.41H248a8 8 0 0 1 8 8m-76 24a36 36 0 0 0-35.77 32h-32.46a36 36 0 1 0-1.83 16h36.12A36 36 0 1 0 180 144"
+      />
+    </svg>
+  );
+}
+
+// Document-with-sparkle mark used next to "AI Confidence Match". Uses
+// currentColor, same as DetectiveIcon above.
+export function AiMatchIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true" {...props}>
+      <path
+        fill="currentColor"
+        d="M4.5 1 5.4 3.6 8 4.5 5.4 5.4 4.5 8 3.6 5.4 1 4.5 3.6 3.6Z"
+      />
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M8 6h5l4.5 4.5V17a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 17V7.5A1.5 1.5 0 0 1 8 6Zm4.5 1.6V10a.5.5 0 0 0 .5.5h2.4Z"
+      />
+    </svg>
+  );
+}
+
 export function BadgeCheckIcon({
   isActive = false,
   activeColor = "#00C3D0",

@@ -4,9 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Plus, ShieldCheck, User as UserIcon, X } from "lucide-react";
+import {
+  ChevronLeft,
+  Edit3,
+  Plus,
+  ShieldCheck,
+  User as UserIcon,
+  X,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import { DetectiveIcon } from "@/public/svgIcons";
 
 type IdentityProfileData = {
   fullName: string;
@@ -107,31 +115,45 @@ function TagBox({
   );
 }
 
-function InfoRow({
+// Each identity field gets its own pill color in view mode — purely
+// visual grouping (matches the reference design) so usernames/aliases/
+// websites/keywords are easy to tell apart at a glance.
+function PillGroup({ values, toneClassName }: { values: string[]; toneClassName: string }) {
+  if (values.length === 0) {
+    return <p className="mt-1 text-[14px] leading-5 text-[#B5BEC4]">Not set</p>;
+  }
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-2 gap-y-2.5">
+      {values.map((value, index) => (
+        <span
+          key={`${value}-${index}`}
+          className={`inline-flex h-6 items-center rounded-lg px-2 text-[12px] text-[#2B2B2B] ${toneClassName}`}
+        >
+          {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// Divider is inset (px-3.5 wraps the border) rather than full card width,
+// matching the reference.
+function FieldSection({
   label,
-  value,
-  onClick,
-  isLast = false,
+  children,
+  isFirst = false,
 }: {
   label: string;
-  value: string;
-  onClick: () => void;
-  isLast?: boolean;
+  children: React.ReactNode;
+  isFirst?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left ${
-        isLast ? "" : "border-b border-[#ECECEC]"
-      }`}
-    >
-      <div className="min-w-0">
-        <p className="text-[13px] text-[#8F98A0]">{label}</p>
-        <p className="mt-0.5 truncate text-[15px] text-[#2D2D2D]">{value || "Not set"}</p>
+    <div className="px-3.5">
+      <div className={`pb-3 pt-3 ${isFirst ? "" : "border-t border-[#E6F0F1]"}`}>
+        <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">{label}</p>
+        {children}
       </div>
-      <ChevronRight className="h-5 w-5 shrink-0 text-[#B5BEC4]" />
-    </button>
+    </div>
   );
 }
 
@@ -181,7 +203,10 @@ export default function IdentityProfilePage() {
   }, []);
 
   const username = user?.username || "user";
-  const avatarUrl = user?.image || user?.profileImage;
+  // Placeholder only once the user has loaded and is known to have no image.
+  const avatarUrl = user
+    ? user.image || user.profileImage || "/images/placeholder_avatar.png"
+    : undefined;
   const isVerified =
     user?.identityVerificationStatus === "APPROVED" || user?.isVerified || false;
 
@@ -229,15 +254,15 @@ export default function IdentityProfilePage() {
   if (mode === "edit") {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
-        <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
-          <button type="button" onClick={cancelEdit} className="p-2">
+        <header className="flex items-center justify-between py-4 bg-white z-10">
+          <button type="button" onClick={cancelEdit} className="-ml-3 p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">Edit Identity Profile</h1>
-          <div className="w-10" />
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">Edit Identity Profile</h1>
+          <div className="-mr-3 w-10" />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        <main className="flex-1 min-h-0 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)]">
           <div className="space-y-6">
             <div className="space-y-2">
               <label className="block text-[14px] text-[#2D2D2D]">Full Name</label>
@@ -245,7 +270,7 @@ export default function IdentityProfilePage() {
                 type="text"
                 value={draft.fullName}
                 onChange={(e) => setDraft({ ...draft, fullName: e.target.value })}
-                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-[15px]"
+                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-base"
               />
             </div>
 
@@ -295,7 +320,7 @@ export default function IdentityProfilePage() {
                     next[index] = e.target.value;
                     setDraft({ ...draft, websites: next });
                   }}
-                  className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-[15px]"
+                  className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-base"
                 />
               ))}
               <button
@@ -331,7 +356,7 @@ export default function IdentityProfilePage() {
               type="button"
               onClick={cancelEdit}
               disabled={isSaving}
-              className="h-14 flex-1 rounded-full bg-[#EEEEEE] text-[15px] font-medium text-[#9AA3AA] disabled:opacity-50"
+              className="h-11 flex-1 rounded-full bg-[#EEEEEE] text-[16px] font-medium text-[#9AA3AA] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -339,7 +364,7 @@ export default function IdentityProfilePage() {
               type="button"
               onClick={() => void saveEdit()}
               disabled={isSaving}
-              className="h-14 flex-1 rounded-full bg-[#14C3CF] text-[15px] font-medium text-white disabled:opacity-60"
+              className="h-11 flex-1 rounded-full bg-[#14C3CF] text-[16px] font-medium text-white disabled:opacity-60"
             >
               {isSaving ? "Saving..." : "Save Changes"}
             </button>
@@ -351,85 +376,94 @@ export default function IdentityProfilePage() {
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
-      <header className="flex items-center justify-between  bg-white z-10">
-        <button type="button" onClick={() => router.back()} className="p-2">
+      <header className="flex items-center justify-between bg-white z-10">
+        <button type="button" onClick={() => router.back()} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Identity Profile</h1>
-        <div className="w-10" />
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Identity Profile</h1>
+        <div className="-mr-3 w-10" />
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto mt-5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+      {/* No horizontal padding here — the protected layout's <main> already
+          applies px-4, and doubling it was what made every card 32px narrower
+          than the reference at 375px. */}
+      <main className="flex-1 min-h-0 overflow-y-auto mt-2 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="h-10 w-10 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
           </div>
         ) : (
           <>
-        <div className="flex items-center gap-3">
-          <div className="relative h-[60px] w-[60px] shrink-0 overflow-hidden rounded-full bg-gray-200">
+        <div className="flex items-start gap-3 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3">
+          <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-gray-200">
             {avatarUrl ? (
               <Image src={avatarUrl} alt={username} fill className="object-cover" />
             ) : (
-              <UserIcon className="h-full w-full p-3 text-gray-400" />
+              <UserIcon className="h-full w-full p-2 text-gray-400" />
             )}
           </div>
-          <div>
+          {/* min-w-0 + flex-1 so this column shrinks (and truncates) instead
+              of pushing the button past the card edge — without it the row
+              overflowed and the whole page scrolled sideways. */}
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <h2 className="text-[17px] font-medium text-[#2D2D2D]">{username}</h2>
-              <VerifiedBadge className="h-5 w-5 text-[#14C3CF]" />
+              <h2 className="truncate text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
+                {username}
+              </h2>
+              <VerifiedBadge className="h-[15px] w-[15px] shrink-0 text-[#00C3D0]" />
             </div>
             {isVerified && (
-              <div className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#19C48A]">
-                <ShieldCheck className="h-4 w-4" />
-                Verified
+              <div className="flex items-center gap-1 text-[12px] leading-[19px] text-[#10B981]">
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Verified</span>
               </div>
             )}
-            <p className="mt-0.5 text-[13px] text-[#8F98A0]">
-              {level !== null && level > 0 ? `Level ${level} Scout` : "Unranked"}
-            </p>
+            <div className="flex items-center gap-2 text-[12px] leading-[19px] text-[#839297]">
+              <DetectiveIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
+                {level !== null && level > 0 ? `Level ${level} Scout` : "Scout"}
+              </span>
+            </div>
           </div>
-        </div>
-
-        <p className="mt-7 mb-3 text-[15px] font-medium text-[#2D2D2D]">Identity Information</p>
-
-        <div className="rounded-[20px] bg-[#F8F8F8]">
-          <InfoRow label="Full Name" value={identity.fullName} onClick={startEdit} />
-          <InfoRow
-            label="Usernames / Handles"
-            value={identity.usernames.join(", ")}
-            onClick={startEdit}
-          />
-          <InfoRow
-            label="Aliases / Other Names"
-            value={identity.aliases.join(", ")}
-            onClick={startEdit}
-          />
-          <InfoRow
-            label="Known Websites (optional)"
-            value={identity.websites.join(", ")}
-            onClick={startEdit}
-          />
-          <InfoRow
-            label="Keywords (optional)"
-            value={identity.keywords.join(", ")}
-            onClick={startEdit}
-            isLast
-          />
-        </div>
-
-        <div className="mt-10 space-y-3">
           <button
             type="button"
             onClick={startEdit}
-            className="h-14 w-full rounded-full bg-[#14C3CF] text-[15px] font-medium text-white"
+            className="inline-flex h-7 shrink-0 items-center gap-2 self-center rounded-full bg-[#00C3D0] pl-2 pr-2.5 text-[12px] font-medium text-white"
           >
+            <Edit3 className="h-4 w-4" />
             Edit Profile
           </button>
+        </div>
+
+        <p className="mt-6 mb-3 text-[14px] font-medium leading-5 text-[#2B2B2B]">
+          Identity Information
+        </p>
+
+        <div className="rounded-3xl border border-[#E6F0F1] bg-[#FCFEFD]">
+          <FieldSection label="Full Name" isFirst>
+            <p className="mt-1 text-[14px] leading-5 text-[#839297]">
+              {identity.fullName || "Not set"}
+            </p>
+          </FieldSection>
+          <FieldSection label="Usernames / Handles">
+            <PillGroup values={identity.usernames} toneClassName="bg-[#FFF1E6]" />
+          </FieldSection>
+          <FieldSection label="Aliases / Other Names">
+            <PillGroup values={identity.aliases} toneClassName="bg-[#E9F9F6]" />
+          </FieldSection>
+          <FieldSection label="Known Websites">
+            <PillGroup values={identity.websites} toneClassName="bg-[#ECF2FE]" />
+          </FieldSection>
+          <FieldSection label="Keywords">
+            <PillGroup values={identity.keywords} toneClassName="bg-[#FFECF8]" />
+          </FieldSection>
+        </div>
+
+        <div className="mt-10">
           <button
             type="button"
             onClick={() => router.push("/reference-media?mode=profile")}
-            className="h-14 w-full rounded-full border-2 border-[#14C3CF] bg-white text-[15px] font-medium text-[#14C3CF]"
+            className="h-11 w-full rounded-full border-2 border-[#14C3CF] bg-white text-[16px] font-medium text-[#14C3CF]"
           >
             Reference Media
           </button>

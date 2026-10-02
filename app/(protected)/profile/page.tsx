@@ -2,6 +2,7 @@
 
 import {
   Crown,
+  CirclePlus,
   Edit3,
   ChevronLeft,
   ChevronRight,
@@ -32,17 +33,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
-import PlanBadge from "@/app/components/PlanBadge";
 import type { PlanCode } from "@/models/Subscription";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
-import { PostCard } from "@/app/(protected)/cloak-watch/_components/PostUI";
+import { PostCard } from "@/app/(protected)/community/_components/PostUI";
 import {
   fetchPosts,
   type CloakWatchPost,
   type CloakWatchPostScope,
-} from "@/app/(protected)/cloak-watch/_lib/posts";
+} from "@/app/(protected)/community/_lib/posts";
 import { getCroppedImg } from "@/lib/cropImage";
-import { getAchievementIcon } from "@/lib/achievements";
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -107,12 +106,14 @@ export default function ProfilePage() {
   const username =
     user?.username || user?.name?.split(" ")[0].toLowerCase() || "user";
   const email = user?.email || "";
-  const profileImage = user?.image || user?.profileImage;
+  // Placeholder only once the session user is known to have no image.
+  const profileImage = user
+    ? user.image || user.profileImage || "/images/placeholder_avatar.png"
+    : undefined;
   const isVerified =
     user?.identityVerificationStatus === "APPROVED" ||
     user?.isVerified ||
     false;
-  const plan: PlanCode = user?.plan || "FREEMIUM";
   const [imageLoading, setImageLoading] = useState(true);
   const [profileStats, setProfileStats] = useState<{
     totalReports: number;
@@ -120,11 +121,6 @@ export default function ProfilePage() {
     accuracyPercentage: number;
   } | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [profileLevel, setProfileLevel] = useState<number | null>(null);
-  const [profileLastAchievement, setProfileLastAchievement] = useState<{
-    name: string;
-    imageSrc: string;
-  } | null>(null);
   const hasFetchedProfileStats = useRef(false);
 
   const [editData, setEditData] = useState({
@@ -270,24 +266,6 @@ export default function ProfilePage() {
             approvedReports: Number(data.stats.verifiedReports || 0),
             accuracyPercentage: Number(data.stats.accuracyPercentage || 0),
           });
-          setProfileLevel(Number(data.stats.level || 0));
-        }
-        if (data?.success && Array.isArray(data?.achievements)) {
-          const lastCompleted = data.achievements
-            .filter((a: any) => a.unlockedAt)
-            .sort(
-              (a: any, b: any) =>
-                new Date(b.unlockedAt).getTime() -
-                new Date(a.unlockedAt).getTime(),
-            )[0];
-          setProfileLastAchievement(
-            lastCompleted
-              ? {
-                  name: lastCompleted.config?.name || lastCompleted.code,
-                  imageSrc: getAchievementIcon(lastCompleted.code),
-                }
-              : null,
-          );
         }
       } catch (err) {
         console.error(err);
@@ -723,7 +701,7 @@ export default function ProfilePage() {
 
   // Contact Support is a Cloak Pro perk (see PLAN_LIMITS.canContactSupport)
   // — same client-side gate + toast pattern as community posting in
-  // app/(protected)/cloak-watch/page.tsx. Real enforcement is server-side
+  // app/(protected)/community/page.tsx. Real enforcement is server-side
   // in POST /api/support.
   const handleContactSupportClick = () => {
     const plan: PlanCode = user?.plan || "FREEMIUM";
@@ -770,12 +748,12 @@ export default function ProfilePage() {
             onClick={() => {
               router.push("/profile");
             }}
-            className="p-2"
+            className="-ml-3 p-2"
           >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">Verification</h1>
-          <div className="w-10" />
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">Verification</h1>
+          <div className="-mr-3 w-10" />
         </header>
         <div className="flex flex-1 flex-col items-center justify-center space-y-4 px-6 text-center">
           <div
@@ -828,14 +806,14 @@ export default function ProfilePage() {
               setForceVerificationForm(false);
               setView("main");
             }}
-            className="p-2"
+            className="-ml-3 p-2"
           >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">
             Verification
           </h1>
-          <div className="w-10" />
+          <div className="-mr-3 w-10" />
         </header>
         <div className="flex-1">
           <IdentityVerificationStep
@@ -870,29 +848,44 @@ export default function ProfilePage() {
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="shrink-0 bg-white">
           <div className="flex items-center justify-between ">
-            <button onClick={() => router.push("/profile")} className="p-2">
+            <button onClick={() => router.push("/profile")} className="-ml-3 p-2">
               <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
             </button>
-            <h1 className="text-lg font-semibold text-[#2D2D2D]">
+            <h1 className="text-[16px] font-medium text-[#2B2B2B]">
               {postsViewTitle}
             </h1>
-            <div className="w-10" />
+            {postsScope === "my" ? (
+              <button
+                type="button"
+                aria-label="Saved posts"
+                onClick={() => void openPostsView("Saved Posts", "saved")}
+                className="-mr-2 flex h-10 w-10 items-center justify-center text-[#2B2B2B]"
+              >
+                <Bookmark className="h-[22px] w-[22px]" strokeWidth={1.8} />
+              </button>
+            ) : (
+              <div className="-mr-3 w-10" />
+            )}
           </div>
 
-          <div className="px-4 pb-2 mt-4">
-            <div className="flex items-center gap-3 rounded-full bg-[#F3F3F3] px-4 py-3">
-              <Search className="h-5 w-5 text-[#98A0A7]" />
+          <div className="pb-1 pt-1">
+            <div className="flex h-10 items-center gap-2 rounded-full bg-[#F6F6F6] px-3.5">
+              <Search className="h-[18px] w-[18px] shrink-0 text-[#839297]" />
               <input
                 value={postsQuery}
                 onChange={(e) => setPostsQuery(e.target.value)}
-                placeholder="Search posts,people,topics..."
-                className="w-full bg-transparent text-[14px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7]"
+                placeholder={
+                  postsScope === "saved"
+                    ? "Search saved posts..."
+                    : "Search posts..."
+                }
+                className="w-full bg-transparent text-base text-[#2B2B2B] outline-none placeholder:text-[14px] placeholder:text-[#839297]"
               />
             </div>
           </div>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2 no-scrollbar">
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5 no-scrollbar">
           {postsLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
@@ -906,23 +899,24 @@ export default function ProfilePage() {
                   <Bookmark className="h-7 w-7 text-[#14C3CF]" />
                 )}
               </div>
-              <h2 className="mt-4 text-[18px] font-semibold text-[#2D2D2D]">
+              <h2 className="mt-4 text-[16px] font-medium text-[#2D2D2D]">
                 No {postsScope === "my" ? "posts" : "saved posts"} yet
               </h2>
               <p className="mx-auto mt-2 max-w-[260px] text-[14px] leading-6 text-[#8F98A0]">
                 {postsScope === "my"
-                  ? "Posts you create in Cloak Watch will appear here."
-                  : "Posts you save from Cloak Watch will appear here."}
+                  ? "Posts you create in Community will appear here."
+                  : "Posts you save from Community will appear here."}
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {profilePosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
+                  showShare={postsScope !== "saved"}
                   onOpenPost={(selectedPost) =>
-                    router.push(`/cloak-watch/post/${selectedPost.id}`)
+                    router.push(`/community/post/${selectedPost.id}`)
                   }
                   onDeleted={(postId) =>
                     setProfilePosts((prev) =>
@@ -961,19 +955,19 @@ export default function ProfilePage() {
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="flex items-center justify-between  bg-white z-10">
-          <button onClick={handleEditProfileBack} className="p-2">
+          <button onClick={handleEditProfileBack} className="-ml-3 p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-lg font-semibold text-[#2D2D2D]">Edit Profile</h1>
-          <div className="w-10" />
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">Edit Profile</h1>
+          <div className="-mr-3 w-10" />
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-8 space-y-8">
-          <div className="flex flex-col items-center space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pt-7 pb-4">
+          <div className="flex justify-center">
             <div className="relative">
               <div
                 onClick={openPhotoSourceModal}
-                className="relative h-32 w-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-sm cursor-pointer active:scale-95 transition-transform bg-gray-200 flex items-center justify-center"
+                className="relative flex h-[125px] w-[125px] cursor-pointer items-center justify-center overflow-hidden rounded-full bg-gray-200 transition-transform active:scale-95"
               >
                 {imageLoading && !profileImage && (
                   <UserIcon className="h-16 w-16 text-gray-400" />
@@ -1001,27 +995,27 @@ export default function ProfilePage() {
                   e.stopPropagation();
                   openPhotoSourceModal();
                 }}
-                className="absolute bottom-1 right-1 h-8 w-8 bg-[#14C3CF] rounded-full flex items-center justify-center border-2 border-white disabled:opacity-50 active:scale-90 transition-all"
+                className="absolute bottom-0 right-0 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#01C3CF] transition-all active:scale-90 disabled:opacity-50"
               >
                 <Camera className="h-4 w-4 text-white" />
               </button>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-500 ml-1">
+          <div className="mt-5 space-y-2.5">
+            <div>
+              <label className="mb-[5px] block text-[14px] leading-5 text-[#2B2B2B]">
                 Username
               </label>
               <input
                 type="text"
                 value={editData.username}
                 disabled
-                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none opacity-60 cursor-not-allowed"
+                className="h-10 w-full cursor-not-allowed rounded-full bg-[#F6F6F6] px-[17px] text-base text-[#839297] outline-none"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-500 ml-1">
+            <div>
+              <label className="mb-[5px] block text-[14px] leading-5 text-[#2B2B2B]">
                 Display Name
               </label>
               <input
@@ -1037,38 +1031,39 @@ export default function ProfilePage() {
                   })
                 }
                 maxLength={MAX_DISPLAY_NAME_LENGTH}
-                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20"
+                className="h-10 w-full rounded-full bg-[#F6F6F6] px-[17px] text-base text-[#2B2B2B] outline-none focus:ring-2 focus:ring-[#14C3CF]/20"
               />
-              <p className="ml-1 text-right text-xs text-slate-400">
+              <p className="mt-1 text-right text-[12px] leading-4 text-[#839297]">
                 {editData.displayName.length}/{MAX_DISPLAY_NAME_LENGTH}
               </p>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-500 ml-1">
+            <div>
+              <label className="mb-[5px] block text-[14px] leading-5 text-[#2B2B2B]">
                 Email
               </label>
               <input
                 type="email"
                 value={editData.email}
                 disabled
-                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none opacity-60 cursor-not-allowed"
+                className="h-10 w-full cursor-not-allowed rounded-full bg-[#F6F6F6] px-[17px] text-base text-[#839297] outline-none"
               />
             </div>
           </div>
+        </div>
 
-          <div className="pb-6">
-            <button
-              onClick={handleEditProfile}
-              disabled={isUploading || !isProfileEditDirty}
-              className="w-full h-14 bg-[#14C3CF] text-white rounded-full font-semibold text-lg shadow-lg shadow-[#14C3CF]/20 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {isUploading ? (
-                <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              ) : (
-                "Save Changes"
-              )}
-            </button>
-          </div>
+        {/* Pinned outside the scroll area, as in the design */}
+        <div className="shrink-0 bg-white pt-3">
+          <button
+            onClick={handleEditProfile}
+            disabled={isUploading || !isProfileEditDirty}
+            className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#01C3CF] text-[14px] text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isUploading ? (
+              <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+            ) : (
+              "Save Changes"
+            )}
+          </button>
         </div>
 
         {profileCropImageSrc && (
@@ -1082,13 +1077,13 @@ export default function ProfilePage() {
                     setProfileZoom(1);
                     setProfileCroppedAreaPixels(null);
                   }}
-                  className="rounded-full bg-[#F5F5F5] px-4 py-2 text-sm font-medium text-[#2D2D2D]"
+                  className="rounded-full bg-[#F5F5F5] px-3 py-1.5 text-[12px] font-medium text-[#2D2D2D]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => void handleApplyProfileCrop()}
-                  className="rounded-full bg-[#14C3CF] px-4 py-2 text-sm font-medium text-white"
+                  className="rounded-full bg-[#14C3CF] px-3 py-1.5 text-[12px] font-medium text-white"
                 >
                   Apply
                 </button>
@@ -1124,25 +1119,27 @@ export default function ProfilePage() {
         )}
 
         {showPhotoSourceModal && (
-          <div className="fixed inset-0 z-50 flex items-end bg-black/45 p-4">
-            <div className="mx-auto w-full max-w-[420px] rounded-[28px] bg-white p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-[18px] font-semibold text-[#2D2D2D]">
+          <div className="fixed inset-0 z-50 flex items-end bg-black/40">
+            <div className="w-full rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5">
+              <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
+              <div className="relative mt-3.5">
+                <h3 className="text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
                   Change profile photo
                 </h3>
                 <button
                   type="button"
                   onClick={() => setShowPhotoSourceModal(false)}
-                  className="rounded-full p-2 text-[#8F98A0]"
+                  className="absolute -top-[7px] right-0 -mr-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="space-y-3">
+              <div className="mt-3.5 border-t border-[#E7E7E7]" />
+              <div className="space-y-2.5 pt-3.5">
                 <button
                   type="button"
                   onClick={() => void openCameraCapture("user")}
-                  className="flex h-14 w-full items-center justify-center rounded-full bg-[#14C3CF] text-[16px] font-medium text-white"
+                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#01C3CF] text-[14px] text-white"
                 >
                   Take Photo
                 </button>
@@ -1152,14 +1149,14 @@ export default function ProfilePage() {
                     setShowPhotoSourceModal(false);
                     fileInputRef.current?.click();
                   }}
-                  className="flex h-14 w-full items-center justify-center rounded-full bg-[#F5F5F5] text-[16px] font-medium text-[#2D2D2D]"
+                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#F6F6F6] text-[14px] text-[#2B2B2B]"
                 >
                   Upload From Device
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowPhotoSourceModal(false)}
-                  className="flex h-14 w-full items-center justify-center rounded-full bg-white text-[16px] font-medium text-[#8F98A0]"
+                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-white text-[14px] text-[#839297]"
                 >
                   Cancel
                 </button>
@@ -1197,12 +1194,12 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                <h3 className="absolute inset-x-0 mx-auto text-center text-[17px] font-semibold tracking-wide text-white pointer-events-none">
+                <h3 className="absolute inset-x-0 mx-auto text-center text-[16px] font-medium tracking-wide text-white pointer-events-none">
                   Take Photo
                 </h3>
 
                 <div className="flex w-20 justify-end">
-                  <p className="text-right text-[15px] font-semibold text-[#00D0E6]">
+                  <p className="text-right text-[14px] font-semibold text-[#00D0E6]">
                     Profile
                   </p>
                 </div>
@@ -1213,10 +1210,10 @@ export default function ProfilePage() {
                   {profileCameraError ? (
                     <div className="flex h-full flex-col items-center justify-center bg-[#1A1715] px-8 text-center">
                       <Camera className="h-10 w-10 text-white/75" />
-                      <p className="mt-4 text-[15px] font-medium text-white">
+                      <p className="mt-4 text-[14px] font-medium text-white">
                         Camera unavailable
                       </p>
-                      <p className="mt-2 text-sm text-white/70">
+                      <p className="mt-2 text-[12px] text-white/70">
                         {profileCameraError}
                       </p>
                     </div>
@@ -1285,7 +1282,7 @@ export default function ProfilePage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-300">
             <div className="w-full max-w-[340px] bg-white rounded-[32px] p-6 space-y-6 animate-in zoom-in-95 duration-300">
               <div className="flex justify-between items-center">
-                <h3 className="text-[20px] font-bold text-[#2D2D2D]">
+                <h3 className="text-[16px] font-medium text-[#2D2D2D]">
                   Discard Changes?
                 </h3>
                 <button
@@ -1303,7 +1300,7 @@ export default function ProfilePage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowDiscardChangesModal(false)}
-                  className="flex-1 h-14 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all"
+                  className="flex-1 h-11 rounded-full bg-[#F5F5F5] text-[16px] font-medium text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all"
                 >
                   Keep Editing
                 </button>
@@ -1312,7 +1309,7 @@ export default function ProfilePage() {
                     setShowDiscardChangesModal(false);
                     discardProfileEdits();
                   }}
-                  className="flex-1 h-14 rounded-full bg-red-500 font-semibold text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
+                  className="flex-1 h-11 rounded-full bg-red-500 text-[16px] font-medium text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
                 >
                   Discard
                 </button>
@@ -1326,19 +1323,21 @@ export default function ProfilePage() {
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
-      <header className="shrink-0 bg-white px-4 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
-        <h1 className="text-center text-[17px] font-semibold text-[#2D2D2D]">
+      <header className="shrink-0 bg-white pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
+        <h1 className="text-center text-[16px] font-medium text-[#2B2B2B]">
           Profile
         </h1>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar bg-white">
-        <div className="space-y-5 px-1 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <section className="pb-2 pt-1">
-            <div className="flex items-start gap-4">
-              <div className="relative mt-1 h-[60px] w-[60px] shrink-0 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center">
+        {/* No extra horizontal padding — the protected layout's <main>
+            already applies px-4 (16px), which is the reference's margin. */}
+        <div className="space-y-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+          <section className="rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3">
+            <div className="flex items-start gap-3">
+              <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center">
                 {imageLoading && !profileImage && (
-                  <UserIcon className="h-7 w-7 text-gray-400" />
+                  <UserIcon className="h-5 w-5 text-gray-400" />
                 )}
                 {profileImage && (
                   <Image
@@ -1350,142 +1349,163 @@ export default function ProfilePage() {
                   />
                 )}
               </div>
-
-              <div className="flex flex-1 justify-between pt-1">
-                <div className="min-w-[64px] text-center">
-                  <p className="text-[18px] font-semibold text-[#2D2D2D]">
-                    {statsLoading ? "—" : (profileStats?.totalReports ?? 0)}
-                  </p>
-                  <p className="mt-1 text-[13px] text-[#A7ADB2]">Reports</p>
+              {/* min-w-0 + flex-1 so long names truncate instead of pushing
+                  the button off the card. Centered against the avatar. */}
+              <div className="flex min-h-[42px] min-w-0 flex-1 flex-col justify-center">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="truncate text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
+                    {username}
+                  </h2>
+                  {isVerified && (
+                    <VerifiedBadge className="h-[15px] w-[15px] shrink-0 text-[#00C3D0]" />
+                  )}
                 </div>
-                <div className="min-w-[64px] text-center">
-                  <p className="text-[18px] font-semibold text-[#2D2D2D]">
-                    {statsLoading ? "—" : (profileStats?.approvedReports ?? 0)}
-                  </p>
-                  <p className="mt-1 text-[13px] text-[#A7ADB2]">Verified</p>
-                </div>
-                <div className="min-w-[64px] text-center">
-                  <p className="text-[18px] font-semibold text-[#2D2D2D]">
-                    {statsLoading
-                      ? "—"
-                      : `${profileStats?.accuracyPercentage ?? 0}%`}
-                  </p>
-                  <p className="mt-1 text-[13px] text-[#A7ADB2]">Accuracy</p>
-                </div>
+                <p className="truncate text-[12px] leading-[19px] text-[#839297]">
+                  {user?.name || username}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => router.push("/profile?view=edit")}
+                className="inline-flex h-7 shrink-0 items-center gap-2 rounded-full bg-[#00C3D0] pl-2 pr-2.5 text-[12px] font-medium text-white"
+              >
+                <Edit3 className="h-4 w-4" />
+                Edit Profile
+              </button>
             </div>
 
-            <div className="mt-3 space-y-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-[16px] font-medium text-[#2D2D2D]">
-                  {username}
-                </h2>
-                {isVerified && (
-                  <VerifiedBadge className="h-5 w-5 text-[#00C3D0]" />
-                )}
-                <PlanBadge plan={plan} />
+            <div className="mt-7 flex items-center rounded-xl bg-white pb-3 pt-2.5">
+              <div className="flex-1 text-center">
+                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
+                  {statsLoading ? "—" : (profileStats?.totalReports ?? 0)}
+                </p>
+                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Reports</p>
               </div>
-              <p className="text-[14px] text-[#A7ADB2]">
-                {user?.name || username}
-              </p>
-              <p className="text-[13px] text-[#A7ADB2]">
-                {profileLevel !== null && profileLevel > 0
-                  ? `Level ${profileLevel}`
-                  : "Unranked"}
-                {profileLastAchievement
-                  ? ` · ${profileLastAchievement.name}`
-                  : ""}
-              </p>
+              <div className="h-11 w-px bg-[#C8EEF1]" />
+              <div className="flex-1 text-center">
+                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
+                  {statsLoading ? "—" : (profileStats?.approvedReports ?? 0)}
+                </p>
+                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Verified</p>
+              </div>
+              <div className="h-11 w-px bg-[#C8EEF1]" />
+              <div className="flex-1 text-center">
+                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
+                  {statsLoading
+                    ? "—"
+                    : `${profileStats?.accuracyPercentage ?? 0}%`}
+                </p>
+                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Accuracy</p>
+              </div>
             </div>
           </section>
 
-          <MenuGroup>
-            <MenuButton
-              icon={<Edit3 size={19} className="text-[#14C3CF]" />}
-              label="Edit profile"
-              onClick={() => router.push("/profile?view=edit")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<UserIcon size={19} className="text-[#14C3CF]" />}
-              label="Identity Profile"
-              onClick={() => router.push("/identity-profile")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Crown size={19} className="text-[#14C3CF]" />}
-              label="Subscription"
-              onClick={() => router.push("/subscription")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Trophy size={19} className="text-[#14C3CF]" />}
-              label="Your Progress"
-              onClick={() => router.push("/progress")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Flag size={19} className="text-[#14C3CF]" />}
-              label="My Reports"
-              onClick={() => router.push("/my-reports")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<FileText size={19} className="text-[#14C3CF]" />}
-              label="My Posts"
-              onClick={() => void openPostsView("My Posts", "my")}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Bookmark size={19} className="text-[#14C3CF]" />}
-              label="Saved Posts"
-              onClick={() => void openPostsView("Saved Posts", "saved")}
-            />
-          </MenuGroup>
+          <div>
+            <p className="mb-2 text-[14px] leading-5 text-[#839297]">Account &amp; Activity</p>
+            <MenuGroup>
+              <MenuButton
+                icon={<UserIcon size={20} className="text-[#16A472]" />}
+                iconBg="bg-[#E9F8F1]"
+                label="Identity Profile"
+                onClick={() => router.push("/identity-profile")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Crown size={20} className="text-[#F08922]" />}
+                iconBg="bg-[#FFF3E5]"
+                label="Subscription"
+                onClick={() => router.push("/subscription")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Trophy size={20} className="text-[#E3484C]" />}
+                iconBg="bg-[#FCECED]"
+                label="Your Progress"
+                onClick={() => router.push("/progress")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Flag size={20} className="text-[#8A3FD0]" />}
+                iconBg="bg-[#F4E9FA]"
+                label="My Reports"
+                onClick={() => router.push("/my-reports")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<CirclePlus size={20} className="text-[#1497B3]" />}
+                iconBg="bg-[#E8F7FA]"
+                label="My Posts"
+                onClick={() => void openPostsView("My Posts", "my")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Bookmark size={20} className="text-[#067DB5]" />}
+                iconBg="bg-[#E8F3F9]"
+                label="Saved Posts"
+                onClick={() => void openPostsView("Saved Posts", "saved")}
+              />
+            </MenuGroup>
+          </div>
 
-          <MenuGroup>
-            <MenuButton
-              icon={<ShieldCheck size={19} className="text-[#14C3CF]" />}
-              label="Verification"
-              onClick={handleVerificationClick}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Camera size={19} className="text-[#14C3CF]" />}
-              label="Protected Media"
-              onClick={() => router.push("/reference-media?mode=profile")}
-            />
-          </MenuGroup>
+          <div>
+            <p className="mb-2 text-[14px] leading-5 text-[#839297]">Verification &amp; Privacy</p>
+            <MenuGroup>
+              <MenuButton
+                icon={<ShieldCheck size={20} className="text-[#D74B66]" />}
+                iconBg="bg-[#FBEAF0]"
+                label="Verification"
+                onClick={handleVerificationClick}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Camera size={20} className="text-[#1CB986]" />}
+                iconBg="bg-[#E8F9F3]"
+                label="Reference Media"
+                onClick={() => router.push("/reference-media?mode=profile")}
+                showDivider={true}
+              />
+              <MenuButton
+                icon={<Shield size={20} className="text-[#C98113]" />}
+                iconBg="bg-[#FFF4E0]"
+                label="Privacy Policy"
+                onClick={() => router.push("/privacy-policy")}
+              />
+            </MenuGroup>
+          </div>
 
-          <MenuGroup>
-            <MenuButton
-              icon={<LifeBuoy size={19} className="text-[#14C3CF]" />}
-              label="Contact Support"
-              onClick={handleContactSupportClick}
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Shield size={19} className="text-[#14C3CF]" />}
-              label="Privacy Policy"
-              onClick={() => router.push("/privacy-policy")}
-            />
-          </MenuGroup>
+          <div>
+            <p className="mb-2 text-[14px] leading-5 text-[#839297]">Support</p>
+            <MenuGroup>
+              <MenuButton
+                icon={<LifeBuoy size={20} className="text-[#1497B3]" />}
+                iconBg="bg-[#E8F7FA]"
+                label="Contact Support"
+                onClick={handleContactSupportClick}
+              />
+            </MenuGroup>
+          </div>
 
-          <MenuGroup>
-            <MenuButton
-              icon={<LogOut size={19} className="text-[#EF4444]" />}
-              label="Log Out"
-              onClick={() => setShowLogoutModal(true)}
-              variant="danger"
-              showDivider={true}
-            />
-            <MenuButton
-              icon={<Trash2 size={19} className="text-[#EF4444]" />}
-              label="Delete Account"
-              onClick={() => setShowDeleteAccountModal(true)}
-              variant="danger"
-            />
-          </MenuGroup>
+          <div>
+            <p className="mb-2 text-[14px] leading-5 text-[#839297]">Account Actions</p>
+            <MenuGroup>
+              <MenuButton
+                icon={<Trash2 size={20} className="text-[#FD3B3C]" />}
+                iconBg="bg-[#FFF1F1]"
+                label="Delete Account"
+                onClick={() => setShowDeleteAccountModal(true)}
+                variant="danger"
+              />
+            </MenuGroup>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowLogoutModal(true)}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-3xl bg-[#FFF6F7] text-[16px] font-medium text-[#F30131]"
+          >
+            <LogOut className="h-6 w-6" />
+            Logout
+          </button>
         </div>
       </div>
 
@@ -1494,7 +1514,7 @@ export default function ProfilePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-300">
           <div className="w-full max-w-[340px] bg-white rounded-[32px] p-6 space-y-6 animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center">
-              <h3 className="text-[20px] font-bold text-[#2D2D2D]">Log Out</h3>
+              <h3 className="text-[16px] font-medium text-[#2D2D2D]">Log Out</h3>
               <button
                 onClick={() => setShowLogoutModal(false)}
                 className="p-2 hover:bg-slate-50 rounded-full transition-colors"
@@ -1510,13 +1530,13 @@ export default function ProfilePage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
-                className="flex-1 h-14 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all"
+                className="flex-1 h-11 rounded-full bg-[#F5F5F5] text-[16px] font-medium text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleLogout}
-                className="flex-1 h-14 rounded-full bg-red-500 font-semibold text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
+                className="flex-1 h-11 rounded-full bg-red-500 text-[16px] font-medium text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all"
               >
                 Log Out
               </button>
@@ -1529,7 +1549,7 @@ export default function ProfilePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-300">
           <div className="w-full max-w-[340px] bg-white rounded-[32px] p-6 space-y-6 animate-in zoom-in-95 duration-300">
             <div className="flex justify-between items-center">
-              <h3 className="text-[20px] font-bold text-[#2D2D2D]">
+              <h3 className="text-[16px] font-medium text-[#2D2D2D]">
                 Delete Account
               </h3>
               <button
@@ -1541,7 +1561,7 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            <p className="text-[15px] leading-relaxed text-[#2D2D2D]">
+            <p className="text-[14px] leading-relaxed text-[#2D2D2D]">
               This will permanently delete your account, profile, protected
               media, identity verification data, reports, and recent searches.
             </p>
@@ -1550,14 +1570,14 @@ export default function ProfilePage() {
               <button
                 onClick={() => setShowDeleteAccountModal(false)}
                 disabled={isDeletingAccount}
-                className="flex-1 h-14 rounded-full bg-[#F5F5F5] font-semibold text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all disabled:opacity-50"
+                className="flex-1 h-11 rounded-full bg-[#F5F5F5] text-[16px] font-medium text-[#2D2D2D] hover:bg-[#EBEBEB] active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteAccount}
                 disabled={isDeletingAccount}
-                className="flex-1 h-14 rounded-full bg-red-500 font-semibold text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center"
+                className="flex-1 h-11 rounded-full bg-red-500 text-[16px] font-medium text-white shadow-lg shadow-red-500/20 hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center"
               >
                 {isDeletingAccount ? (
                   <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
@@ -1579,47 +1599,45 @@ function MenuButton({
   onClick,
   variant = "default",
   showDivider = false,
+  iconBg,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   variant?: "default" | "danger";
   showDivider?: boolean;
+  // Each row gets its own pastel badge color per the reference design —
+  // falls back to the old two-tone (teal/red) behavior when not given.
+  iconBg?: string;
 }) {
   return (
     <div>
       <button
         onClick={onClick}
-        className="flex w-full items-center justify-between bg-white px-4 py-[18px] active:scale-[0.99] transition-all"
+        className="flex h-[49px] w-full items-center justify-between pl-3.5 pr-2 active:scale-[0.99] transition-all"
       >
-        <div className="flex items-center gap-3.5">
+        <div className="flex min-w-0 items-center gap-2">
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-              variant === "danger" ? "bg-[#FFF4F4]" : "bg-[#EAF9FA]"
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+              iconBg || (variant === "danger" ? "bg-[#FFF1F1]" : "bg-[#E8F7FA]")
             }`}
           >
             {icon}
           </div>
-          <span
-            className={`text-[16px] font-medium ${
-              variant === "danger" ? "text-[#2D2D2D]" : "text-[#2D2D2D]"
-            }`}
-          >
-            {label}
-          </span>
+          <span className="truncate text-[14px] leading-5 text-[#0D1015]">{label}</span>
         </div>
-        <ChevronRight className="h-5 w-5 text-[#B5BEC4]" />
+        <ChevronRight className="h-5 w-5 shrink-0 text-[#9AB1B7]" />
       </button>
-      {showDivider && (
-        <div className="ml-[4.75rem] border-t border-[#F1F1F1]" />
-      )}
+      {/* Inset divider: starts under the label, stops 14px short of the
+          right edge — matches the reference, not full-width. */}
+      {showDivider && <div className="ml-[49px] mr-3.5 h-px bg-[#E6F0EF]" />}
     </div>
   );
 }
 
 function MenuGroup({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#F1F1F1] bg-white">
+    <div className="overflow-hidden rounded-3xl border border-[#E6F0F1] bg-[#FCFEFD] py-0.5">
       {children}
     </div>
   );

@@ -113,16 +113,16 @@ export default function ProgressPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.back()} className="p-2">
+        <button onClick={() => router.back()} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">
           Your Progress
         </h1>
-        <div className="w-10" />
+        <div className="-mr-3 w-10" />
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-3">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-3">
         <div className="mx-auto max-w-[420px]">
           <div className="flex flex-col items-center pt-2">
             <div className="relative h-[112px] w-[112px]">
@@ -159,10 +159,10 @@ export default function ProgressPage() {
               </div>
             </div>
 
-            <h3 className="mt-4 text-[17px] font-medium leading-none text-[#2D2D2D]">
+            <h3 className="mt-4 text-[16px] font-medium leading-none text-[#2D2D2D]">
               {user?.username || user?.name || "Cloak User"}
             </h3>
-            <p className="mt-2 text-[13px] text-[#A7ADB2]">
+            <p className="mt-2 text-[12px] text-[#A7ADB2]">
               {stats && stats.level > 0 ? `Level ${stats.level}` : "Unranked"}/{LEVEL_CONFIG.length}
             </p>
           </div>
@@ -181,7 +181,7 @@ export default function ProgressPage() {
                 }}
               />
             </div>
-            <div className="mt-2 flex items-center justify-between text-[13px] text-[#A7ADB2]">
+            <div className="mt-2 flex items-center justify-between text-[12px] text-[#A7ADB2]">
               <span>{levelMeta.currentLevelXp}</span>
               <span>
                 {stats?.xp || 0}/{levelMeta.nextLevelXp}
@@ -190,7 +190,7 @@ export default function ProgressPage() {
           </div>
 
           <div className="mt-7">
-            <h2 className="text-[17px] font-semibold text-[#2D2D2D]">
+            <h2 className="text-[16px] font-semibold text-[#2D2D2D]">
               Achievements
             </h2>
 
@@ -226,16 +226,16 @@ export default function ProgressPage() {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-[15px] font-medium leading-5 text-[#2D2D2D]">
+                      <h4 className="text-[14px] font-medium leading-5 text-[#2D2D2D]">
                         {achievement.config.name}
                       </h4>
-                      <p className="mt-1 text-[13px] leading-5 text-[#A7ADB2]">
+                      <p className="mt-1 text-[12px] leading-5 text-[#A7ADB2]">
                         {achievement.config.description}
                       </p>
                     </div>
 
                     <span
-                      className={`pt-0.5 text-[15px] font-medium ${
+                      className={`pt-0.5 text-[14px] font-medium ${
                         isUnlocked ? "text-[#2D2D2D]" : "text-[#6B7280]"
                       }`}
                     >

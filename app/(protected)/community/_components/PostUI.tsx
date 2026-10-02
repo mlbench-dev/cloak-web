@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertOctagon,
   Bookmark,
-  Check,
   MoreHorizontal,
   Share2,
   X,
@@ -102,17 +101,7 @@ function ProgressiveImage({
   );
 }
 export function PostSharedSuccessToast(message: string) {
-  toast.custom(
-    () => (
-      <div className="flex min-w-[320px] items-center gap-4 rounded-[24px] bg-white px-7 py-6 text-[#2D2D2D] shadow-[0_12px_35px_rgba(0,0,0,0.12)]">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full">
-          <Check className="h-7 w-7 text-[#15C3CF]" strokeWidth={2.7} />
-        </div>
-        <span className="text-[16px] font-medium">{message}</span>
-      </div>
-    ),
-    { duration: 1500 },
-  );
+  toast.success(message, { duration: 1500 });
 }
 
 function BottomSheet({
@@ -139,14 +128,14 @@ function BottomSheet({
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/20"
+      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/40"
       onClick={onClose}
     >
       <div
-        className={`w-full rounded-t-[30px] bg-white pt-2 ${panelClassName}`}
+        className={`w-full rounded-t-[30px] bg-white pt-2.5 font-sf-pro-display ${panelClassName}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto h-2 w-16 rounded-full bg-[#DADADA]" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
         {children}
       </div>
     </div>
@@ -163,18 +152,18 @@ function SheetHeader({
   return (
     <>
       <div className="relative">
-        <h3 className="text-center text-[18px] font-semibold text-[#2D2D2D]">
+        <h3 className="text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
           {title}
         </h3>
         <button
           type="button"
           onClick={onClose}
-          className="absolute -top-1 right-0 flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+          className="absolute -top-[7px] right-0 -mr-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
-      <div className="mt-6 border-t border-[#E8E8E8]" />
+      <div className="mt-3.5 border-t border-[#E7E7E7]" />
     </>
   );
 }
@@ -200,20 +189,20 @@ function OptionsSheet({
 }) {
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <div className="mt-6 px-7 pb-10 pt-2">
+      <div className="mt-3.5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <SheetHeader title="Options" onClose={onClose} />
-        <div className="space-y-8 pt-8 text-[18px] text-[#2D2D2D]">
+        <div className="space-y-5 pt-5 text-[14px] leading-5 text-[#2B2B2B]">
           <button
             type="button"
             onClick={() => {
               onToggleSave();
               onClose();
             }}
-            className="flex items-center gap-4"
+            className="flex items-center gap-3"
           >
             <Bookmark
-              className={`h-6 w-6 ${
-                isSaved ? "fill-current text-[#00C3D0]" : "text-[#2D2D2D]"
+              className={`h-5 w-5 ${
+                isSaved ? "fill-current text-[#01C3CF]" : "text-[#2B2B2B]"
               }`}
             />
             <span>{isSaved ? "Unsave Post" : "Save Post"}</span>
@@ -225,9 +214,9 @@ function OptionsSheet({
               onCopyLink();
               onClose();
             }}
-            className="flex items-center gap-4"
+            className="flex items-center gap-3"
           >
-            <Share2 className="h-6 w-6" />
+            <Share2 className="h-5 w-5" />
             <span>Copy Post Link</span>
           </button>
 
@@ -238,18 +227,18 @@ function OptionsSheet({
                 onDelete();
                 onClose();
               }}
-              className="flex items-center gap-4 text-[#A31616]"
+              className="flex items-center gap-3 text-[#FC383A]"
             >
-              <AlertOctagon className="h-6 w-6" />
+              <AlertOctagon className="h-5 w-5" />
               <span>Delete Post</span>
             </button>
           ) : (
             <button
               type="button"
               onClick={onReport}
-              className="flex items-center gap-4 text-[#A31616]"
+              className="flex items-center gap-3 text-[#FC383A]"
             >
-              <AlertOctagon className="h-6 w-6" />
+              <AlertOctagon className="h-5 w-5" />
               <span>Report</span>
             </button>
           )}
@@ -285,15 +274,15 @@ function ReportSheet({
       onClose={onClose}
       panelClassName="max-h-[60dvh] overflow-hidden"
     >
-      <div className="mt-6 flex max-h-[calc(60dvh-1.5rem)] flex-col px-7 pb-10 pt-2">
+      <div className="mt-3.5 flex max-h-[calc(60dvh-1.5rem)] flex-col px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <SheetHeader title="Submit a Report" onClose={onClose} />
 
-        <div className="space-y-7 overflow-y-auto pt-8 pr-1 no-scrollbar">
+        <div className="space-y-3.5 overflow-y-auto pt-3.5 no-scrollbar">
           <div>
-            <p className="text-[17px] font-medium text-[#2D2D2D]">
+            <p className="text-[14px] leading-5 text-[#2B2B2B]">
               Select a Reason
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-2 flex flex-wrap gap-2">
               {reportReasons.map((item) => {
                 const active = item === reason;
                 return (
@@ -301,10 +290,10 @@ function ReportSheet({
                     key={item}
                     type="button"
                     onClick={() => setReason(item)}
-                    className={`rounded-full px-5 py-3 text-[15px] font-medium ${
+                    className={`h-[30px] rounded-full px-3 text-[14px] ${
                       active
-                        ? "bg-[#15C3CF] text-white"
-                        : "bg-[#F3F3F3] text-[#2D2D2D]"
+                        ? "bg-[#01C3CF] text-white"
+                        : "bg-[#F6F6F6] text-[#2B2B2B]"
                     }`}
                   >
                     {item}
@@ -314,24 +303,24 @@ function ReportSheet({
             </div>
           </div>
 
-          <div className="rounded-[24px] bg-[#F3F3F3] px-6 py-5">
+          <div className="rounded-[20px] bg-[#F6F6F6] px-3 py-2.5">
             <textarea
               value={details}
               onChange={(e) => setDetails(e.target.value.slice(0, 200))}
-              rows={5}
+              rows={4}
               placeholder="Provide additional details (required)..."
-              className="w-full resize-none bg-transparent text-[16px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7]"
+              className="block w-full resize-none bg-transparent text-base text-[#2B2B2B] outline-none placeholder:text-[14px] placeholder:text-[#839297]"
             />
-            <div className="mt-4 flex justify-end text-[14px] text-[#98A0A7]">
+            <div className="mt-1.5 flex justify-end text-[12px] text-[#839297]">
               {details.length}/200
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="h-14 min-w-[132px] rounded-full bg-[#F3F3F3] px-8 text-[16px] font-medium text-[#98A0A7]"
+              className="h-[45px] w-[117px] shrink-0 rounded-full bg-[#F6F6F6] text-[14px] text-[#839297]"
             >
               Cancel
             </button>
@@ -347,7 +336,7 @@ function ReportSheet({
                 try {
                   setSubmitting(true);
                   const response = await fetch(
-                    `/api/cloak-watch/posts/${postId}/report`,
+                    `/api/community/posts/${postId}/report`,
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -375,7 +364,7 @@ function ReportSheet({
                 }
               }}
               disabled={submitting}
-              className="h-14 flex-1 rounded-full bg-[#15C3CF] px-8 text-[16px] font-medium text-white"
+              className="h-[45px] flex-1 rounded-full bg-[#01C3CF] text-[14px] text-white disabled:opacity-60"
             >
               {submitting ? "Submitting..." : "Submit Report"}
             </button>
@@ -399,19 +388,19 @@ function DeleteConfirmationSheet({
 }) {
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <div className="mt-6 px-7 pb-10 pt-2">
+      <div className="mt-3.5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <SheetHeader title="Delete Post" onClose={onClose} />
-        <div className="pt-8">
-          <p className="text-[16px] leading-7 text-[#2D2D2D]">
+        <div className="pt-3.5">
+          <p className="text-[14px] leading-5 text-[#839297]">
             Are you sure you want to delete this post? This action cannot be
             undone.
           </p>
-          <div className="mt-8 flex items-center justify-between gap-4">
+          <div className="mt-5 flex items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
               disabled={deleting}
-              className="h-14 min-w-[132px] rounded-full bg-[#F3F3F3] px-8 text-[16px] font-medium text-[#98A0A7] disabled:opacity-60"
+              className="h-[45px] w-[117px] shrink-0 rounded-full bg-[#F6F6F6] text-[14px] text-[#839297] disabled:opacity-60"
             >
               Cancel
             </button>
@@ -419,7 +408,7 @@ function DeleteConfirmationSheet({
               type="button"
               onClick={onConfirm}
               disabled={deleting}
-              className="h-14 flex-1 rounded-full bg-[#A31616] px-8 text-[16px] font-medium text-white disabled:opacity-60"
+              className="h-[45px] flex-1 rounded-full bg-[#FFEBEC] text-[14px] text-[#FC383A] disabled:opacity-60"
             >
               {deleting ? "Deleting..." : "Delete Post"}
             </button>
@@ -458,11 +447,15 @@ export function PostCard({
   onOpenPost,
   onDeleted,
   onSaveStateChange,
+  showShare = true,
 }: {
   post: CloakWatchPost;
   onOpenPost?: (post: CloakWatchPost) => void;
   onDeleted?: (postId: string) => void;
   onSaveStateChange?: (post: CloakWatchPost, isSaved: boolean) => void;
+  // The Saved Posts design has no share pill in the action row (copying
+  // the link is still available from the ⋯ options sheet).
+  showShare?: boolean;
 }) {
   const { onPointerDown, onPointerUp } = useTapVsDrag(() =>
     onOpenPost?.(localPost),
@@ -560,10 +553,10 @@ export function PostCard({
     const target = pendingViewerVoteRef.current;
     // Lets the server enforce "last click wins" even if this request's
     // response arrives out of order relative to a later one — see
-    // app/api/cloak-watch/posts/[id]/vote/route.ts.
+    // app/api/community/posts/[id]/vote/route.ts.
     const clientSeq = Date.now();
 
-    fetch(`/api/cloak-watch/posts/${post.id}/vote`, {
+    fetch(`/api/community/posts/${post.id}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ value: target, clientSeq }),
@@ -603,7 +596,7 @@ export function PostCard({
     const target = pendingIsSavedRef.current;
     const clientSeq = Date.now();
 
-    fetch(`/api/cloak-watch/posts/${post.id}/save`, {
+    fetch(`/api/community/posts/${post.id}/save`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isSaved: target, clientSeq }),
@@ -730,10 +723,10 @@ export function PostCard({
     try {
       if (typeof window !== "undefined") {
         await navigator.clipboard.writeText(
-          `${window.location.origin}/cloak-watch/post/${localPost.id}`,
+          `${window.location.origin}/community/post/${localPost.id}`,
         );
       }
-      await fetch(`/api/cloak-watch/posts/${localPost.id}/share`, {
+      await fetch(`/api/community/posts/${localPost.id}/share`, {
         method: "POST",
       }).catch(() => null);
       toast.success("Post link has been copied", { duration: 1500 });
@@ -745,7 +738,7 @@ export function PostCard({
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
-      const response = await fetch(`/api/cloak-watch/posts/${localPost.id}`, {
+      const response = await fetch(`/api/community/posts/${localPost.id}`, {
         method: "DELETE",
       });
       const data = await response.json().catch(() => null);
@@ -768,28 +761,28 @@ export function PostCard({
 
   return (
     <>
-      <article className="rounded-[22px] bg-white">
+      <article className="bg-white">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative h-10 w-10 overflow-hidden rounded-full bg-slate-200">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-slate-200">
               <Image
-                src={localPost.avatarUrl}
+                src={localPost.avatarUrl || "/images/placeholder_avatar.png"}
                 alt={localPost.username}
                 fill
                 className="object-cover"
                 unoptimized
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1">
-                <p className="text-[14px] font-semibold text-[#2D2D2D]">
+                <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">
                   {localPost.username}
                 </p>
                 {localPost.identityVerificationStatus === "APPROVED" && (
-                  <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
+                  <VerifiedBadge className="h-4 w-4 shrink-0 text-[#14C3CF]" />
                 )}
               </div>
-              <p className="text-[12px] text-[#98A0A7]">
+              <p className="text-[12px] leading-4 text-[#839297]">
                 Level {localPost.level} • {time}
               </p>
             </div>
@@ -798,13 +791,13 @@ export function PostCard({
           <button
             type="button"
             onClick={() => setOptionsOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#98A0A7]"
+            className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#839297]"
           >
             <MoreHorizontal className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="mt-3 break-words text-[14px] leading-6 text-[#2D2D2D]">
+        <p className="mt-2.5 break-words text-[14px] leading-[18px] text-[#2B2B2B]">
           {localPost.body}
         </p>
 
@@ -816,7 +809,7 @@ export function PostCard({
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") onOpenPost?.(localPost);
           }}
-          className="relative mt-3 block w-full cursor-pointer overflow-hidden rounded-[22px] bg-[#EDE7DE] text-left"
+          className="relative mt-3.5 block w-full cursor-pointer overflow-hidden rounded-[20px] bg-[#EDE7DE] text-left"
         >
           <div
             ref={carouselRef}
@@ -861,16 +854,16 @@ export function PostCard({
           />
         </div>
 
-        <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
             {/* Upvote Button */}
             <button
               type="button"
               onClick={() => void handleVote(1)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold min-w-[64px] justify-center ${
+              className={`inline-flex h-[34px] min-w-[51px] items-center justify-center gap-1.5 rounded-full px-2.5 text-[12px] ${
                 localPost.viewerVote === 1
-                  ? "bg-[#E8FEFF] text-[#00C3D0]"
-                  : "bg-[#F3F3F3] text-[#2B2B2B]"
+                  ? "bg-[#E6FEFF] text-[#01C3CF]"
+                  : "bg-[#F6F6F6] text-[#2B2B2B]"
               }`}
             >
               <svg
@@ -903,9 +896,9 @@ export function PostCard({
             <button
               type="button"
               onClick={() => void handleVote(-1)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold min-w-[64px] justify-center ${
+              className={`inline-flex h-[34px] min-w-[51px] items-center justify-center gap-1.5 rounded-full px-2.5 text-[12px] ${
                 localPost.viewerVote === -1
-                  ? "bg-[#FFEDED] text-[#A84141]"
+                  ? "bg-[#FFEBEC] text-[#D0383C]"
                   : "bg-[#F6F6F6] text-[#2B2B2B]"
               }`}
             >
@@ -936,40 +929,38 @@ export function PostCard({
             </button>
 
             {/* Share Button */}
-            <button
-              type="button"
-              onClick={() => void handleCopyLink()}
-              disabled={isShareCoolingDown}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F6F6F6] text-[#2B2B2B] disabled:opacity-50"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 15 14"
-                fill="none"
-                className="h-4.5 w-4.5 shrink-0"
-                aria-hidden="true"
+            {showShare && (
+              <button
+                type="button"
+                onClick={() => void handleCopyLink()}
+                disabled={isShareCoolingDown}
+                className="flex h-[34px] w-10 items-center justify-center rounded-full bg-[#F6F6F6] text-[#2B2B2B] disabled:opacity-50"
               >
-                <path
-                  d="M14.7803 6.21959L8.78025 0.21959C8.67536 0.114733 8.54174 0.0433283 8.39627 0.0144026C8.25081 -0.0145231 8.10003 0.000329213 7.96301 0.0570817C7.82598 0.113834 7.70886 0.209939 7.62645 0.333246C7.54404 0.456554 7.50003 0.601527 7.5 0.74984V3.40859C5.45122 3.59818 3.54692 4.54549 2.15977 6.06511C0.772615 7.58474 0.0024538 9.56731 0 11.6248L0 12.7498C0.000118392 12.9055 0.0486823 13.0573 0.138956 13.1842C0.229229 13.311 0.356737 13.4066 0.503794 13.4577C0.650851 13.5088 0.810168 13.5129 0.959647 13.4694C1.10913 13.4259 1.24136 13.3369 1.338 13.2148C2.07288 12.3412 2.97446 11.6227 3.99007 11.1013C5.00569 10.5799 6.11501 10.2661 7.25325 10.1781C7.29075 10.1736 7.3845 10.1661 7.5 10.1586V12.7498C7.50003 12.8982 7.54404 13.0431 7.62645 13.1664C7.70886 13.2897 7.82598 13.3858 7.96301 13.4426C8.10003 13.4994 8.25081 13.5142 8.39627 13.4853C8.54174 13.4564 8.67536 13.3849 8.78025 13.2801L14.7803 7.28009C14.9209 7.13944 14.9998 6.94871 14.9998 6.74984C14.9998 6.55097 14.9209 6.36024 14.7803 6.21959ZM9 10.9393V9.37484C9 9.17593 8.92098 8.98516 8.78033 8.84451C8.63968 8.70386 8.44891 8.62484 8.25 8.62484C8.05875 8.62484 7.278 8.66234 7.0785 8.68859C5.0571 8.87463 3.13296 9.64262 1.539 10.8996C1.71993 9.24542 2.50465 7.7161 3.74292 6.60446C4.98118 5.49282 6.58596 4.87698 8.25 4.87484C8.44891 4.87484 8.63968 4.79582 8.78033 4.65517C8.92098 4.51452 9 4.32375 9 4.12484V2.56034L13.1895 6.74984L9 10.9393Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 15 14"
+                  fill="none"
+                  className="h-4.5 w-4.5 shrink-0"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M14.7803 6.21959L8.78025 0.21959C8.67536 0.114733 8.54174 0.0433283 8.39627 0.0144026C8.25081 -0.0145231 8.10003 0.000329213 7.96301 0.0570817C7.82598 0.113834 7.70886 0.209939 7.62645 0.333246C7.54404 0.456554 7.50003 0.601527 7.5 0.74984V3.40859C5.45122 3.59818 3.54692 4.54549 2.15977 6.06511C0.772615 7.58474 0.0024538 9.56731 0 11.6248L0 12.7498C0.000118392 12.9055 0.0486823 13.0573 0.138956 13.1842C0.229229 13.311 0.356737 13.4066 0.503794 13.4577C0.650851 13.5088 0.810168 13.5129 0.959647 13.4694C1.10913 13.4259 1.24136 13.3369 1.338 13.2148C2.07288 12.3412 2.97446 11.6227 3.99007 11.1013C5.00569 10.5799 6.11501 10.2661 7.25325 10.1781C7.29075 10.1736 7.3845 10.1661 7.5 10.1586V12.7498C7.50003 12.8982 7.54404 13.0431 7.62645 13.1664C7.70886 13.2897 7.82598 13.3858 7.96301 13.4426C8.10003 13.4994 8.25081 13.5142 8.39627 13.4853C8.54174 13.4564 8.67536 13.3849 8.78025 13.2801L14.7803 7.28009C14.9209 7.13944 14.9998 6.94871 14.9998 6.74984C14.9998 6.55097 14.9209 6.36024 14.7803 6.21959ZM9 10.9393V9.37484C9 9.17593 8.92098 8.98516 8.78033 8.84451C8.63968 8.70386 8.44891 8.62484 8.25 8.62484C8.05875 8.62484 7.278 8.66234 7.0785 8.68859C5.0571 8.87463 3.13296 9.64262 1.539 10.8996C1.71993 9.24542 2.50465 7.7161 3.74292 6.60446C4.98118 5.49282 6.58596 4.87698 8.25 4.87484C8.44891 4.87484 8.63968 4.79582 8.78033 4.65517C8.92098 4.51452 9 4.32375 9 4.12484V2.56034L13.1895 6.74984L9 10.9393Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
 
-          {/* Bookmark Button (Unchanged) */}
+          {/* Bookmark Button — filled dark when saved, as in the design */}
           <button
             type="button"
             onClick={() => handleToggleSave()}
-            className={`flex h-9 w-9 items-center justify-center rounded-full ${
-              localPost.isSaved
-                ? "bg-[#E8FEFF] text-[#00C3D0]"
-                : "bg-[#F6F6F6] text-[#2B2B2B]"
-            }`}
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#F6F6F6] text-[#2B2B2B]"
           >
             <Bookmark
-              className={`h-5 w-5 ${localPost.isSaved ? "fill-current" : ""}`}
-              strokeWidth={2.1}
+              className={`h-[18px] w-[18px] ${localPost.isSaved ? "fill-current" : ""}`}
+              strokeWidth={1.8}
             />
           </button>
         </div>

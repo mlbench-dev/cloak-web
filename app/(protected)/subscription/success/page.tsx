@@ -29,7 +29,7 @@ export default function SubscriptionSuccessPage() {
           <CheckCircle2 className="h-8 w-8 text-[#1CCF84]" />
         </div>
         <h1 className="text-[22px] font-semibold text-[#111827]">Payment received</h1>
-        <p className="mt-3 max-w-[300px] text-[15px] leading-6 text-[#8F98A0]">
+        <p className="mt-3 max-w-[300px] text-[14px] leading-6 text-[#8F98A0]">
           {refreshed
             ? "Your plan is being activated. It can take a moment to reflect everywhere."
             : "Confirming your payment..."}
@@ -37,7 +37,7 @@ export default function SubscriptionSuccessPage() {
         <button
           type="button"
           onClick={() => router.push("/subscription")}
-          className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-4 text-[15px] font-medium text-white"
+          className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
         >
           Back to Subscription
         </button>

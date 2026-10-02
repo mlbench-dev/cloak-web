@@ -13,7 +13,7 @@ import { useNotifications } from "./NotificationsProvider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: HomeNavIcon },
-  { href: "/cloak-watch", label: "Cloak Watch", icon: CloakWatchNavIcon },
+  { href: "/community", label: "Community", icon: CloakWatchNavIcon },
   { href: "/submit-report", label: "Submit Report", icon: SubmitReportNavIcon },
   { href: "/alerts", label: "Alerts", icon: AlertsNavIcon },
   { href: "/profile", label: "Profile", icon: ProfileNavIcon },

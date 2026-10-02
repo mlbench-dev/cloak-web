@@ -50,7 +50,7 @@ export default function CloakWatchPostDetailPage() {
         <button type="button" onClick={() => router.back()} className="p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-lg font-semibold text-[#2D2D2D]">Post</h1>
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Post</h1>
         <div className="w-10" />
       </header>
 

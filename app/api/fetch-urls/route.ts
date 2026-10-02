@@ -50,11 +50,28 @@ function getFetchUrlApiHeaders(extra?: Record<string, string>) {
 
 const NUMBER_OF_REQUESTS = 15;
 
+// The CV team's discovery API isn't ready yet, so "Scan Now" runs as a mock
+// for now: no external call, just a short wait so the Scraping Posts screen
+// has something to show, after which the dashboard reloads
+// /api/scan-results (which serves the mock/test links). Once the real API
+// is ready, set FETCH_URL_USE_REAL_API=true in the environment — the real
+// implementation below is untouched.
+const USE_MOCK_SCAN = process.env.FETCH_URL_USE_REAL_API !== "true";
+const MOCK_SCAN_DURATION_MS = 4000;
+
 export async function POST() {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (USE_MOCK_SCAN) {
+      await new Promise((resolve) => setTimeout(resolve, MOCK_SCAN_DURATION_MS));
+      // Deliberately doesn't stamp lastScanTriggeredAt — nothing ever
+      // completes a mock scan on the CV side, so Cloak Watch would show
+      // "Scraping is in Progress" forever.
+      return NextResponse.json({ success: true, mock: true, result: null });
     }
 
     if (!FETCH_URL_API_BASE_URL) {
@@ -144,6 +161,50 @@ export async function POST() {
     console.error("Error triggering scan:", error);
     return NextResponse.json(
       { error: "Scan request failed. Please try again." },
+      { status: 500 },
+    );
+  }
+}
+
+// Removes one or more links from the user's watch list (Cloak Watch's
+// select-and-delete mode). Pulling from the array in place rather than
+// re-running the CV scan — the CV service only knows how to (re)discover
+// links, not forget ones a user has dismissed.
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const urls = Array.isArray(body?.urls)
+      ? body.urls.filter((url: unknown): url is string => typeof url === "string")
+      : [];
+
+    if (urls.length === 0) {
+      return NextResponse.json(
+        { error: "No links provided to delete." },
+        { status: 400 },
+      );
+    }
+
+    const client = await clientPromise;
+    const db = client.db();
+    const userId = new ObjectId(session.user.id);
+
+    const result = await db
+      .collection<{ userId: ObjectId; urls: string[] }>("fetchUrl")
+      .updateOne({ userId }, { $pull: { urls: { $in: urls } } });
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: result.modifiedCount > 0 ? urls.length : 0,
+    });
+  } catch (error) {
+    console.error("Error deleting watched links:", error);
+    return NextResponse.json(
+      { error: "Failed to delete selected links." },
       { status: 500 },
     );
   }

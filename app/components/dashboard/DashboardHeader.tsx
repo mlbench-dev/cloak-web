@@ -1,6 +1,5 @@
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import PlanBadge from "@/app/components/PlanBadge";
-import { User } from "lucide-react";
 import Image from "next/image";
 import { LEVEL_CONFIG } from "@/lib/config";
 import type { PlanCode } from "@/models/Subscription";
@@ -45,7 +44,7 @@ export default function DashboardHeader({
   image,
   currentLevel,
 }: DashboardHeaderProps) {
-  const avatarUrl = profileImage || image;
+  const avatarUrl = profileImage || image || "/images/placeholder_avatar.png";
   const currentLevelConfig = LEVEL_CONFIG.find(
     (level) => level.level === currentLevel,
   );
@@ -75,22 +74,12 @@ export default function DashboardHeader({
       </div>
 
       <div className="flex items-center gap-4">
-        {avatarUrl ? (
-          <div
-            className="h-14 w-14 shrink-0 rounded-full bg-cover bg-center bg-no-repeat shadow-sm"
-            style={{ backgroundImage: `url(${avatarUrl})` }}
-            aria-label={`${username} profile image`}
-            role="img"
-          />
-        ) : (
-          <div
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 shadow-sm"
-            aria-label="Default profile avatar"
-            role="img"
-          >
-            <User className="h-7 w-7" strokeWidth={1.8} />
-          </div>
-        )}
+        <div
+          className="h-14 w-14 shrink-0 rounded-full bg-cover bg-center bg-no-repeat shadow-sm"
+          style={{ backgroundImage: `url(${avatarUrl})` }}
+          aria-label={`${username} profile image`}
+          role="img"
+        />
 
         <div className="grid flex-1 grid-cols-3 gap-3 text-center">
           {stats.map((stat) => (
