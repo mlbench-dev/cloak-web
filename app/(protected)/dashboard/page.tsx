@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Crown,
   Crosshair,
   Fingerprint,
   Flag,
@@ -23,6 +24,7 @@ import VerifiedBadge from "@/app/components/VerifiedBadge";
 import ScrapingProgress from "./_components/ScrapingProgress";
 import { DetectiveIcon } from "@/public/svgIcons";
 import type { PlanCode } from "@/models/Subscription";
+import { PLAN_DISPLAY_NAME } from "@/lib/config";
 
 // --- Types matching the real /api/user/dashboard payload (unchanged from
 // before this redesign — only the achievements/XP-bar/old-3-stat UI that
@@ -309,9 +311,26 @@ export default function DashboardPage() {
       {hasRequiredIdentityDetails ? (
         <div
           className={`rounded-3xl bg-gradient-to-r from-[#02C4D0] to-[#21DBE7] px-1 pb-1 ${
-            plan === "FREEMIUM" ? "pt-3" : "pt-1"
+            plan === "FREEMIUM" ? "pt-3" : "pt-2.5"
           }`}
         >
+          {/* Paid plans have no carousel dots, so without this strip the
+              gradient was just a thick outline around the card. */}
+          {plan !== "FREEMIUM" && (
+            <div className="mb-2.5 flex items-center justify-between gap-3 px-3">
+              <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-medium leading-4 text-white">
+                <Crown className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{PLAN_DISPLAY_NAME[plan]}</span>
+              </p>
+              <Link
+                href="/subscription"
+                className="flex shrink-0 items-center text-[12px] leading-4 text-white/90"
+              >
+                Manage plan
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          )}
           {plan === "FREEMIUM" && (
             <div className="mb-3 flex h-1.5 items-center justify-center gap-1">
               <span

@@ -431,7 +431,7 @@ export default function IdentityProfilePage() {
             className="inline-flex h-7 shrink-0 items-center gap-2 self-center rounded-full bg-[#00C3D0] pl-2 pr-2.5 text-[12px] font-medium text-white"
           >
             <Edit3 className="h-4 w-4" />
-            Edit Profile
+            Edit 
           </button>
         </div>
 
