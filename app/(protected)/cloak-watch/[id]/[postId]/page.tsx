@@ -246,7 +246,7 @@ export default function PostDetailPage() {
                       key={reason}
                       type="button"
                       onClick={() => setRejectionReason(reason)}
-                      className={`flex h-10 min-w-0 items-center gap-3 rounded-xl border px-2.5 text-left ${
+                      className={`flex min-h-10 min-w-0 items-center gap-3 rounded-xl border px-2.5 py-2 text-left ${
                         isActive
                           ? "border-[#00C3CF] shadow-[0_0_0_2px_#D8F6F8]"
                           : "border-[#E7E7E7]"
@@ -259,7 +259,7 @@ export default function PostDetailPage() {
                       >
                         {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00C3CF]" />}
                       </span>
-                      <span className="truncate text-[12px] leading-4 text-[#2B2B2B]">{reason}</span>
+                      <span className="min-w-0 break-words text-[12px] leading-4 text-[#2B2B2B]">{reason}</span>
                     </button>
                   );
                 })}

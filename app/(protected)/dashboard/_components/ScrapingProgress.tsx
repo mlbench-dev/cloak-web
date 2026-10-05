@@ -12,7 +12,7 @@ function formatElapsed(totalSeconds: number): string {
 // Full-screen takeover shown while the real "Scan Now" call
 // (POST /api/fetch-urls) is in flight. There's no streaming progress from
 // the CV service — it's a single request that resolves once — so
-// Post Found/Images extracted are simulated motion to show something is
+// Post Found/Images extracted/Analyzing content are simulated motion to show something is
 // happening, not a real running count. Only Time Elapsed and the
 // complete/incomplete state are real.
 export default function ScrapingProgress({
@@ -39,6 +39,12 @@ export default function ScrapingProgress({
     }, 300);
     return () => clearInterval(interval);
   }, [isComplete]);
+
+  // Analysis trails behind scraping; once the scan resolves, everything
+  // found counts as analyzed.
+  const analyzedContent = isComplete
+    ? postsFound
+    : Math.min(postsFound, Math.floor(elapsedSeconds / 3));
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white px-4 pt-4 font-sf-pro-display">
@@ -99,6 +105,12 @@ export default function ScrapingProgress({
               <div className="flex items-center justify-between text-[14px] leading-5">
                 <p className="text-[#839297]">Images extracted</p>
                 <p className="text-[#2B2B2B]">{imagesExtracted}</p>
+              </div>
+              <div className="flex items-center justify-between text-[14px] leading-5">
+                <p className="text-[#839297]">Analyzing content</p>
+                <p className="text-[#2B2B2B]">
+                  {analyzedContent}/{postsFound}
+                </p>
               </div>
               <div className="flex items-center justify-between text-[14px] leading-5">
                 <p className="text-[#839297]">Time Elapsed</p>
