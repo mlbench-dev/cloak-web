@@ -1,0 +1,58 @@
+{
+  "name": "cloak",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "allowScripts": {
+    "@firebase/util@1.15.1": true,
+    "@sentry/cli@2.58.6": true,
+    "sharp@0.34.5": true,
+    "sharp@0.35.3": true,
+    "protobufjs@7.6.3": true,
+    "unrs-resolver@1.12.2": true
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^4.15.9"
+    }
+  },
+  "dependencies": {
+    "@auth/mongodb-adapter": "^3.11.2",
+    "@iconify-react/stash": "^1.0.2",
+    "@sentry/nextjs": "^10.65.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/lodash": "^4.17.24",
+    "@types/nodemailer": "^8.0.0",
+    "firebase": "^12.14.0",
+    "firebase-admin": "^14.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "lodash": "^4.18.1",
+    "lucide-react": "^1.17.0",
+    "mongodb": "^6.12.0",
+    "next": "16.2.7",
+    "next-auth": "^4.24.14",
+    "nodemailer": "^7.0.13",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-easy-crop": "^5.5.7",
+    "react-hot-toast": "^2.6.0",
+    "react-webcam": "^7.2.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,89 @@
+# Cloud Build config for the Cloak Next.js app.
+#
+# This exists to fix a specific gap: Cloud Run's own auto-generated
+# "Continuous Deployment" build (the one that runs when a trigger's
+# Configuration is left as "Dockerfile"/autodetected) calls `docker build`
+# with no --build-arg flags, so every NEXT_PUBLIC_* value in the Dockerfile's
+# ARGs resolves to an empty string and gets baked into the shipped client
+# bundle that way (Next.js inlines NEXT_PUBLIC_* at build time — there's no
+# fixing it later at runtime).
+#
+# To use this file: in the trigger's edit page, find "Configuration" (near
+# the top, above Substitution variables) and switch it from
+# "Dockerfile"/autodetected to "Cloud Build configuration file (yaml or
+# json)", with location "Repository" and path "cloudbuild.yaml". The
+# _AR_HOSTNAME / _AR_PROJECT_ID / _AR_REPOSITORY / _DEPLOY_REGION /
+# _PLATFORM / _SERVICE_NAME substitutions below are ones Cloud Run already
+# auto-populates on this trigger — no need to touch those. Add the 8
+# _NEXT_PUBLIC_* ones as new substitution variables with your real values.
+# These are public client-side values (an API key restricted by Firebase's
+# own domain/app rules, not a secret), so plain substitutions are fine —
+# do not put server-only secrets (DATABASE_URL, NEXTAUTH_SECRET, etc.) here;
+# those belong in Cloud Run's runtime env vars / Secret Manager instead, set
+# once on the service, not on every build.
+
+substitutions:
+  _AR_HOSTNAME: ""
+  _AR_PROJECT_ID: ""
+  _AR_REPOSITORY: ""
+  _DEPLOY_REGION: ""
+  _PLATFORM: managed
+  _SERVICE_NAME: ""
+  _NEXT_PUBLIC_APP_URL: ""
+  _NEXT_PUBLIC_FIREBASE_API_KEY: ""
+  _NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ""
+  _NEXT_PUBLIC_FIREBASE_PROJECT_ID: ""
+  _NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ""
+  _NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ""
+  _NEXT_PUBLIC_FIREBASE_APP_ID: ""
+  _NEXT_PUBLIC_FIREBASE_DATABASE_URL: ""
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_APP_URL=${_NEXT_PUBLIC_APP_URL}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_DATABASE_URL=${_NEXT_PUBLIC_FIREBASE_DATABASE_URL}
+      - -t
+      - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA
+      - -t
+      - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}
+
+  # Deploys the image just pushed above. Runtime secrets are read from
+  # Secret Manager on the Cloud Run service itself, never passed through
+  # this build — edit the secret names below to match what you actually
+  # created (see the DATABASE_URL / NEXTAUTH_SECRET / etc. list from the
+  # deployment runbook) before enabling this step.
+  - id: deploy
+    name: gcr.io/cloud-builders/gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA
+      - --region=${_DEPLOY_REGION}
+      - --platform=${_PLATFORM}
+      - --quiet
+      - --set-secrets=DATABASE_URL=database-url:latest,NEXTAUTH_SECRET=nextauth-secret:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,SMTP_PASS=smtp-pass:latest,FIREBASE_PRIVATE_KEY=firebase-private-key:latest,FIREBASE_CLIENT_EMAIL=firebase-client-email:latest,FIREBASE_PROJECT_ID=firebase-project-id:latest,BEARER_TOKEN=bearer-token:latest,CRON_SECRET=cron-secret:latest
+
+images:
+  - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:$SHORT_SHA
+  - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
