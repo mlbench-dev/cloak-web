@@ -1,19 +1,16 @@
 import {
-  LucideMegaphoneOff,
-  FlagTriangleRight,
-  Bookmark,
   Crown,
-  Search,
-  ShieldPlus,
-  Users,
-  Zap,
-  LifeBuoy,
-  Timer,
+  FlagTriangleRight,
+  ImagePlus,
+  LayoutGrid,
+  Megaphone,
+  MegaphoneOff,
+  Radar,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PLAN_LIMITS } from "@/lib/config";
 
-export type PlanTone = "slate" | "teal" | "green";
+export type PlanTone = "slate" | "teal";
 
 export type PlanFeature = {
   icon: LucideIcon;
@@ -21,7 +18,7 @@ export type PlanFeature = {
 };
 
 export type PlanSummary = {
-  slug: "cloak-pro" | "boost-protection";
+  slug: "cloak-pro";
   name: string;
   price: string;
   priceLine: string;
@@ -41,34 +38,19 @@ function formatZarPriceLine(priceZarCents: number): string {
   return `≈ R${(priceZarCents / 100).toFixed(2)} ZAR, billed via PayFast`;
 }
 
-// Feature copy here reflects the finalized, technically-scoped plan shared
-// with the client — every line here has real enforcement behind it in
-// lib/config.ts's PLAN_LIMITS. Don't add a line here without matching
-// backend enforcement, or it becomes the same kind of unbacked marketing
-// claim this replaced.
+// Copy follows the approved subscription design.
 export const freemiumFeatures: PlanFeature[] = [
-  { icon: FlagTriangleRight, label: "3 reports per month" },
-  { icon: LucideMegaphoneOff, label: "Basic alerts" },
-  { icon: Search, label: "10 searches per day" },
-  { icon: Bookmark, label: "5 saved lookups" },
-  { icon: Users, label: "View-only community feed" },
-];
-
-export const boostProtectionFeatures: PlanFeature[] = [
-  { icon: FlagTriangleRight, label: "20 reports per month" },
-  { icon: Search, label: "Unlimited search" },
-  { icon: Bookmark, label: "Unlimited saved lookups" },
-  { icon: Users, label: "Post in the community feed" },
-  { icon: Zap, label: "1.5x points on approved reports" },
-  { icon: Timer, label: "Faster verification retries" },
+  { icon: ImagePlus, label: "3 image uploads" },
+  { icon: MegaphoneOff, label: "Basic Alerts" },
+  { icon: FlagTriangleRight, label: "Manual Reporting" },
+  { icon: Radar, label: "One time AI Monitoring" },
 ];
 
 export const cloakProFeatures: PlanFeature[] = [
-  { icon: FlagTriangleRight, label: "Unlimited reports" },
-  { icon: Search, label: "Unlimited search & saved lookups" },
-  { icon: Users, label: "Post in the community feed" },
-  { icon: Zap, label: "2x points on approved reports" },
-  { icon: LifeBuoy, label: "Priority support" },
+  { icon: ImagePlus, label: "Unlimited Uploads" },
+  { icon: Megaphone, label: "Real Time Alerts" },
+  { icon: Radar, label: "Daily AI Monitoring" },
+  { icon: LayoutGrid, label: "Advanced Dashboard" },
 ];
 
 export const cloakProPlan: PlanSummary = {
@@ -77,20 +59,8 @@ export const cloakProPlan: PlanSummary = {
   price: "$11.99",
   priceLine: "$11.99 per month",
   zarPriceLine: formatZarPriceLine(PLAN_LIMITS.CLOAK_PRO.priceZarCents),
-  description: "Unlimited reports, 2x points, and priority support",
+  description: "Unlock everything at the go",
   icon: Crown,
   tone: "teal",
   features: cloakProFeatures,
-};
-
-export const boostProtectionPlan: PlanSummary = {
-  slug: "boost-protection",
-  name: "Boost Protection",
-  price: "$4.99",
-  priceLine: "$4.99 per month",
-  zarPriceLine: formatZarPriceLine(PLAN_LIMITS.BOOST.priceZarCents),
-  description: "More reports, unlimited search, and community posting",
-  icon: ShieldPlus,
-  tone: "green",
-  features: boostProtectionFeatures,
 };

@@ -7,12 +7,19 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { PlatformIcon } from "./_components/IncidentUI";
 import { detectPlatform } from "@/lib/platform";
+import { getSourceLinkLabel } from "@/app/components/reports/reportUi";
+import {
+  ConfirmLinksScreen,
+  ScrapingLinksScreen,
+  ScrapingPostsScreen,
+  describeMissingProfile,
+  profileCompletionHref,
+  useLinkFetchStatus,
+} from "@/app/components/linkDiscovery/LinkDiscovery";
 
 interface ScanResultsResponse {
   success: boolean;
   urls: string[];
-  updatedAt: string | null;
-  lastScanTriggeredAt: string | null;
 }
 
 interface IdentityProfileResponse {
@@ -20,50 +27,108 @@ interface IdentityProfileResponse {
   profile: { fullName?: string } | null;
 }
 
-// Shows a friendly hostname ("www.instagram.com") instead of the full
-// profile path — this level is about the link/account itself, not an
-// individual post.
-function hostnameLabel(url: string): string {
+async function fetchWatchedUrls(): Promise<string[] | null> {
   try {
-    return new URL(url).hostname;
+    const res = await fetch("/api/scan-results", { cache: "no-store" });
+    const data: ScanResultsResponse | null = res.ok ? await res.json() : null;
+    return data?.success ? data.urls : null;
   } catch {
-    return url;
+    return null;
   }
 }
 
 export default function IncidentsPage() {
   const router = useRouter();
   const [urls, setUrls] = useState<string[]>([]);
-  const [scanInProgress, setScanInProgress] = useState(false);
   const [subjectName, setSubjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
 
+  // Link discovery runs as a background job; if one is running or has
+  // links waiting for review, this screen shows it (it may have been
+  // started from the identity profile and closed there).
+  const {
+    status: linkFetch,
+    start: startLinkFetch,
+    refresh: refreshLinkFetch,
+    retryScrape,
+    applyStatus,
+  } = useLinkFetchStatus();
+  // Showing the Scraping Links screen; stays up after the run finishes
+  // until the user taps Ok (or goes back).
+  const [watchingScrape, setWatchingScrape] = useState(false);
+  const [scrapeDismissed, setScrapeDismissed] = useState(false);
+  const [reviewDismissed, setReviewDismissed] = useState(false);
+
+  // Same idea for post scraping, which starts after Confirm Links.
+  const [watchingPosts, setWatchingPosts] = useState(false);
+  const [postsDismissed, setPostsDismissed] = useState(false);
+  const scrapeState = linkFetch?.scrape.status;
+  if (scrapeState === "running" && !postsDismissed && !watchingPosts) {
+    setWatchingPosts(true);
+  }
+
+  if (linkFetch?.status === "running" && !scrapeDismissed && !watchingScrape) {
+    setWatchingScrape(true);
+  }
+
+  // Keeps what's shown if a reload fails.
+  const reloadUrls = () =>
+    fetchWatchedUrls().then((list) => {
+      if (list) setUrls(list);
+    });
+
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/scan-results")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: ScanResultsResponse | null) => {
-        if (cancelled || !data?.success) return;
-        setUrls(data.urls);
-        // A scan is "in progress" when it was requested more recently than
-        // the last completed result set landed (or no results exist yet).
-        setScanInProgress(
-          !!data.lastScanTriggeredAt &&
-            (!data.updatedAt ||
-              new Date(data.lastScanTriggeredAt) > new Date(data.updatedAt)),
-        );
-      })
-      .catch(() => null)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    fetchWatchedUrls().then((list) => {
+      if (cancelled) return;
+      if (list) setUrls(list);
+      setLoading(false);
+    });
+    void refreshLinkFetch();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshLinkFetch]);
+
+  // New links land in the list as soon as a run finishes.
+  const linkFetchState = linkFetch?.status;
+  useEffect(() => {
+    if (linkFetchState !== "done") return;
+    let cancelled = false;
+    fetchWatchedUrls().then((list) => {
+      if (!cancelled && list) setUrls(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkFetchState]);
+
+  const showConfirm =
+    !watchingScrape && Boolean(linkFetch?.awaitingReview) && !reviewDismissed;
+
+  // Nothing can be fetched until every profile requirement is met (see
+  // getProfileCompleteness in lib/fetchLinks.ts).
+  const needsProfile = linkFetch !== null && !linkFetch.profileComplete;
+  // Profile is ready but discovery has never run (e.g. the first fetch
+  // failed or was never started) — offer to run it from here.
+  const canStartFirstScan =
+    linkFetch !== null &&
+    linkFetch.profileComplete &&
+    !linkFetch.everFetched &&
+    linkFetch.status === "idle";
+  const [startingScan, setStartingScan] = useState(false);
+
+  const handleStartScan = async () => {
+    if (startingScan) return;
+    setStartingScan(true);
+    setScrapeDismissed(false);
+    const error = await startLinkFetch();
+    setStartingScan(false);
+    if (error) toast.error(error);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +189,62 @@ export default function IncidentsPage() {
     }
   };
 
+  if (watchingPosts) {
+    return (
+      <ScrapingPostsScreen
+        scrape={linkFetch?.scrape ?? null}
+        onBack={() => {
+          setWatchingPosts(false);
+          setPostsDismissed(true);
+        }}
+        onRetry={() => void retryScrape()}
+        onOk={() => {
+          setWatchingPosts(false);
+          setPostsDismissed(true);
+          void reloadUrls();
+        }}
+      />
+    );
+  }
+
+  if (watchingScrape) {
+    return (
+      <ScrapingLinksScreen
+        status={linkFetch}
+        onBack={() => {
+          setWatchingScrape(false);
+          setScrapeDismissed(true);
+        }}
+        onRetry={() => {
+          setScrapeDismissed(false);
+          void startLinkFetch();
+        }}
+        onOk={() => {
+          setWatchingScrape(false);
+          setScrapeDismissed(true);
+          if (!linkFetch?.awaitingReview) toast("No new links found");
+        }}
+      />
+    );
+  }
+
+  if (showConfirm && linkFetch) {
+    return (
+      <ConfirmLinksScreen
+        urls={linkFetch.urls}
+        subjectName={subjectName || ""}
+        onBack={() => setReviewDismissed(true)}
+        onDone={(next) => {
+          // Choosing starts scraping — show its loader next.
+          applyStatus(next);
+          setPostsDismissed(false);
+          setWatchingPosts(true);
+          void reloadUrls();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between bg-white z-10">
@@ -145,12 +266,117 @@ export default function IncidentsPage() {
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto pt-5 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-        {scanInProgress && (
-          <div className="mb-4 rounded-3xl bg-[#E9FEFF] px-2.5 pb-3 pt-2">
-            <p className="px-0.5 text-[12px] leading-4 text-[#2B2B2B]">Scraping is in Progress</p>
+        {needsProfile && (
+          <div className="mb-4 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
+            <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+              Complete Your Identity Profile
+            </p>
+            <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
+              {describeMissingProfile(linkFetch.missingProfile)}
+            </p>
+            <Link
+              href={profileCompletionHref(linkFetch.missingProfile)}
+              className="mt-3 inline-flex h-[30px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
+            >
+              Complete Profile
+            </Link>
+          </div>
+        )}
+
+        {canStartFirstScan && (
+          <div className="mb-4 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
+            <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+              Find links about you
+            </p>
+            <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
+              Your identity profile is ready. Start a scan to find accounts and pages that match you.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleStartScan()}
+              disabled={startingScan}
+              className="mt-3 inline-flex h-[30px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
+            >
+              {startingScan && (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              )}
+              Start Scan
+            </button>
+          </div>
+        )}
+
+        {linkFetch?.status === "running" && (
+          <button
+            type="button"
+            onClick={() => setScrapeDismissed(false)}
+            className="mb-4 block w-full rounded-3xl bg-[#E9FEFF] px-2.5 pb-3 pt-2 text-left"
+          >
+            <p className="px-0.5 text-[12px] leading-4 text-[#2B2B2B]">Finding links…</p>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
               <div className="h-full w-2/3 animate-pulse rounded-full bg-[#00C2CE]" />
             </div>
+          </button>
+        )}
+
+        {scrapeState === "running" && (
+          <button
+            type="button"
+            onClick={() => setPostsDismissed(false)}
+            className="mb-4 block w-full rounded-3xl bg-[#E9FEFF] px-2.5 pb-3 pt-2 text-left"
+          >
+            <p className="px-0.5 text-[12px] leading-4 text-[#2B2B2B]">Scraping posts…</p>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
+              <div className="h-full w-2/3 animate-pulse rounded-full bg-[#00C2CE]" />
+            </div>
+          </button>
+        )}
+
+        {scrapeState === "failed" && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-[#FFF1F1] px-3 py-3">
+            <span className="text-[12px] leading-4 text-[#2B2B2B]">
+              {linkFetch?.scrape.error || "Scraping failed."}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setPostsDismissed(false);
+                void retryScrape();
+              }}
+              className="shrink-0 text-[12px] text-[#F30131]"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {linkFetch?.awaitingReview && (
+          <button
+            type="button"
+            onClick={() => setReviewDismissed(false)}
+            className="mb-4 flex w-full items-center justify-between rounded-3xl bg-[#E9FEFF] px-3 py-3 text-left"
+          >
+            <span className="text-[12px] leading-4 text-[#2B2B2B]">
+              {linkFetch.urls.length} new link{linkFetch.urls.length === 1 ? "" : "s"} to review
+            </span>
+            <ChevronRight className="h-4 w-4 text-[#00C2CE]" />
+          </button>
+        )}
+
+        {linkFetch?.status === "failed" && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-[#FFF1F1] px-3 py-3">
+            <span className="text-[12px] leading-4 text-[#2B2B2B]">
+              {linkFetch.error || "Link search failed."}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setScrapeDismissed(false);
+                void startLinkFetch();
+              }}
+              className="shrink-0 text-[12px] text-[#F30131]"
+            >
+              Try again
+            </button>
           </div>
         )}
 
@@ -164,7 +390,7 @@ export default function IncidentsPage() {
               const isSelected = selected.has(url);
               const row = (
                 <div
-                  className={`flex h-14 items-center gap-3 rounded-2xl bg-[#F6F6F6] px-2.5 ${
+                  className={`flex min-h-14 items-center gap-3 rounded-2xl bg-[#F6F6F6] px-2.5 py-2 ${
                     selectMode && isSelected
                       ? "ring-[1.5px] ring-[#00C2CE] shadow-[0_0_0_4px_rgba(0,194,206,0.12)]"
                       : ""
@@ -187,8 +413,10 @@ export default function IncidentsPage() {
                     <PlatformIcon platform={detectPlatform(url)} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">
-                      {hostnameLabel(url)}
+                    {/* Full link — several results share a domain, so the
+                        path is what tells them apart. */}
+                    <p className="break-all text-[14px] leading-5 text-[#2B2B2B]">
+                      {getSourceLinkLabel(url)}
                     </p>
                     <p className="truncate text-[12px] leading-4 text-[#839297]">
                       {subjectName || "Pending review"}
@@ -214,7 +442,7 @@ export default function IncidentsPage() {
               );
             })}
           </div>
-        ) : (
+        ) : needsProfile || canStartFirstScan ? null : (
           <p className="py-10 text-center text-[12px] text-[#839297]">
             No links detected yet
           </p>

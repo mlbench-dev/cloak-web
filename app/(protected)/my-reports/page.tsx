@@ -5,6 +5,12 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import {
+  ReportFilterPills,
+  ReportRowMeta,
+  matchesReportFilter,
+  type ReportFilter,
+} from "@/app/components/reports/reportUi";
 
 type ReportStatus =
   | "PENDING"
@@ -32,18 +38,13 @@ type Report = {
   };
 };
 
-const statusFilters = [
-  { id: "all", label: "All" },
-  { id: "PENDING", label: "Pending" },
-  { id: "APPROVED", label: "Approved" },
-  { id: "FALSE_POSITIVE", label: "Rejected" },
-];
 const truncateText = (text: string, maxChars: number) =>
   text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}...` : text;
+
 export default function MyReportsPage() {
   const { status } = useSession();
   const router = useRouter();
-  const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [activeFilter, setActiveFilter] = useState<ReportFilter>("all");
   const [allReports, setAllReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const hasFetchedReports = useRef(false);
@@ -70,53 +71,23 @@ export default function MyReportsPage() {
     }
   };
 
-  const filteredReports =
-    activeFilter === "all"
-      ? allReports
-      : allReports.filter((report) => {
-          if (activeFilter === "APPROVED") {
-            return report.status === "VERIFIED" || report.status === "APPROVED";
-          }
+  const filteredReports = allReports.filter((report) =>
+    matchesReportFilter(report.status, activeFilter),
+  );
+  const getStatusCount = (filter: ReportFilter) =>
+    allReports.filter((report) => matchesReportFilter(report.status, filter))
+      .length;
 
-          if (activeFilter === "FALSE_POSITIVE") {
-            return (
-              report.status === "REJECTED" || report.status === "FALSE_POSITIVE"
-            );
-          }
-
-          return report.status === activeFilter;
-        });
-
-  const getStatusCount = (statusId: string) => {
-    if (statusId === "all") return allReports.length;
-
-    if (statusId === "APPROVED") {
-      return allReports.filter(
-        (report) =>
-          report.status === "VERIFIED" || report.status === "APPROVED",
-      ).length;
-    }
-    if (statusId === "FALSE_POSITIVE") {
-      return allReports.filter(
-        (report) =>
-          report.status === "REJECTED" || report.status === "FALSE_POSITIVE",
-      ).length;
-    }
-
-    return allReports.filter((report) => report.status === statusId).length;
-  };
-
-  const getStatusPresentation = (status: ReportStatus) => {
-    if (status === "VERIFIED" || status === "APPROVED") {
-      return { label: "Approved", color: "#14C3CF" };
-    }
-
-    if (status === "REJECTED" || status === "FALSE_POSITIVE") {
-      return { label: "Rejected", color: "#EF4444" };
-    }
-
-    return { label: "Pending", color: "#F59E0B" };
-  };
+  const totalReports = allReports.length;
+  const verifiedReports = getStatusCount("VERIFIED");
+  const rejectedReports = getStatusCount("REJECTED");
+  // Accuracy only counts reports that have been reviewed — pending ones
+  // haven't been judged right or wrong yet.
+  const reviewedReports = verifiedReports + rejectedReports;
+  const accuracy =
+    reviewedReports > 0
+      ? `${Math.round((verifiedReports / reviewedReports) * 100)}%`
+      : "—";
 
   if (status === "loading") {
     return (
@@ -136,82 +107,83 @@ export default function MyReportsPage() {
         <div className="-mr-3 w-10" />
       </header>
 
-      {/* Status filters */}
-      <div className="shrink-0 bg-white py-3">
-        <div className="flex flex-nowrap gap-1.5">
-          {statusFilters.map((filter) => (
-            <button
-              key={filter.id}
-              onClick={() => setActiveFilter(filter.id)}
-              className={`flex-1 whitespace-nowrap px-2 py-2 rounded-full text-xs xs:text-sm font-medium text-center transition-all ${
-                activeFilter === filter.id
-                  ? "bg-[#14C3CF] text-white"
-                  : "bg-[#F5F5F5] text-[#666666]"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-3 text-[12px] text-[#8F98A0]">
-          Showing {getStatusCount(activeFilter)}{" "}
-          {getStatusCount(activeFilter) === 1 ? "result" : "results"}
-        </p>
+      <div className="mt-4 grid shrink-0 grid-cols-3 rounded-2xl bg-[#F5F5F5] py-3">
+        {[
+          { label: "Reports", value: totalReports },
+          { label: "Verified", value: verifiedReports },
+          { label: "Accuracy", value: accuracy },
+        ].map((stat, index) => (
+          <div
+            key={stat.label}
+            className={`flex flex-col items-center gap-1 ${
+              index > 0 ? "border-l border-[#E2E2E2]" : ""
+            }`}
+          >
+            <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
+              {stat.value}
+            </p>
+            <p className="text-[12px] leading-4 text-[#A7ADB2]">{stat.label}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto py-4">
+      <div className="shrink-0 bg-white py-3">
+        <ReportFilterPills
+          active={activeFilter}
+          onChange={setActiveFilter}
+          getCount={getStatusCount}
+        />
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
         {loading ? (
           <div className="flex items-center justify-center pt-10">
-            <div className="h-8 w-8 border-3 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
+            <div className="h-8 w-8 border-4 border-[#14C3CF]/20 border-t-[#14C3CF] rounded-full animate-spin" />
           </div>
         ) : filteredReports.length === 0 ? (
           <div className="flex flex-col items-center justify-center pt-20 text-center">
             <p className="text-[#8F98A0] text-[12px]">No reports yet</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {filteredReports.map((report) => (
               <div
                 key={report._id}
                 onClick={() => router.push(`/reports/${report._id}?type=sent`)}
-                className="flex cursor-pointer items-center justify-between rounded-2xl px-3 py-4 bg-[#F7F7F8] hover:bg-[#EDEEF0] active:bg-[#E4E5E8] transition-colors duration-150"
+                className="flex cursor-pointer items-center gap-3 rounded-2xl py-2 transition-colors duration-150 hover:bg-[#F7F7F8] active:bg-[#EDEEF0]"
               >
-                <div className="flex items-center space-x-3">
-                  <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                    <img
-                      src={
-                        report.user.image ||
-                        report.user.profileImage ||
-                        "/images/placeholder_avatar.png"
-                      }
-                      alt={report.user.username || report.user.name || "User"}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1">
-                      <p className="text-[#2D2D2D] font-medium text-[16px]">
-                        {report.user.username}
-                      </p>
-                      {report.user.identityVerificationStatus ===
-                        "APPROVED" && (
-                        <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
-                      )}
-                    </div>
-                    <p className="text-[#8F98A0] text-[12px]">
-                      {truncateText(
-                        report.user.name || report.user.username || "",
-                        30,
-                      )}
-                    </p>
-                  </div>
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-slate-200">
+                  <img
+                    src={
+                      report.user.image ||
+                      report.user.profileImage ||
+                      "/images/placeholder_avatar.png"
+                    }
+                    alt={report.user.username || report.user.name || "User"}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
-                <p
-                  className="text-[12px] font-medium"
-                  style={{ color: getStatusPresentation(report.status).color }}
-                >
-                  {getStatusPresentation(report.status).label}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1">
+                    <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">
+                      {report.user.username}
+                    </p>
+                    {report.user.identityVerificationStatus === "APPROVED" && (
+                      <VerifiedBadge className="h-4 w-4 shrink-0 text-[#14C3CF]" />
+                    )}
+                  </div>
+                  <p className="truncate text-[12px] leading-4 text-[#8F98A0]">
+                    {truncateText(
+                      report.user.name || report.user.username || "",
+                      30,
+                    )}
+                  </p>
+                </div>
+                <ReportRowMeta
+                  status={report.status}
+                  createdAt={report.createdAt}
+                  platform={report.platform}
+                />
               </div>
             ))}
           </div>

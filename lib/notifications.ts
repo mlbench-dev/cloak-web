@@ -43,6 +43,7 @@ function buildAlertHref(doc: any): string | undefined {
     // which side of the report this notification was about.
     case "REPORT_RECEIVED":
     case "REPORT_VERIFIED":
+    case "REPORT_REJECTED":
       return typeof reportId === "string" ? `/reports/${reportId}` : undefined;
     case "POST_VOTE":
     case "POST_RAPID_ACTION":
@@ -329,6 +330,29 @@ export async function notifyReportVerified(
     avatarUrl: pickAvatarUrl(input.targetUser),
     data: { reportId: input.reportId.toString() },
     dedupeKey: input.dedupeKey,
+  });
+}
+
+export async function notifyReportRejected(
+  db: Db,
+  input: {
+    reporterId: ObjectId;
+    targetUser: any;
+    reportId: ObjectId;
+  },
+): Promise<void> {
+  const targetUsername = String(input.targetUser?.username || "user");
+
+  await createNotification(db, {
+    userId: input.reporterId,
+    type: "REPORT_REJECTED",
+    filter: "Community",
+    title: `Report rejected for @${targetUsername}`,
+    // The reason itself is shown on the report, not in the alert.
+    description: "Your report was not verified",
+    avatarType: "image",
+    avatarUrl: pickAvatarUrl(input.targetUser),
+    data: { reportId: input.reportId.toString() },
   });
 }
 

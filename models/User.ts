@@ -91,6 +91,8 @@ export interface ReportDoc {
   aiConfidenceLastAttemptAt?: Date;
   verifiedBy?: ObjectId;
   verifiedAt?: Date;
+  // Free-text reason the target user gave when rejecting the report.
+  rejectionReason?: string;
   // Guards against awarding XP more than once for the same report, even if
   // its status is transitioned/re-fetched multiple times.
   xpAwarded?: boolean;

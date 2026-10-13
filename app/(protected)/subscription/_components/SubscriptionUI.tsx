@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import {
+  ArrowRight,
   Check,
   ChevronLeft,
-  ChevronRight,
   Crown,
   ShieldCheck,
   X,
@@ -12,6 +12,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { PlanFeature, PlanSummary, PlanTone } from "../_lib/plans";
 import { useRouter } from "next/navigation";
+import BottomSheet from "@/app/components/BottomSheet";
 const toneClasses: Record<
   PlanTone,
   {
@@ -20,32 +21,21 @@ const toneClasses: Record<
     featureText: string;
     checkColor: string;
     button: string;
-    privacyBadge: string;
   }
 > = {
   slate: {
     iconBox: "bg-[#7E8C93]",
     iconColor: "text-white",
-    featureText: "text-[#8F98A0]",
-    checkColor: "text-[#9AA3AA]",
+    featureText: "text-[#839297]",
+    checkColor: "text-[#839297]",
     button: "bg-slate-200 text-slate-500",
-    privacyBadge: "bg-[#7E8C93]/10 text-[#7E8C93]",
   },
   teal: {
-    iconBox: "bg-[#14C3CF]",
+    iconBox: "bg-gradient-to-b from-[#14C3CF] to-[#0FA4AE]",
     iconColor: "text-white",
-    featureText: "text-[#2D2D2D]",
+    featureText: "text-[#2B2B2B]",
     checkColor: "text-[#14C3CF]",
-    button: "bg-[#14C3CF] text-white",
-    privacyBadge: "bg-[#14C3CF]/10 text-[#14C3CF]",
-  },
-  green: {
-    iconBox: "bg-gradient-to-br from-[#1CCF84] to-[#2BCF9D]",
-    iconColor: "text-white",
-    featureText: "text-[#2D2D2D]",
-    checkColor: "text-[#27C989]",
-    button: "bg-gradient-to-r from-[#1FCB8C] to-[#29D37A] text-white",
-    privacyBadge: "bg-[#1CCF84]/10 text-[#1CCF84]",
+    button: "bg-gradient-to-b from-[#14C3CF] to-[#0FA4AE] text-white",
   },
 };
 
@@ -80,7 +70,7 @@ export function SubscriptionHeader() {
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 text-[14px] font-medium text-[#8F98A0]">{children}</p>
+    <p className="mb-2 text-[12px] leading-4 text-[#839297]">{children}</p>
   );
 }
 
@@ -98,18 +88,18 @@ export function CurrentPlanCard({
   const styles = toneClasses[tone];
 
   return (
-    <div className="rounded-[26px] border border-[#EAEAEA] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.02)]">
-      <div className="flex items-center gap-3">
+    <div className="rounded-[20px] border border-[#EDEDED] bg-white px-3 py-3">
+      <div className="flex items-center gap-2.5">
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] ${styles.iconBox}`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${styles.iconBox}`}
         >
-          <Icon className={`h-5 w-5 ${styles.iconColor}`} />
+          <Icon className={`h-[18px] w-[18px] ${styles.iconColor}`} />
         </div>
-        <div>
-          <p className="text-[16px] font-semibold leading-5 text-[#2D2D2D]">
+        <div className="min-w-0">
+          <p className="truncate text-[14px] font-medium leading-5 text-[#2B2B2B]">
             {title}
           </p>
-          <p className="mt-1 text-[14px] leading-4 text-[#8F98A0]">
+          <p className="truncate text-[12px] leading-4 text-[#839297]">
             {statusLabel}
           </p>
         </div>
@@ -128,26 +118,26 @@ export function FeatureListCard({
   const styles = toneClasses[tone];
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#EAEAEA] bg-white px-4">
+    <div className="overflow-hidden rounded-[20px] border border-[#EDEDED] bg-white px-3">
       {features.map((feature, index) => {
         const Icon = feature.icon;
 
         return (
           <div
             key={feature.label}
-            className={`flex items-center gap-3 py-4 ${index !== features.length - 1 ? "border-b border-[#EFEFEF]" : ""}`}
+            className={`flex items-center gap-2.5 py-2.5 ${index !== features.length - 1 ? "border-b border-[#F0F0F0]" : ""}`}
           >
             <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] ${styles.iconBox}`}
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${styles.iconBox}`}
             >
-              <Icon className={`h-5 w-5 ${styles.iconColor}`} />
+              <Icon className={`h-4 w-4 ${styles.iconColor}`} />
             </div>
             <span
-              className={`flex-1 text-[14px] leading-5 ${styles.featureText}`}
+              className={`flex-1 text-[13px] leading-5 ${styles.featureText}`}
             >
               {feature.label}
             </span>
-            <Check className={`h-5 w-5 shrink-0 ${styles.checkColor}`} />
+            <Check className={`h-4 w-4 shrink-0 ${styles.checkColor}`} />
           </div>
         );
       })}
@@ -169,29 +159,26 @@ export function PlanUpsellCard({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-[28px] border border-[#EAEAEA] bg-white px-4 py-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.02)]"
+      className="flex w-full items-stretch gap-3 rounded-[20px] border border-[#EDEDED] bg-white px-3 py-3 text-left"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-semibold leading-5 text-[#2D2D2D]">
+        <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
           {plan.name}
         </p>
-        <p className="mt-1 text-[14px] font-medium leading-5 text-[#14C3CF]">
+        <p className="mt-0.5 text-[14px] leading-5 text-[#14C3CF]">
           {plan.priceLine}
         </p>
-        <p className="mt-0.5 text-[12px] leading-4 text-[#B0B5BB]">
-          {plan.zarPriceLine}
-        </p>
-        <p className="mt-1 text-[14px] leading-5 text-[#8F98A0]">
+        <p className="mt-1 text-[12px] leading-4 text-[#839297]">
           {plan.description}
         </p>
       </div>
-      <div className="flex shrink-0 flex-col items-center gap-3">
+      <div className="flex shrink-0 flex-col items-end justify-between">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-[12px] ${styles.iconBox}`}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg ${styles.iconBox}`}
         >
-          <Icon className={`h-5 w-5 ${styles.iconColor}`} />
+          <Icon className={`h-[18px] w-[18px] ${styles.iconColor}`} />
         </div>
-        <ChevronRight className="h-5 w-5 text-[#9CA3AF]" />
+        <ArrowRight className="h-4 w-4 text-[#839297]" />
       </div>
     </button>
   );
@@ -205,12 +192,12 @@ export function BillingCard({
   nextChargeDate: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[#EAEAEA] bg-white px-4">
-      <div className="flex items-center justify-between border-b border-[#EFEFEF] py-4">
-        <span className="text-[14px] leading-5 text-[#2D2D2D]">
+    <div className="overflow-hidden rounded-[20px] border border-[#EDEDED] bg-white px-3">
+      <div className="flex items-center justify-between border-b border-[#F0F0F0] py-3">
+        <span className="text-[13px] leading-5 text-[#2B2B2B]">
           Payment Method
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[16px] font-semibold leading-5 text-black">
+        <span className="inline-flex items-center gap-1 text-[15px] font-semibold leading-5 text-black">
           <svg
             aria-hidden="true"
             viewBox="0 0 14 17"
@@ -221,12 +208,11 @@ export function BillingCard({
           <span>Pay</span>
         </span>
       </div>
-      <div className="flex items-center justify-between py-4">
-        <span className="text-[14px] leading-5 text-[#2D2D2D]">
-          Next Charge:{" "}
-          <span className="font-medium text-[#14C3CF]">{price}</span>
+      <div className="flex items-center justify-between py-3">
+        <span className="text-[13px] leading-5 text-[#2B2B2B]">
+          Next Charge: <span className="text-[#14C3CF]">{price}</span>
         </span>
-        <span className="text-[14px] leading-5 text-[#9CA3AF]">
+        <span className="text-[13px] leading-5 text-[#839297]">
           {nextChargeDate}
         </span>
       </div>
@@ -249,11 +235,11 @@ export function CancelSubscriptionBlock({
         type="button"
         onClick={onCancel}
         disabled={isCancelling}
-        className="w-full rounded-full border border-[#ECECEC] bg-white px-4 py-2.5 text-[16px] font-medium text-[#F05B5B] disabled:opacity-60"
+        className="h-11 w-full rounded-full border border-[#EDEDED] bg-white px-4 text-[14px] text-[#F30131] disabled:opacity-60"
       >
         {isCancelling ? "Cancelling..." : "Cancel Subscription"}
       </button>
-      <p className="mt-4 text-[14px] leading-5 text-[#8F98A0]">
+      <p className="mt-2.5 text-[11px] leading-4 text-[#839297]">
         If you cancel , you can still access the subscription till{" "}
         {accessUntilDate} , after that your plan will be downgraded
       </p>
@@ -264,22 +250,22 @@ export function CancelSubscriptionBlock({
 export function PrivacyFooter() {
   return (
     <div className="mt-auto flex flex-col items-center px-4 pb-7 pt-10 text-center">
-      <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-[#14C3CF]/12 text-[#14C3CF]">
+      <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-lg border border-[#14C3CF]/30 bg-[#14C3CF]/10 text-[#14C3CF]">
         <ShieldCheck className="h-4 w-4" />
       </div>
-      <p className="text-[14px] leading-5 text-[#8F98A0]">
+      <p className="text-[12px] leading-4 text-[#839297]">
         We care about your privacy
       </p>
-      <div className="mt-6 flex items-center gap-10">
+      <div className="mt-5 flex items-center gap-14">
         <Link
           href="/privacy-policy"
-          className="text-[14px] font-medium text-[#14C3CF] underline"
+          className="text-[13px] text-[#14C3CF] underline"
         >
           Privacy Policy
         </Link>
         <Link
           href="/privacy-policy"
-          className="text-[14px] font-medium text-[#14C3CF] underline"
+          className="text-[13px] text-[#14C3CF] underline"
         >
           Terms of Service
         </Link>
@@ -303,41 +289,25 @@ export function UpgradeModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  if (!open) return null;
-
   const styles = toneClasses[plan.tone];
   const Icon = plan.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        type="button"
-        aria-label="Close modal"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div className="relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5 font-sf-pro-display shadow-[0_-16px_40px_rgba(15,23,42,0.14)]">
-        <div className="mx-auto mb-6 h-1 w-10 rounded-full bg-[#E0E0E0]" />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close modal"
-          className="absolute right-2 top-3.5 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
-        >
-          <X className="h-5 w-5" />
-        </button>
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      panelClassName="max-h-[90dvh] overflow-y-auto shadow-[0_-16px_40px_rgba(15,23,42,0.14)]"
+    >
+      <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-6">
         <div
-          className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[14px] ${styles.iconBox}`}
+          className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${styles.iconBox}`}
         >
-          <Icon className={`h-7 w-7 ${styles.iconColor}`} />
+          <Icon className={`h-6 w-6 ${styles.iconColor}`} />
         </div>
-        <h2 className="mx-auto max-w-[290px] text-center text-[24px] font-medium leading-[30px] text-[#2B2B2B]">
+        <h2 className="mx-auto max-w-[260px] text-center text-[22px] font-medium leading-7 text-[#2B2B2B]">
           {title}
         </h2>
-        <p className="mx-auto mt-2 text-center text-[12px] leading-4 text-[#839297]">
-          {plan.zarPriceLine}
-        </p>
-        <p className="mb-2 mt-6 text-[14px] leading-5 text-[#2B2B2B]">
+        <p className="mb-2 mt-6 text-[12px] leading-4 text-[#839297]">
           What You Will Get
         </p>
         <FeatureListCard features={plan.features} tone={plan.tone} />
@@ -351,12 +321,12 @@ export function UpgradeModal({
         <button
           type="button"
           onClick={onClose}
-          className="mt-2.5 h-[45px] w-full rounded-full bg-[#F6F6F6] px-4 text-[14px] text-[#839297]"
+          className="mt-2.5 h-[45px] w-full rounded-full bg-[#F5F5F5] px-4 text-[14px] text-[#839297]"
         >
           Not Now
         </button>
       </div>
-    </div>
+    </BottomSheet>
   );
 }
 

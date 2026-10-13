@@ -14,12 +14,18 @@ import {
   refreshVerificationGate,
   shouldAttemptAiConfidence,
 } from "@/lib/reportAiConfidence";
-import { notifyReportVerified } from "@/lib/notifications";
+import {
+  notifyReportRejected,
+  notifyReportVerified,
+} from "@/lib/notifications";
 
 // See app/api/reports/route.ts for why this matches the AI service's
 // 10-minute fetch timeout, and the caveat that your Vercel plan may still
 // cap this lower regardless.
 export const maxDuration = 600;
+
+// Same limit the reject sheet's counter shows.
+const MAX_REJECTION_REASON_LENGTH = 200;
 
 type StoredReport = {
   _id?: ObjectId;
@@ -27,6 +33,7 @@ type StoredReport = {
   targetUserId: ObjectId;
   sourceLink: string;
   notes?: string;
+  rejectionReason?: string;
   aiConfidence?: number;
   aiConfidenceSource?: ReportDoc["aiConfidenceSource"];
   aiConfidenceMessage?: string;
@@ -60,11 +67,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { status } = await request.json();
+    const { status, rejectionReason } = await request.json();
     const reportId = id;
 
     if (!["VERIFIED", "FALSE_POSITIVE", "REJECTED"].includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    const trimmedRejectionReason =
+      typeof rejectionReason === "string" ? rejectionReason.trim() : "";
+    if (trimmedRejectionReason.length > MAX_REJECTION_REASON_LENGTH) {
+      return NextResponse.json(
+        {
+          error: `Rejection reason must be ${MAX_REJECTION_REASON_LENGTH} characters or fewer`,
+        },
+        { status: 400 },
+      );
     }
 
     const db = await getDb();
@@ -98,6 +116,7 @@ export async function PATCH(
       verifiedAt?: Date;
       verifiedBy?: ObjectId;
       xpAwarded?: boolean;
+      rejectionReason?: string;
     } = {
       status,
       updatedAt: new Date(),
@@ -107,6 +126,8 @@ export async function PATCH(
       updateData.verifiedAt = new Date();
       updateData.verifiedBy = new ObjectId(session.user.id);
       updateData.xpAwarded = true;
+    } else if (trimmedRejectionReason) {
+      updateData.rejectionReason = trimmedRejectionReason;
     }
 
     await reportsCollection.updateOne(
@@ -190,6 +211,17 @@ export async function PATCH(
           targetUser,
           reportId: new ObjectId(reportId),
           pointsAwarded,
+        });
+      } else {
+        const targetUser = await usersCollection.findOne(
+          { _id: report.targetUserId },
+          { projection: { username: 1, image: 1, profileImage: 1 } },
+        );
+
+        await notifyReportRejected(db, {
+          reporterId,
+          targetUser,
+          reportId: new ObjectId(reportId),
         });
       }
     }
@@ -295,7 +327,7 @@ export async function GET(
 
     // Only kicks off the expensive AI call if the gate is open and
     // we're not already processing / out of retries / cooling down.
-    // Boost/Cloak Pro reporters get a shorter cooldown between retries.
+    // Cloak Pro reporters get a shorter cooldown between retries.
     const reporterPlan = await resolveUserPlan(db, report.reportedBy);
     if (shouldAttemptAiConfidence(report, PLAN_LIMITS[reporterPlan].retryCooldownMs)) {
       after(() => computeAndStoreAiConfidence(reportId));
@@ -314,6 +346,7 @@ export async function GET(
         sourceLink: report.sourceLink,
         platform: report.platform,
         notes: report.notes,
+        rejectionReason: report.rejectionReason,
         status: report.status,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt,
