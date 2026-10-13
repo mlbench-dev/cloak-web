@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 
-export type PlanCode = "FREEMIUM" | "BOOST" | "CLOAK_PRO";
+export type PlanCode = "FREEMIUM" | "CLOAK_PRO";
 
 export type SubscriptionStatus = "NONE" | "ACTIVE" | "CANCELLED" | "PAST_DUE";
 

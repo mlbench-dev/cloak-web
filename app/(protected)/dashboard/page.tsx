@@ -5,24 +5,27 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle,
+  ArrowDownToLine,
   BarChart3,
+  Bell,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Crown,
   Crosshair,
   Fingerprint,
-  Flag,
   Globe,
   Radar,
   ShieldCheck,
-  TrendingUp,
   User as UserIcon,
 } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
-import ScrapingProgress from "./_components/ScrapingProgress";
-import { DetectiveIcon } from "@/public/svgIcons";
+import {
+  ScrapingLinksScreen,
+  describeMissingProfile,
+  profileCompletionHref,
+  useLinkFetchStatus,
+} from "@/app/components/linkDiscovery/LinkDiscovery";
+import { useNotifications } from "@/app/components/NotificationsProvider";
 import type { PlanCode } from "@/models/Subscription";
 import { PLAN_DISPLAY_NAME } from "@/lib/config";
 
@@ -40,79 +43,48 @@ interface DashboardUser {
   plan: PlanCode;
 }
 
-interface DashboardStats {
-  level: number;
-}
-
-interface IdentityProfileSummary {
-  fullName: string;
-  usernames: string[];
-  aliases: string[];
-}
-
 // --- Mock monitoring data ---------------------------------------------
 // This dashboard isn't wired to a real scanning pipeline yet — there's no
 // CV<->MERN discovery contract to call (see the Phase 2.0 plan). Numbers
 // below match the Figma reference exactly for visual QA.
 
 const MOCK_STATS = {
-  urlsDetected: { value: "1,284", delta: "+124 this week" },
-  matchesIncidents: { value: "24", delta: "+6 this week" },
-  newIncidents: { value: "8", delta: "+2 this week" },
-  avgConfidence: { value: "96%", deltaLabel: "This week" },
-};
-
-// Scan cadence per plan — display-only for now (no real scheduler yet).
-// Cloak Pro is provisionally daily per your call; explicitly a placeholder
-// pending real cost/volume data from Phase 2.0.
-const SCAN_SCHEDULE: Record<
-  PlanCode,
-  { frequencyLabel: string; countdownLabel: string }
-> = {
-  FREEMIUM: { frequencyLabel: "Next Month", countdownLabel: "In 21 days" },
-  BOOST: { frequencyLabel: "After 15 Days", countdownLabel: "In 7d 23h" },
-  CLOAK_PRO: { frequencyLabel: "Daily", countdownLabel: "In 5h 26m" },
+  matches: "24",
+  avgConfidence: "96%",
+  pendingReports: 12,
+  newCloakWatchMatches: 6,
 };
 
 function StatCard({
   bgClassName,
   circleClassName,
-  iconColorClassName,
+  trendColorClassName,
   Icon,
   label,
   value,
   trendLabel,
-  trendColorClassName,
-  showTrendIcon,
 }: {
   bgClassName: string;
   circleClassName: string;
-  iconColorClassName: string;
+  trendColorClassName: string;
   Icon: typeof Globe;
   label: string;
   value: string | number;
   trendLabel: string;
-  trendColorClassName: string;
-  showTrendIcon: boolean;
 }) {
   return (
-    <div className={`rounded-[20px] px-2.5 pb-3.5 pt-2.5 ${bgClassName}`}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] leading-4 text-[#839297]">{label}</p>
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${circleClassName}`}
-        >
-          <Icon className={`h-4 w-4 ${iconColorClassName}`} />
-        </div>
+    <div className={`flex min-w-0 flex-col rounded-[16px] p-2.5 ${bgClassName}`}>
+      <div
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${circleClassName}`}
+      >
+        <Icon className="h-4 w-4 text-white" />
       </div>
-      <div className="mt-[18px] flex items-end justify-between gap-2 max-[399px]:flex-col max-[399px]:items-start">
-        <p
-          className={`flex items-center gap-0.5 text-[10px] font-medium leading-6 whitespace-nowrap ${trendColorClassName}`}
-        >
-          {showTrendIcon && <TrendingUp className="h-6 w-6 shrink-0" />}
+      <p className="mt-2 text-xs leading-4 text-[#839297]">{label}</p>
+      <div className="mt-auto flex items-baseline justify-between gap-1 pt-4">
+        <p className="text- font-medium leading-6 text-[#2B2B2B]">{value}</p>
+        <p className={`truncate text-[10px] leading-4 ${trendColorClassName}`}>
           {trendLabel}
         </p>
-        <p className="text-[20px] font-medium leading-6 text-[#2B2B2B]">{value}</p>
       </div>
     </div>
   );
@@ -120,16 +92,19 @@ function StatCard({
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { unreadCount: unreadAlerts } = useNotifications();
   const [user, setUser] = useState<DashboardUser | null>(null);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [identityProfile, setIdentityProfile] =
-    useState<IdentityProfileSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  // Full-screen "Scraping Posts" takeover — shown for the real Scan Now
-  // action (not replayed for every already-discovered link the way it used
-  // to be under Cloak Watch's per-link pages).
+  // Scan runs link discovery as a background job on the server; this
+  // follows it (it may also have been started from the identity profile).
+  const {
+    status: linkFetch,
+    start: startLinkFetch,
+    refresh: refreshLinkFetch,
+  } = useLinkFetchStatus();
+  const scanning = linkFetch?.status === "running";
+  // Full-screen Scraping Links screen for the Scan action.
   const [showScrapingOverlay, setShowScrapingOverlay] = useState(false);
 
   // Shared by the mount effect below and handleScanNow, so a completed
@@ -145,26 +120,13 @@ export default function DashboardPage() {
   };
 
   const handleScanNow = async () => {
-    setScanning(true);
     setScanError(null);
     setShowScrapingOverlay(true);
-    try {
-      const res = await fetch("/api/fetch-urls", { method: "POST" });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || "Scan could not be started.");
-      }
-      await fetchScanResults();
-    } catch (err) {
-      setScanError(
-        err instanceof Error ? err.message : "Scan could not be started.",
-      );
-      // No point leaving the overlay up over an error state it doesn't
-      // know how to show — the existing inline scanError message below
-      // the button already covers that.
+    const error = await startLinkFetch();
+    if (error) {
+      // Couldn't even start — show it inline under the button instead.
+      setScanError(error);
       setShowScrapingOverlay(false);
-    } finally {
-      setScanning(false);
     }
   };
   const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
@@ -182,8 +144,8 @@ export default function DashboardPage() {
 
   // Auto-advance the carousel every 3s (Freemium only — paid plans show a
   // single card). Keyed on activeScanSlide so a manual swipe restarts the
-  // wait, and on identityProfile because the carousel only mounts once the
-  // profile has loaded.
+  // wait, and on profileComplete because the carousel only mounts once the
+  // profile is known to be complete.
   const isFreemiumPlan = (user?.plan || "FREEMIUM") === "FREEMIUM";
   useEffect(() => {
     if (loading || !isFreemiumPlan) return;
@@ -194,11 +156,18 @@ export default function DashboardPage() {
       el.scrollTo({ left: next * el.clientWidth, behavior: "smooth" });
     }, 6000);
     return () => clearTimeout(timeout);
-  }, [loading, isFreemiumPlan, activeScanSlide, identityProfile]);
+  }, [loading, isFreemiumPlan, activeScanSlide, linkFetch?.profileComplete]);
 
   useEffect(() => {
     fetchScanResults();
-  }, []);
+    void refreshLinkFetch();
+  }, [refreshLinkFetch]);
+
+  // Refresh the URL count once a run finishes.
+  const linkFetchState = linkFetch?.status;
+  useEffect(() => {
+    if (linkFetchState === "done") fetchScanResults();
+  }, [linkFetchState]);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/user/dashboard")
@@ -206,25 +175,11 @@ export default function DashboardPage() {
       .then((data) => {
         if (cancelled || !data?.success) return;
         setUser(data.user);
-        setStats(data.stats);
       })
       .catch(() => null)
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/identity-profile")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.success) setIdentityProfile(data.profile);
-      })
-      .catch(() => null);
     return () => {
       cancelled = true;
     };
@@ -239,14 +194,10 @@ export default function DashboardPage() {
   }
 
   const plan: PlanCode = user?.plan || "FREEMIUM";
-  const schedule = SCAN_SCHEDULE[plan];
-  // Monitoring needs a name plus at least one username/alias to search
-  // against — Known Websites/Keywords are explicitly optional on that form,
-  // so they don't gate readiness here.
-  const hasRequiredIdentityDetails =
-    !!identityProfile?.fullName?.trim() &&
-    (identityProfile?.usernames?.length ?? 0) > 0 &&
-    (identityProfile?.aliases?.length ?? 0) > 0;
+  // Same rule that gates the CV API (getProfileCompleteness in
+  // lib/fetchLinks.ts): name, username, keyword and reference media.
+  const hasRequiredIdentityDetails = linkFetch?.profileComplete ?? false;
+  const missingProfile = linkFetch?.missingProfile ?? [];
   // Placeholder only once the user has loaded and is known to have no image.
   const avatarUrl = user
     ? user.image || user.profileImage || "/images/placeholder_avatar.png"
@@ -259,16 +210,18 @@ export default function DashboardPage() {
   return (
     <>
       {showScrapingOverlay && (
-        <ScrapingProgress
-          isComplete={!scanning}
+        <ScrapingLinksScreen
+          status={linkFetch}
           onBack={() => setShowScrapingOverlay(false)}
+          onRetry={() => void handleScanNow()}
+          // Cloak Watch opens Confirm Links when there's anything to review.
           onOk={() => router.push("/cloak-watch")}
         />
       )}
       <div className="space-y-4 pb-2">
       {/* Username block is absolutely centered on the screen (not just in
-          the space between the avatar and the Scout label, which have
-          different widths) — matches the reference. */}
+          the space between the avatar and the alerts bell) — matches the
+          reference. */}
       <div className="relative flex min-h-10 items-start justify-between">
         <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200">
           {avatarUrl ? (
@@ -302,10 +255,18 @@ export default function DashboardPage() {
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 pt-0.5 text-[12px] leading-4 text-[#839297]">
-          <DetectiveIcon className="h-3.5 w-3.5" />
-          {stats && stats.level > 0 ? `Level ${stats.level}` : "Scout"}
-        </div>
+        <Link
+          href="/alerts"
+          aria-label="Alerts"
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F5F5F5] text-[#839297]"
+        >
+          <Bell className="h-4 w-4" fill="currentColor" />
+          {unreadAlerts > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[9px] font-semibold leading-none text-white">
+              {unreadAlerts > 9 ? "9+" : unreadAlerts}
+            </span>
+          )}
+        </Link>
       </div>
 
       {hasRequiredIdentityDetails ? (
@@ -365,53 +326,24 @@ export default function DashboardPage() {
                 with h-full applied. Making the visible card itself the flex
                 item sidesteps that entirely. */}
             <div
-              className={`flex w-full flex-col justify-between gap-3 rounded-[20px] bg-white p-3.5 ${
+              className={`flex w-full items-center justify-between gap-3 rounded-[20px] bg-white p-3.5 ${
                 plan === "FREEMIUM" ? "shrink-0 snap-center snap-always" : ""
               }`}
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center">
-                  <div className="min-w-0">
-                    <p className="text-[12px] leading-4 text-[#A7ADB2]">Last scan</p>
-                    <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">12 min ago</p>
-                    <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 fill-[#33C757] text-white" />
-                      Completed
-                    </p>
-                  </div>
-                  <div className="mx-2.5 h-[53px] w-px shrink-0 bg-[#F4F4F4]" />
-                  <div className="min-w-0">
-                    <p className="text-[12px] leading-4 text-[#A7ADB2]">Next scheduled scan</p>
-                    <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">
-                      {schedule.frequencyLabel}
-                    </p>
-                    <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      {schedule.countdownLabel}
-                    </p>
-                  </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-0.5">
+                  <p className="text-[12px] leading-4 text-[#A7ADB2]">Last scan</p>
+                  <p className="flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 fill-[#33C757] text-white" />
+                    Completed
+                  </p>
                 </div>
-
-                <div className="relative flex h-[72px] w-[72px] shrink-0 items-center justify-center">
-                  <Image
-                    src="/Sonar_Radar.svg"
-                    alt=""
-                    aria-hidden="true"
-                    fill
-                    className="absolute inset-0"
-                  />
-                  <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#34C759]">
-                    <ShieldCheck className="h-[18px] w-[18px] text-white" />
-                  </div>
-                </div>
-              </div>
-
-              <div>
+                <p className="mt-1 text-[14px] leading-5 text-[#2B2B2B]">12 min ago</p>
                 <button
                   type="button"
                   onClick={handleScanNow}
                   disabled={scanning}
-                  className="flex h-7 min-w-[89px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
+                  className="mt-3 flex h-7 min-w-[89px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
                 >
                   {scanning ? (
                     <>
@@ -423,10 +355,21 @@ export default function DashboardPage() {
                   )}
                 </button>
                 {scanError && (
-                  <p className="mt-2 text-center text-[12px] text-[#D14343]">
-                    {scanError}
-                  </p>
+                  <p className="mt-2 text-[12px] text-[#D14343]">{scanError}</p>
                 )}
+              </div>
+
+              <div className="relative flex h-[80px] w-[80px] shrink-0 items-center justify-center">
+                <Image
+                  src="/Sonar_Radar.svg"
+                  alt=""
+                  aria-hidden="true"
+                  fill
+                  className="absolute inset-0"
+                />
+                <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#34C759]">
+                  <ShieldCheck className="h-[18px] w-[18px] text-white" />
+                </div>
               </div>
             </div>
 
@@ -467,11 +410,10 @@ export default function DashboardPage() {
                 Complete Your Identity Profile
               </p>
               <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
-                Add your name, usernames &amp; aliases so we know what to
-                monitor for you.
+                {describeMissingProfile(missingProfile)}
               </p>
               <Link
-                href="/identity-profile"
+                href={profileCompletionHref(missingProfile)}
                 className="mt-3 inline-flex h-[30px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
               >
                 Complete Profile
@@ -511,74 +453,39 @@ export default function DashboardPage() {
         </>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <StatCard
           bgClassName="bg-[#E9F9F6]"
-          circleClassName="bg-[#D4EFE8]"
-          iconColorClassName="text-[#209066]"
-          Icon={Globe}
-          label="URLs Detected"
-          value={hasRequiredIdentityDetails ? detectedUrls.length : "0"}
-          trendLabel={
-            hasRequiredIdentityDetails
-              ? MOCK_STATS.urlsDetected.delta
-              : "Monitoring Disabled"
-          }
+          circleClassName="bg-[#209066]"
           trendColorClassName={
             hasRequiredIdentityDetails ? "text-[#209066]" : "text-[#839297]"
           }
-          showTrendIcon={hasRequiredIdentityDetails}
+          Icon={Globe}
+          label="URLs Detected"
+          value={hasRequiredIdentityDetails ? detectedUrls.length : "0"}
+          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
         />
         <StatCard
           bgClassName="bg-[#FFF1E6]"
-          circleClassName="bg-[#FFE6D0]"
-          iconColorClassName="text-[#FE8D27]"
-          Icon={Crosshair}
-          label="Matches"
-          value={hasRequiredIdentityDetails ? MOCK_STATS.matchesIncidents.value : "0"}
-          trendLabel={
-            hasRequiredIdentityDetails
-              ? MOCK_STATS.matchesIncidents.delta
-              : "Monitoring Disabled"
-          }
+          circleClassName="bg-[#FE8D27]"
           trendColorClassName={
             hasRequiredIdentityDetails ? "text-[#FE8D27]" : "text-[#839297]"
           }
-          showTrendIcon={hasRequiredIdentityDetails}
-        />
-        <StatCard
-          bgClassName="bg-[#FFF0F3]"
-          circleClassName="bg-[#FFD7E0]"
-          iconColorClassName="text-[#F30131]"
-          Icon={Flag}
-          label="New Incidents"
-          value={hasRequiredIdentityDetails ? MOCK_STATS.newIncidents.value : "0"}
-          trendLabel={
-            hasRequiredIdentityDetails
-              ? MOCK_STATS.newIncidents.delta
-              : "Monitoring Disabled"
-          }
-          trendColorClassName={
-            hasRequiredIdentityDetails ? "text-[#F30131]" : "text-[#839297]"
-          }
-          showTrendIcon={hasRequiredIdentityDetails}
+          Icon={Crosshair}
+          label="Matches"
+          value={hasRequiredIdentityDetails ? MOCK_STATS.matches : "0"}
+          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
         />
         <StatCard
           bgClassName="bg-[#ECF2FE]"
-          circleClassName="bg-[#D5E5FF]"
-          iconColorClassName="text-[#0A63FB]"
-          Icon={BarChart3}
-          label="AVG Match Conf"
-          value={hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence.value : "—"}
-          trendLabel={
-            hasRequiredIdentityDetails
-              ? MOCK_STATS.avgConfidence.deltaLabel
-              : "Monitoring Disabled"
-          }
+          circleClassName="bg-[#0A63FB]"
           trendColorClassName={
             hasRequiredIdentityDetails ? "text-[#0A63FB]" : "text-[#839297]"
           }
-          showTrendIcon={hasRequiredIdentityDetails}
+          Icon={BarChart3}
+          label="AVG Match Conf"
+          value={hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence : "—"}
+          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
         />
       </div>
 
@@ -588,7 +495,7 @@ export default function DashboardPage() {
           <Link href="/reports" className="block">
             <div className="flex h-[60px] items-center gap-3 rounded-2xl bg-[#F5F5F7] px-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
-                <AlertTriangle className="h-4 w-4 text-[#F30131]" />
+                <ArrowDownToLine className="h-4 w-4 text-[#F30131]" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[16px] leading-[22px] text-[#2B2B2B]">Reports</p>
@@ -596,6 +503,11 @@ export default function DashboardPage() {
                   Reports from other users
                 </p>
               </div>
+              {hasRequiredIdentityDetails && MOCK_STATS.pendingReports > 0 && (
+                <span className="shrink-0 text-[12px] leading-4 text-[#FE8D27]">
+                  {MOCK_STATS.pendingReports} Pending
+                </span>
+              )}
               <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
             </div>
           </Link>
@@ -610,6 +522,12 @@ export default function DashboardPage() {
                   Matches found by Cloak
                 </p>
               </div>
+              {hasRequiredIdentityDetails &&
+                MOCK_STATS.newCloakWatchMatches > 0 && (
+                  <span className="shrink-0 text-[12px] leading-4 text-[#00C3D0]">
+                    {MOCK_STATS.newCloakWatchMatches} New
+                  </span>
+                )}
               <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
             </div>
           </Link>

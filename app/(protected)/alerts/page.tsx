@@ -1,7 +1,8 @@
 "use client";
 
-import { Crown, Info } from "lucide-react";
+import { ChevronLeft, Crown, Info } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useNotifications,
@@ -169,6 +170,7 @@ function toAlertItem(item: ApiAlertItem): AlertItem {
 }
 
 export default function AlertsPage() {
+  const router = useRouter();
   const { subscribe, markAllViewed } = useNotifications();
   const [activeFilter, setActiveFilter] = useState<AlertFilter>("All");
   const [items, setItems] = useState<AlertItem[]>([]);
@@ -244,7 +246,14 @@ export default function AlertsPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between pb-5 bg-white z-10">
-        <div className="w-10" />
+        <button
+          type="button"
+          onClick={() => router.back()}
+          aria-label="Back"
+          className="-ml-3 w-10 p-2"
+        >
+          <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
+        </button>
         <h1 className="flex-1 text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
           Alerts
         </h1>

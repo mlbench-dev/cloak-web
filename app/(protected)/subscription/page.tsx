@@ -17,25 +17,22 @@ import {
   SubscriptionScreenShell,
   UpgradeModal,
 } from "./_components/SubscriptionUI";
+import { cloakProPlan, freemiumFeatures } from "./_lib/plans";
 import {
-  boostProtectionPlan,
-  cloakProPlan,
-  freemiumFeatures,
-} from "./_lib/plans";
-import { cancelActiveSubscription, startCheckout } from "./_lib/checkout";
+  cancelActiveSubscription,
+  startCheckout,
+  type PlanSlug,
+} from "./_lib/checkout";
 import {
   fetchSubscriptionStatus,
   formatPlanDate,
   type SubscriptionStatus,
 } from "./_lib/status";
 
-type ActiveModal = "cloak-pro" | "boost-protection" | null;
-type PendingUpgrade = "cloak-pro" | "boost-protection" | null;
-
 export default function SubscriptionPage() {
   const searchParams = useSearchParams();
-  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
-  const [pendingUpgrade, setPendingUpgrade] = useState<PendingUpgrade>(null);
+  const [activeModal, setActiveModal] = useState<PlanSlug | null>(null);
+  const [pendingUpgrade, setPendingUpgrade] = useState<PlanSlug | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -80,7 +77,7 @@ export default function SubscriptionPage() {
     window.history.replaceState(null, "", "/subscription");
   }, [searchParams]);
 
-  const handleUpgrade = async (plan: "boost-protection" | "cloak-pro") => {
+  const handleUpgrade = async (plan: PlanSlug) => {
     if (isRedirecting) return;
     setIsRedirecting(true);
     try {
@@ -128,13 +125,11 @@ export default function SubscriptionPage() {
   }
 
   const plan = subscription?.plan || "FREEMIUM";
-  const currentPlanSummary =
-    plan === "BOOST" ? boostProtectionPlan : plan === "CLOAK_PRO" ? cloakProPlan : null;
+  const currentPlanSummary = plan === "CLOAK_PRO" ? cloakProPlan : null;
   const accessUntilDate = formatPlanDate(subscription?.currentPeriodEnd || null);
   const isCancelledButStillActive =
     currentPlanSummary !== null && Boolean(subscription?.cancelAtPeriodEnd);
-  const pendingUpgradePlan =
-    pendingUpgrade === "cloak-pro" ? cloakProPlan : pendingUpgrade === "boost-protection" ? boostProtectionPlan : null;
+  const pendingUpgradePlan = pendingUpgrade === "cloak-pro" ? cloakProPlan : null;
 
   return (
     <SubscriptionScreenShell>
@@ -157,16 +152,8 @@ export default function SubscriptionPage() {
           <CurrentPlanCard icon={Crown} title="Freemium Plan" tone="slate" />
         )}
 
-        <div className="mt-5">
-          <SectionLabel>Whats Included</SectionLabel>
-          <FeatureListCard
-            features={currentPlanSummary ? currentPlanSummary.features : freemiumFeatures}
-            tone={currentPlanSummary ? currentPlanSummary.tone : "slate"}
-          />
-        </div>
-
         {currentPlanSummary && (
-          <div className="mt-5">
+          <div className="mt-4">
             <SectionLabel>Billing &amp; Payment</SectionLabel>
             <BillingCard
               price={currentPlanSummary.price}
@@ -175,21 +162,21 @@ export default function SubscriptionPage() {
           </div>
         )}
 
+        <div className="mt-4">
+          <SectionLabel>Whats Included</SectionLabel>
+          <FeatureListCard
+            features={currentPlanSummary ? currentPlanSummary.features : freemiumFeatures}
+            tone={currentPlanSummary ? currentPlanSummary.tone : "slate"}
+          />
+        </div>
+
         {plan !== "CLOAK_PRO" && (
-          <div className="mt-5">
+          <div className="mt-4">
             <SectionLabel>Explore Premium Plans</SectionLabel>
-            <div className="space-y-4">
-              <PlanUpsellCard
-                plan={cloakProPlan}
-                onClick={() => setActiveModal("cloak-pro")}
-              />
-              {plan === "FREEMIUM" && (
-                <PlanUpsellCard
-                  plan={boostProtectionPlan}
-                  onClick={() => setActiveModal("boost-protection")}
-                />
-              )}
-            </div>
+            <PlanUpsellCard
+              plan={cloakProPlan}
+              onClick={() => setActiveModal("cloak-pro")}
+            />
           </div>
         )}
 
@@ -200,7 +187,7 @@ export default function SubscriptionPage() {
           />
         )}
 
-        <PrivacyFooter />
+        {!currentPlanSummary && <PrivacyFooter />}
       </div>
 
       <UpgradeModal
@@ -212,18 +199,6 @@ export default function SubscriptionPage() {
         onConfirm={() => {
           setActiveModal(null);
           setPendingUpgrade("cloak-pro");
-        }}
-      />
-
-      <UpgradeModal
-        open={activeModal === "boost-protection"}
-        plan={boostProtectionPlan}
-        title="Get more control with Protection Boost"
-        ctaLabel="Unlock Protection Boost - $4.99"
-        onClose={() => setActiveModal(null)}
-        onConfirm={() => {
-          setActiveModal(null);
-          setPendingUpgrade("boost-protection");
         }}
       />
 

@@ -13,7 +13,6 @@ import { ensureSubscriptionIndexes, upsertPendingSubscription } from "@/lib/subs
 import type { PlanCode } from "@/models/Subscription";
 
 const SLUG_TO_PLAN: Record<string, PlanCode> = {
-  "boost-protection": "BOOST",
   "cloak-pro": "CLOAK_PRO",
 };
 

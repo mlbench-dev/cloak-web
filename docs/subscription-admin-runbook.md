@@ -33,7 +33,7 @@ db.subscriptions.updateOne(
   { userId: ObjectId("...") },
   {
     $set: {
-      plan: "BOOST", // or "CLOAK_PRO"
+      plan: "CLOAK_PRO",
       status: "ACTIVE",
       billingType: "SUBSCRIPTION",
       cancelAtPeriodEnd: false,
@@ -47,7 +47,7 @@ db.subscriptions.updateOne(
 );
 db.users.updateOne(
   { _id: ObjectId("...") },
-  { $set: { plan: "BOOST", updatedAt: new Date() } },
+  { $set: { plan: "CLOAK_PRO", updatedAt: new Date() } },
 );
 ```
 

@@ -2,18 +2,18 @@
 import { CLOAK_WATCH_IMAGE_ASPECT } from "../_lib/posts";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertOctagon,
   Bookmark,
   MoreHorizontal,
   Share2,
-  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import type { CloakWatchPost } from "../_lib/posts";
 import { formatTimeAgo } from "../_lib/posts";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
+import BottomSheet from "@/app/components/BottomSheet";
 
 type ReportReason =
   | "Spam or Scams"
@@ -104,70 +104,6 @@ export function PostSharedSuccessToast(message: string) {
   toast.success(message, { duration: 1500 });
 }
 
-function BottomSheet({
-  open,
-  onClose,
-  children,
-  panelClassName = "",
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-  panelClassName?: string;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/40"
-      onClick={onClose}
-    >
-      <div
-        className={`w-full rounded-t-[30px] bg-white pt-2.5 font-sf-pro-display ${panelClassName}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function SheetHeader({
-  title,
-  onClose,
-}: {
-  title: string;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <div className="relative">
-        <h3 className="text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
-          {title}
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute -top-[7px] right-0 -mr-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-      <div className="mt-3.5 border-t border-[#E7E7E7]" />
-    </>
-  );
-}
-
 function OptionsSheet({
   open,
   onClose,
@@ -188,9 +124,8 @@ function OptionsSheet({
   onDelete: () => void;
 }) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
-      <div className="mt-3.5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-        <SheetHeader title="Options" onClose={onClose} />
+    <BottomSheet open={open} onClose={onClose} title="Options">
+      <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="space-y-5 pt-5 text-[14px] leading-5 text-[#2B2B2B]">
           <button
             type="button"
@@ -261,21 +196,20 @@ function ReportSheet({
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      setReason("Spam or Scams");
-      setDetails("");
-    }
-  }, [open]);
-
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      panelClassName="max-h-[60dvh] overflow-hidden"
+      title="Submit a Report"
+      dismissible={!submitting}
+      panelClassName="flex max-h-[60dvh] flex-col overflow-hidden"
+      // Reset once the sheet has slid away, not while it's still visible.
+      onExited={() => {
+        setReason("Spam or Scams");
+        setDetails("");
+      }}
     >
-      <div className="mt-3.5 flex max-h-[calc(60dvh-1.5rem)] flex-col px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-        <SheetHeader title="Submit a Report" onClose={onClose} />
+      <div className="flex min-h-0 flex-col px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
 
         <div className="space-y-3.5 overflow-y-auto pt-3.5 no-scrollbar">
           <div>
@@ -387,9 +321,13 @@ function DeleteConfirmationSheet({
   deleting: boolean;
 }) {
   return (
-    <BottomSheet open={open} onClose={onClose}>
-      <div className="mt-3.5 px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-        <SheetHeader title="Delete Post" onClose={onClose} />
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title="Delete Post"
+      dismissible={!deleting}
+    >
+      <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="pt-3.5">
           <p className="text-[14px] leading-5 text-[#839297]">
             Are you sure you want to delete this post? This action cannot be

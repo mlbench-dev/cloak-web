@@ -437,7 +437,7 @@ export function shouldAttemptAiConfidence(
     | "aiConfidenceAttempts"
     | "aiConfidenceLastAttemptAt"
   >,
-  // Boost/Cloak Pro reporters get a shorter cooldown between retry
+  // Cloak Pro reporters get a shorter cooldown between retry
   // attempts (lib/config.ts PLAN_LIMITS.retryCooldownMs) — callers that
   // know the reporter's plan should pass it; defaults to the Freemium
   // cooldown when unknown.

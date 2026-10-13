@@ -4,8 +4,10 @@ import { ObjectId, type Db } from "mongodb";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import type { IdentityProfileDoc } from "@/models/IdentityProfile";
-
-const IDENTITY_PROFILES_COLLECTION = "identityProfiles";
+import {
+  IDENTITY_PROFILES_COLLECTION,
+  shouldAutoFetchLinks,
+} from "@/lib/fetchLinks";
 
 const MAX_FULL_NAME_LENGTH = 100;
 const MAX_TAG_LENGTH = 100;
@@ -102,10 +104,14 @@ export async function POST(request: Request) {
     );
 
     const saved = await db
-      .collection(IDENTITY_PROFILES_COLLECTION)
+      .collection<IdentityProfileDoc>(IDENTITY_PROFILES_COLLECTION)
       .findOne({ userId });
 
-    return NextResponse.json({ success: true, profile: saved });
+    // Tells the client to run link discovery (Scraping Links -> Confirm
+    // Links). The fetch itself goes through POST /api/fetch-urls.
+    const shouldFetchLinks = await shouldAutoFetchLinks(db, userId);
+
+    return NextResponse.json({ success: true, profile: saved, shouldFetchLinks });
   } catch (error) {
     console.error("Error saving identity profile:", error);
     return NextResponse.json(

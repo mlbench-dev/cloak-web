@@ -25,7 +25,7 @@ export default function CloakWatchPage() {
     const plan = ((session?.user as any)?.plan as PlanCode) || "FREEMIUM";
     if (!PLAN_LIMITS[plan].canPostCommunity) {
       showPlanLimitToast(
-        "Community posting is a Boost Protection perk. Upgrade to Boost Protection to post in Cloak Watch.",
+        "Community posting is a Cloak Pro perk. Upgrade to Cloak Pro to post in Cloak Watch.",
       );
       return;
     }

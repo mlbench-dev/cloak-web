@@ -1,47 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BadgeCheckIcon } from "@/public/svgIcons";
-import { ShieldCheck, X, BadgeCheck } from "lucide-react";
-
-function BottomSheet({
-  open,
-  onClose,
-  children,
-  panelClassName = "",
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-  panelClassName?: string;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-x-0 top-0 z-50 flex h-dvh items-end bg-black/40"
-      onClick={onClose}
-    >
-      <div
-        className={`w-full rounded-t-[30px] bg-white pt-2.5 font-sf-pro-display ${panelClassName}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
-        {children}
-      </div>
-    </div>
-  );
-}
+import { ShieldCheck, BadgeCheck, Check } from "lucide-react";
+import BottomSheet from "@/app/components/BottomSheet";
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -99,7 +62,6 @@ export default function IdentityVerificationStep({
 }: IdentityVerificationStepProps) {
   const [step, setStep] = useState<"upload" | "submitted">("upload");
   const [documentType, setDocumentType] = useState("");
-  const [showDocTypeMenu, setShowDocTypeMenu] = useState(false);
   const [showGuidelineSheet, setShowGuidelineSheet] = useState(true);
   const [files, setFiles] = useState<VerificationFileItem[]>([]);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -283,7 +245,6 @@ export default function IdentityVerificationStep({
     if (isLoading) return;
     if (!documentType) {
       setFieldError("Please select a document type.");
-      setShowDocTypeMenu(false);
       return;
     }
 
@@ -511,8 +472,10 @@ export default function IdentityVerificationStep({
             <h1 className="text-[24px] font-[600] leading-[1.2] tracking-[-0.03em] text-[#2D2D2D]">
               Verify Your Identity
             </h1>
-            <p className="max-w-[280px] text-[14px] leading-6 text-[#8F98A0]">
+            <p className="text-[14px] leading-6 text-[#8F98A0]">
               Are you a public figure or notable individual?
+              <br />
+              Take a moment to provide us necessary information
             </p>
           </div>
 
@@ -533,73 +496,41 @@ export default function IdentityVerificationStep({
 
           <div className="flex-1 min-h-0 w-full space-y-6 overflow-y-auto overflow-x-hidden pb-4">
             <div className="space-y-2.5">
-              <label className="block text-[15px] font-medium text-[#3E454B]">
+              <label className="block text-[14px] font-medium text-[#2D2D2D]">
                 Document type
               </label>
-              <button
-                onClick={() => setShowDocTypeMenu(true)}
-                disabled={isLoading}
-                className="flex h-14 w-full min-w-0 items-center justify-between rounded-[18px] bg-[#ECECEC] px-5 text-[15px] text-[#2D2D2D]"
-              >
-                <span
-                  className={`min-w-0 flex-1 truncate pr-3 text-left ${
-                    documentType ? "text-[#2D2D2D]" : "text-[#A7ADB2]"
-                  }`}
-                >
-                  {documentType || "Select document type"}
-                </span>
-                <svg
-                  width="12"
-                  height="8"
-                  viewBox="0 0 12 8"
-                  fill="none"
-                  className={`shrink-0 transition-transform ${
-                    showDocTypeMenu ? "rotate-180" : ""
-                  }`}
-                >
-                  <path
-                    d="M1 1.5L6 6.5L11 1.5"
-                    stroke="#14C3CF"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-
-              <BottomSheet
-                open={showDocTypeMenu}
-                onClose={() => setShowDocTypeMenu(false)}
-              >
-                <div className="relative mt-3.5 flex items-center justify-center px-4">
-                  <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
-                    Select document type to verify
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowDocTypeMenu(false)}
-                    className="absolute -top-[7px] right-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                <div className="mx-4 mt-3.5 border-t border-[#E7E7E7]" />
-                <div className="px-4 pt-1.5 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-                  {DOCUMENT_TYPES.map((type) => (
+              <div className="space-y-2.5" role="radiogroup">
+                {DOCUMENT_TYPES.map((type) => {
+                  const isSelected = documentType === type;
+                  return (
                     <button
                       key={type}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      disabled={isLoading}
                       onClick={() => {
                         setDocumentType(type);
-                        setShowDocTypeMenu(false);
                         setFieldError(null);
                       }}
-                      className="w-full rounded-2xl px-3 py-3 text-left text-[14px] leading-5 text-[#2B2B2B] break-words hover:bg-[#F6F6F6] transition-colors"
+                      className={`flex h-10 w-full min-w-0 items-center justify-between rounded-[12px] px-3 text-left text-[14px] text-[#2D2D2D] transition-colors ${
+                        isSelected ? "bg-[#EAF9FA]" : "bg-[#F5F5F5]"
+                      }`}
                     >
-                      {type}
+                      <span className="min-w-0 flex-1 truncate pr-3">
+                        {type}
+                      </span>
+                      {isSelected && (
+                        <Check
+                          size={18}
+                          strokeWidth={2.2}
+                          className="shrink-0 text-[#34C759]"
+                        />
+                      )}
                     </button>
-                  ))}
-                </div>
-              </BottomSheet>
+                  );
+                })}
+              </div>
               {fieldError && (
                 <p className="text-[12px] font-medium text-[#FF3B30]">
                   {fieldError}
@@ -670,11 +601,11 @@ export default function IdentityVerificationStep({
             )}
 
             {/* 2. Add File Button & Explanatory Text (Moved beneath the previews) */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3 pt-10">
               <button
                 onClick={handleAddFileClick}
                 disabled={isLoading || files.length >= maxFiles}
-                className={`w-full h-10 rounded-full border-2 flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
+                className={`w-full h-11 rounded-full border-2 flex items-center justify-center gap-2 text-[15px] font-medium transition-all ${
                   documentType && files.length < maxFiles
                     ? "border-[#00C3D0] bg-[#00C3D0] text-white"
                     : "border-[#839297] bg-[#839297] text-white"
@@ -703,13 +634,6 @@ export default function IdentityVerificationStep({
                 className="hidden"
                 onChange={handleFileChange}
               />
-              <p className="text-[12px] text-[#8F98A0]">
-                {!documentType
-                  ? "Select a document type to upload its image."
-                  : files.length >= maxFiles
-                    ? "Document image uploaded."
-                    : "Upload 1 clear image of your document."}
-              </p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-4 bg-[#14C3CF]/5 rounded-2xl border border-[#14C3CF]/10 shrink-0">
@@ -751,17 +675,9 @@ export default function IdentityVerificationStep({
       <BottomSheet
         open={showGuidelineSheet}
         onClose={() => setShowGuidelineSheet(false)}
+        showCloseButton
       >
-        <div className="flex justify-end px-2 pt-1">
-          <button
-            type="button"
-            onClick={() => setShowGuidelineSheet(false)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-[37px]">
           <div className="relative w-full aspect-[4/3]">
             <Image
               src="/images/ID-card/Id-card.png"

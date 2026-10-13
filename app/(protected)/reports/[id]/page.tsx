@@ -2,10 +2,19 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { AiMatchIcon } from "@/public/svgIcons";
+import BottomSheet from "@/app/components/BottomSheet";
+import {
+  PLATFORM_LABELS,
+  PlatformTile,
+  formatReportTimeAgo,
+  getReportStatusGroup,
+  getReportStatusMeta,
+  getSourceLinkLabel,
+} from "@/app/components/reports/reportUi";
 
 type ReportUser = {
   username: string;
@@ -36,6 +45,7 @@ type ReportDetails = {
   platform: string;
   sourceLink: string;
   notes?: string;
+  rejectionReason?: string;
   status: string;
   aiConfidence: number;
   aiConfidenceMessage?: string;
@@ -60,46 +70,10 @@ function isAiConfidencePending(status?: AiConfidenceStatus) {
 
 // Same limit the submit-report form enforces on input.
 const MAX_NOTES_LENGTH = 300;
+// Same limit the report API enforces.
+const MAX_REJECTION_REASON_LENGTH = 200;
 
 type ResultModalStatus = "VERIFIED" | "FALSE_POSITIVE" | null;
-
-function formatTimeAgo(value?: string) {
-  if (!value) return "";
-
-  const now = Date.now();
-  const then = new Date(value).getTime();
-  const diffMinutes = Math.max(1, Math.floor((now - then) / 60000));
-
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h ago`;
-  return `${Math.floor(diffMinutes / 1440)}d ago`;
-}
-
-function getStatusMeta(status: string) {
-  if (status === "VERIFIED" || status === "APPROVED") {
-    return {
-      label: "Approved",
-      className: "text-[#57C56F]",
-    };
-  }
-
-  if (status === "FALSE_POSITIVE" || status === "REJECTED") {
-    return {
-      label: "Rejected",
-      className: "text-[#FF6B6B]",
-    };
-  }
-  if (status === "PENDING") {
-    return {
-      label: "Pending",
-      className: "text-[#F59E0B]",
-    };
-  }
-  return {
-    label: "",
-    className: "text-[#98A0A7]",
-  };
-}
 
 function DecisionResultModal({
   open,
@@ -114,19 +88,20 @@ function DecisionResultModal({
   pointsAwarded: number;
   onDone: () => void;
 }) {
-  if (!open || !status) return null;
+  // `status` is cleared the moment the sheet is dismissed; keep showing the
+  // last one so the content doesn't blank out while it slides away.
+  const [shownStatus, setShownStatus] = useState(status);
+  if (status && status !== shownStatus) setShownStatus(status);
 
-  const isApproved = status === "VERIFIED";
+  const isApproved = shownStatus === "VERIFIED";
   const avatarUrl =
     reporter?.profileImage ||
     reporter?.image ||
     "/images/placeholder_avatar.png";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40">
-      <div className="w-full rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5">
-        <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
-
+    <BottomSheet open={open && Boolean(status)} onClose={onDone}>
+      <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <div className="pt-6">
           {isApproved ? (
             <svg
@@ -223,7 +198,7 @@ function DecisionResultModal({
           </div>
         </div>
       </div>
-    </div>
+    </BottomSheet>
   );
 }
 
@@ -240,7 +215,6 @@ export default function ReportDetailsPage({
   const [report, setReport] = useState<ReportDetails | null>(null);
   const [preview, setPreview] = useState<LinkPreview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [previewReachable, setPreviewReachable] = useState(false);
   // The source link the current preview state belongs to — until it matches
   // the report's link, the preview is still loading.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -249,6 +223,8 @@ export default function ReportDetailsPage({
   // preview lookup.
   const [previewImageFailed, setPreviewImageFailed] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showRejectSheet, setShowRejectSheet] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [resultModal, setResultModal] = useState<ResultModalStatus>(null);
   const [pointsAwarded, setPointsAwarded] = useState(0);
   const [reportViewType, setReportViewType] = useState<"sent" | "received">(
@@ -320,7 +296,6 @@ export default function ReportDetailsPage({
       .then((data) => {
         if (cancelled) return;
         setPreview(data?.success ? (data.preview ?? null) : null);
-        setPreviewReachable(Boolean(data?.success && data.reachable));
         setPreviewImageFailed(false);
       })
       .catch((error) => {
@@ -335,42 +310,29 @@ export default function ReportDetailsPage({
     };
   }, [report?.sourceLink]);
 
-  const updateStatus = async (status: string) => {
+  const updateStatus = async (status: string, reason?: string) => {
     if (!report) return;
     setUpdating(true);
     try {
       const res = await fetch(`/api/reports/${report._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, rejectionReason: reason }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || "Failed to update report");
       }
-      setReport((prev) => (prev ? { ...prev, status } : prev));
+      setReport((prev) =>
+        prev ? { ...prev, status, rejectionReason: reason } : prev,
+      );
+      setShowRejectSheet(false);
       setPointsAwarded(Number(data?.pointsAwarded) || 0);
       setResultModal(status as ResultModalStatus);
     } catch (error) {
       console.error("Failed to update report:", error);
     } finally {
       setUpdating(false);
-    }
-  };
-
-  const getPlatformImage = (platform: string) => {
-    switch (platform) {
-      case "instagram":
-        return "/images/social-media/insta.svg";
-      case "twitter":
-      case "x":
-        return "/images/social-media/twitter.svg";
-      case "facebook":
-        return "/images/social-media/facebook.svg";
-      case "tiktok":
-        return "/images/social-media/tiktok.svg";
-      default:
-        return "/images/social-media/globe.svg";
     }
   };
 
@@ -389,21 +351,14 @@ export default function ReportDetailsPage({
     reportViewType === "sent" ? "Target User" : "Reported By";
 
   const sourceLinkLabel = report?.sourceLink
-    ? (() => {
-        try {
-          const parsed = new URL(report.sourceLink);
-          return `${parsed.hostname.replace(/^www\./, "")}${parsed.pathname}${parsed.search}`;
-        } catch {
-          return report.sourceLink;
-        }
-      })()
+    ? getSourceLinkLabel(report.sourceLink)
     : "";
   const previewLoading =
     Boolean(report?.sourceLink) && previewUrl !== report?.sourceLink;
   const previewImage =
     !previewLoading && !previewImageFailed ? preview?.image : null;
 
-  const statusMeta = getStatusMeta(report?.status || "");
+  const statusMeta = getReportStatusMeta(report?.status || "");
 
   if (loading) {
     return (
@@ -440,7 +395,8 @@ export default function ReportDetailsPage({
         </button>
         <h1 className="text-[16px] font-medium text-[#2B2B2B]">Report Details</h1>
         <div className="min-w-[78px] pr-2 text-right">
-          {statusMeta.label ? (
+          {statusMeta.label &&
+          !(reportViewType !== "sent" && report.status === "PENDING") ? (
             <p className={`text-[14px] font-medium ${statusMeta.className}`}>
               {statusMeta.label}
             </p>
@@ -488,7 +444,7 @@ export default function ReportDetailsPage({
                   Level {detailUser.level ?? 1}
                 </p>
                 <p className="mt-1.5 text-[12px] leading-4 text-[#839297]">
-                  {formatTimeAgo(report.createdAt)}
+                  {formatReportTimeAgo(report.createdAt)}
                 </p>
               </div>
             )}
@@ -503,22 +459,31 @@ export default function ReportDetailsPage({
             href={report.sourceLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-10 items-center gap-2 rounded-full bg-[#F6F6F6] pl-3.5 pr-2.5"
+            className="flex min-h-[70px] items-center gap-2.5 rounded-[20px] bg-[#F6F6F6] px-[13px] py-2.5"
           >
-            <Image
-              src={getPlatformImage(report.platform)}
-              alt={report.platform}
-              width={18}
-              height={18}
-              className="shrink-0 object-contain"
-            />
-            <p className="min-w-0 flex-1 truncate text-[14px] leading-5 text-[#2B2B2B]">
-              {sourceLinkLabel}
-            </p>
-            <ExternalLink
-              className="h-[18px] w-[18px] shrink-0 text-[#839297]"
-              strokeWidth={1.5}
-            />
+            <PlatformTile platform={report.platform} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
+                {PLATFORM_LABELS[report.platform] || "Website"}
+              </p>
+              <p className="mt-0.5 truncate text-[14px] leading-5 text-[#2B2B2B]">
+                {sourceLinkLabel}
+              </p>
+            </div>
+            {previewLoading ? (
+              <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-[#E7E7E7]" />
+            ) : previewImage ? (
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[#E7E7E7]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewImage}
+                  alt={preview?.title || "Link preview"}
+                  referrerPolicy="no-referrer"
+                  onError={() => setPreviewImageFailed(true)}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : null}
           </a>
         </section>
 
@@ -535,78 +500,58 @@ export default function ReportDetailsPage({
           </div>
         </section>
 
-        <section className="mt-6">
-          <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
-            Link Preview
-          </p>
-          <div className="overflow-hidden rounded-[20px] bg-[#F6F6F6]">
-            {previewLoading ? (
-              <div className="flex h-[206px] items-center justify-center">
-                <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
-              </div>
-            ) : previewImage ? (
-              <div className="flex h-[206px] items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewImage}
-                  alt={preview?.title || "Link preview"}
-                  referrerPolicy="no-referrer"
-                  onError={() => setPreviewImageFailed(true)}
-                  className="h-full w-auto max-w-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="flex h-[206px] flex-col items-center justify-center gap-3 px-6 text-center">
-                <Image
-                  src={getPlatformImage(report.platform)}
-                  alt={report.platform}
-                  width={32}
-                  height={32}
-                  className="object-contain"
-                />
-                <p className="text-[12px] leading-4 text-[#839297]">
-                  {previewReachable
-                    ? "No preview image available for this link."
-                    : "This link couldn't be reached — it may require login or have been taken down."}
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Shown for both received reports and the user's own (sent) ones */}
-        <section className="mt-[18px] rounded-[20px] bg-[#E6FEFF] px-2.5 pb-4 pt-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <AiMatchIcon className="h-[18px] w-[18px] shrink-0 text-[#01C3CF]" />
-              <p className="truncate text-[14px] font-medium leading-5 text-[#2B2B2B]">
-                AI Confidence Match
+        {getReportStatusGroup(report.status) === "REJECTED" && (
+          <section className="mt-3.5">
+            <p className="mb-[5px] text-[14px] leading-5 text-[#2B2B2B]">
+              Reason of Rejection
+            </p>
+            {/* Reports rejected before reasons were collected have none. */}
+            <div className="rounded-[20px] bg-[#F6F6F6] px-3 py-2.5">
+              <p className="text-[14px] leading-5 text-[#2B2B2B] break-words">
+                {report.rejectionReason?.trim() || "Marked as a false positive"}
               </p>
             </div>
-            {isAiConfidencePending(report.aiConfidenceStatus) ? (
-              <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#01C3CF]/30 border-t-[#01C3CF]" />
-            ) : (
-              <p className="shrink-0 text-[14px] font-medium leading-5 text-[#2B2B2B]">
-                {report.aiConfidence}%
-              </p>
-            )}
-          </div>
-          <div className="mt-3 h-[7px] overflow-hidden rounded-full bg-[#E0E0E0]">
-            {isAiConfidencePending(report.aiConfidenceStatus) ? (
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-[#01C3CF]/60" />
-            ) : (
-              <div
-                className="h-full rounded-full bg-[#01C3CF]"
-                style={{ width: `${report.aiConfidence}%` }}
-              />
-            )}
-          </div>
-          {report.aiConfidenceMessage ? (
-            <p className="mt-2.5 text-[12px] leading-[18px] text-[#839297] break-words">
-              {report.aiConfidenceMessage}
-            </p>
-          ) : null}
-        </section>
+          </section>
+        )}
+
+        {/* The reviewer gets the AI match to help make their call; the
+            reporter's view stays to the summary above. */}
+        {reportViewType !== "sent" && (
+          <>
+            <section className="mt-3.5 rounded-[20px] bg-[#E6FEFF] px-2.5 pb-4 pt-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <AiMatchIcon className="h-[18px] w-[18px] shrink-0 text-[#01C3CF]" />
+                  <p className="truncate text-[14px] font-medium leading-5 text-[#2B2B2B]">
+                    AI Confidence Match
+                  </p>
+                </div>
+                {isAiConfidencePending(report.aiConfidenceStatus) ? (
+                  <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#01C3CF]/30 border-t-[#01C3CF]" />
+                ) : (
+                  <p className="shrink-0 text-[14px] font-medium leading-5 text-[#2B2B2B]">
+                    {report.aiConfidence}%
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 h-[7px] overflow-hidden rounded-full bg-[#E0E0E0]">
+                {isAiConfidencePending(report.aiConfidenceStatus) ? (
+                  <div className="h-full w-1/3 animate-pulse rounded-full bg-[#01C3CF]/60" />
+                ) : (
+                  <div
+                    className="h-full rounded-full bg-[#01C3CF]"
+                    style={{ width: `${report.aiConfidence}%` }}
+                  />
+                )}
+              </div>
+              {report.aiConfidenceMessage ? (
+                <p className="mt-2.5 text-[12px] leading-[18px] text-[#839297] break-words">
+                  {report.aiConfidenceMessage}
+                </p>
+              ) : null}
+            </section>
+          </>
+        )}
       </div>
 
       {/* Pinned outside the scroll area so the decision is always visible */}
@@ -614,22 +559,72 @@ export default function ReportDetailsPage({
         <div className="shrink-0 bg-white pt-3">
           <div className="flex items-center gap-[11px]">
             <button
-              onClick={() => void updateStatus("FALSE_POSITIVE")}
-              disabled={updating}
-              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#F6F6F6] px-3 text-[14px] text-[#839297] transition-all active:scale-[0.98] disabled:opacity-60"
-            >
-              Mark as False Positive
-            </button>
-            <button
               onClick={() => void updateStatus("VERIFIED")}
               disabled={updating}
-              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#01C3CF] px-3 text-[14px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
+              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#01C3CF] px-3 text-[16px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
             >
-              {updating ? "Saving..." : "Verify Report"}
+              {updating && !showRejectSheet ? "Saving..." : "Confirm Report"}
+            </button>
+            <button
+              onClick={() => setShowRejectSheet(true)}
+              disabled={updating}
+              className="h-[45px] flex-1 whitespace-nowrap rounded-full bg-[#FFE5E5] px-3 text-[16px] text-[#F30131] transition-all active:scale-[0.98] disabled:opacity-60"
+            >
+              Reject Report
             </button>
           </div>
         </div>
       )}
+
+      <BottomSheet
+        open={showRejectSheet}
+        onClose={() => setShowRejectSheet(false)}
+        title="Give Reason of Rejection"
+        showCloseButton={false}
+        dismissible={!updating}
+      >
+        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+          <div className="pt-4">
+            <div className="relative rounded-[20px] bg-[#F5F5F5] px-4 pb-7 pt-3">
+              <textarea
+                value={rejectionReason}
+                onChange={(e) =>
+                  setRejectionReason(
+                    e.target.value.slice(0, MAX_REJECTION_REASON_LENGTH),
+                  )
+                }
+                maxLength={MAX_REJECTION_REASON_LENGTH}
+                placeholder="Write Reason here..."
+                rows={3}
+                className="w-full resize-none bg-transparent text-[14px] leading-5 text-[#2B2B2B] outline-none placeholder:text-[#A7ADB2]"
+              />
+              <span className="absolute bottom-2.5 right-4 text-[12px] leading-4 text-[#A7ADB2]">
+                {rejectionReason.length}/{MAX_REJECTION_REASON_LENGTH}
+              </span>
+            </div>
+            <div className="mt-5 flex items-center gap-[11px]">
+              <button
+                type="button"
+                onClick={() => setShowRejectSheet(false)}
+                disabled={updating}
+                className="h-[45px] flex-[0.8] rounded-full bg-[#F5F5F5] px-3 text-[14px] text-[#839297] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void updateStatus("FALSE_POSITIVE", rejectionReason.trim())
+                }
+                disabled={updating || !rejectionReason.trim()}
+                className="h-[45px] flex-[1.2] rounded-full bg-[#01C3CF] px-3 text-[14px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
+              >
+                {updating ? "Submitting..." : "Submit Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </BottomSheet>
 
       <DecisionResultModal
         open={Boolean(resultModal)}

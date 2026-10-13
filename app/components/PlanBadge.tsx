@@ -1,8 +1,8 @@
 import Image from "next/image";
 import type { PlanCode } from "@/models/Subscription";
 
-// Cloak Pro shows the crown icon; Boost Protection and Freemium show
-// nothing next to the username (Boost intentionally has no badge here).
+// Cloak Pro shows the crown icon; Freemium shows nothing next to the
+// username.
 export default function PlanBadge({
   plan,
   className = "",

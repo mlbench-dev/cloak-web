@@ -5,6 +5,7 @@ export type NotificationType =
   | "POST_VOTE" // your community post got up/downvoted
   | "POST_RAPID_ACTION" // your post crossed 2 upvotes (fires once)
   | "REPORT_VERIFIED" // a report you filed got verified -> XP
+  | "REPORT_REJECTED" // a report you filed was rejected by its target
   | "SUBSCRIPTION_EXPIRING" // plan expires within N days (multiple checkpoints)
   | "SUBSCRIPTION_EXPIRED" // plan's billing period has actually ended
   | "VERIFICATION_RESULT"; // identity verification approved/rejected

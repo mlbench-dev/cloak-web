@@ -5,8 +5,6 @@ import {
   CirclePlus,
   Edit3,
   ChevronLeft,
-  ChevronRight,
-  LifeBuoy,
   LogOut,
   Trash2,
   ShieldCheck,
@@ -23,8 +21,6 @@ import {
   Search,
   Settings,
 } from "lucide-react";
-import { PLAN_LIMITS } from "@/lib/config";
-import { showPlanLimitToast } from "@/app/components/planLimitToast";
 import { signOut, useSession } from "next-auth/react";
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -33,7 +29,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Cropper from "react-easy-crop";
 import { BadgeCheckIcon } from "@/public/svgIcons";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
-import type { PlanCode } from "@/models/Subscription";
+import BottomSheet from "@/app/components/BottomSheet";
+import { MenuButton, MenuGroup } from "@/app/components/MenuList";
 import IdentityVerificationStep from "@/app/components/auth/IdentityVerificationStep";
 import { PostCard } from "@/app/(protected)/community/_components/PostUI";
 import {
@@ -58,7 +55,7 @@ type ProfileView =
 type ProfilePostsScope = Extract<CloakWatchPostScope, "my" | "saved">;
 
 export default function ProfilePage() {
-  const { data: session, status, update } = useSession();
+  const { data: session, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [view, setView] = useState<ProfileView>("main");
@@ -115,13 +112,6 @@ export default function ProfilePage() {
     user?.isVerified ||
     false;
   const [imageLoading, setImageLoading] = useState(true);
-  const [profileStats, setProfileStats] = useState<{
-    totalReports: number;
-    approvedReports: number;
-    accuracyPercentage: number;
-  } | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const hasFetchedProfileStats = useRef(false);
 
   const [editData, setEditData] = useState({
     username: username,
@@ -253,33 +243,6 @@ export default function ProfilePage() {
       stopProfileCameraStream();
     };
   }, [stopProfileCameraStream]);
-
-  useEffect(() => {
-    const fetchProfileStats = async () => {
-      setStatsLoading(true);
-      try {
-        const res = await fetch("/api/user/dashboard");
-        const data = await res.json();
-        if (data?.success && data?.stats) {
-          setProfileStats({
-            totalReports: Number(data.stats.totalReports || 0),
-            approvedReports: Number(data.stats.verifiedReports || 0),
-            accuracyPercentage: Number(data.stats.accuracyPercentage || 0),
-          });
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-
-    if (status === "authenticated") {
-      if (hasFetchedProfileStats.current) return;
-      hasFetchedProfileStats.current = true;
-      fetchProfileStats();
-    }
-  }, [status]);
 
   const handleProfileImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -699,21 +662,6 @@ export default function ProfilePage() {
     return () => clearTimeout(timeout);
   }, [view, postsScope, postsQuery, postsViewTitle]);
 
-  // Contact Support is a Cloak Pro perk (see PLAN_LIMITS.canContactSupport)
-  // — same client-side gate + toast pattern as community posting in
-  // app/(protected)/community/page.tsx. Real enforcement is server-side
-  // in POST /api/support.
-  const handleContactSupportClick = () => {
-    const plan: PlanCode = user?.plan || "FREEMIUM";
-    if (!PLAN_LIMITS[plan].canContactSupport) {
-      showPlanLimitToast(
-        "Contact Support is a Cloak Pro perk. Upgrade to Cloak Pro to reach our team directly.",
-      );
-      return;
-    }
-    router.push("/support");
-  };
-
   const handleVerificationClick = async () => {
     if (user?.identityVerificationStatus === "APPROVED") {
       router.push("/verification?status=APPROVED");
@@ -1118,52 +1066,40 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {showPhotoSourceModal && (
-          <div className="fixed inset-0 z-50 flex items-end bg-black/40">
-            <div className="w-full rounded-t-[30px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-2.5">
-              <div className="mx-auto h-1 w-10 rounded-full bg-[#E0E0E0]" />
-              <div className="relative mt-3.5">
-                <h3 className="text-center text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
-                  Change profile photo
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowPhotoSourceModal(false)}
-                  className="absolute -top-[7px] right-0 -mr-2 flex h-9 w-9 items-center justify-center rounded-full text-[#839297]"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-3.5 border-t border-[#E7E7E7]" />
-              <div className="space-y-2.5 pt-3.5">
-                <button
-                  type="button"
-                  onClick={() => void openCameraCapture("user")}
-                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#01C3CF] text-[14px] text-white"
-                >
-                  Take Photo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPhotoSourceModal(false);
-                    fileInputRef.current?.click();
-                  }}
-                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#F6F6F6] text-[14px] text-[#2B2B2B]"
-                >
-                  Upload From Device
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPhotoSourceModal(false)}
-                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-white text-[14px] text-[#839297]"
-                >
-                  Cancel
-                </button>
-              </div>
+        <BottomSheet
+          open={showPhotoSourceModal}
+          onClose={() => setShowPhotoSourceModal(false)}
+          title="Change profile photo"
+        >
+          <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+            <div className="space-y-2.5 pt-3.5">
+              <button
+                type="button"
+                onClick={() => void openCameraCapture("user")}
+                className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#01C3CF] text-[14px] text-white"
+              >
+                Take Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPhotoSourceModal(false);
+                  fileInputRef.current?.click();
+                }}
+                className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#F6F6F6] text-[14px] text-[#2B2B2B]"
+              >
+                Upload From Device
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPhotoSourceModal(false)}
+                className="flex h-[45px] w-full items-center justify-center rounded-full bg-white text-[14px] text-[#839297]"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        )}
+        </BottomSheet>
 
         {showCameraCaptureModal && (
           <div className="fixed inset-0 z-50 overflow-hidden bg-[#0E0A08] text-white">
@@ -1333,9 +1269,9 @@ export default function ProfilePage() {
         {/* No extra horizontal padding — the protected layout's <main>
             already applies px-4 (16px), which is the reference's margin. */}
         <div className="space-y-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <section className="rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3">
-            <div className="flex items-start gap-3">
-              <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center">
+          <section className="rounded-[20px] border border-[#C8EEF1] bg-[#E7F9FB] px-3 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center">
                 {imageLoading && !profileImage && (
                   <UserIcon className="h-5 w-5 text-gray-400" />
                 )}
@@ -1351,7 +1287,7 @@ export default function ProfilePage() {
               </div>
               {/* min-w-0 + flex-1 so long names truncate instead of pushing
                   the button off the card. Centered against the avatar. */}
-              <div className="flex min-h-[42px] min-w-0 flex-1 flex-col justify-center">
+              <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <div className="flex items-center gap-1.5">
                   <h2 className="truncate text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
                     {username}
@@ -1374,74 +1310,56 @@ export default function ProfilePage() {
               </button>
             </div>
 
-            <div className="mt-7 flex items-center rounded-xl bg-white pb-3 pt-2.5">
-              <div className="flex-1 text-center">
-                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
-                  {statsLoading ? "—" : (profileStats?.totalReports ?? 0)}
-                </p>
-                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Reports</p>
-              </div>
-              <div className="h-11 w-px bg-[#C8EEF1]" />
-              <div className="flex-1 text-center">
-                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
-                  {statsLoading ? "—" : (profileStats?.approvedReports ?? 0)}
-                </p>
-                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Verified</p>
-              </div>
-              <div className="h-11 w-px bg-[#C8EEF1]" />
-              <div className="flex-1 text-center">
-                <p className="text-[16px] font-semibold leading-[22px] text-[#2B2B2B]">
-                  {statsLoading
-                    ? "—"
-                    : `${profileStats?.accuracyPercentage ?? 0}%`}
-                </p>
-                <p className="mt-2 text-[12px] leading-4 text-[#A7ADB2]">Accuracy</p>
-              </div>
-            </div>
           </section>
 
           <div>
             <p className="mb-2 text-[14px] leading-5 text-[#839297]">Account &amp; Activity</p>
             <MenuGroup>
               <MenuButton
-                icon={<UserIcon size={20} className="text-[#16A472]" />}
+                icon={<UserIcon size={18} strokeWidth={1.75} className="text-[#16A472]" />}
                 iconBg="bg-[#E9F8F1]"
                 label="Identity Profile"
+                description="Manage your identity details"
                 onClick={() => router.push("/identity-profile")}
                 showDivider={true}
               />
               <MenuButton
-                icon={<Crown size={20} className="text-[#F08922]" />}
+                icon={<Crown size={18} strokeWidth={1.75} className="text-[#F08922]" />}
                 iconBg="bg-[#FFF3E5]"
                 label="Subscription"
+                description="Manage your plan & benefits"
                 onClick={() => router.push("/subscription")}
                 showDivider={true}
               />
               <MenuButton
-                icon={<Trophy size={20} className="text-[#E3484C]" />}
+                icon={<Trophy size={18} strokeWidth={1.75} className="text-[#E3484C]" />}
                 iconBg="bg-[#FCECED]"
                 label="Your Progress"
+                description="Track your Cloak progress"
                 onClick={() => router.push("/progress")}
                 showDivider={true}
               />
               <MenuButton
-                icon={<Flag size={20} className="text-[#8A3FD0]" />}
+                icon={<Flag size={18} strokeWidth={1.75} className="text-[#8A3FD0]" />}
                 iconBg="bg-[#F4E9FA]"
                 label="My Reports"
+                description="View your submitted reports"
                 onClick={() => router.push("/my-reports")}
                 showDivider={true}
               />
               <MenuButton
-                icon={<CirclePlus size={20} className="text-[#1497B3]" />}
+                icon={<CirclePlus size={18} strokeWidth={1.75} className="text-[#1497B3]" />}
                 iconBg="bg-[#E8F7FA]"
                 label="My Posts"
+                description="Manage your community posts"
                 onClick={() => void openPostsView("My Posts", "my")}
                 showDivider={true}
               />
               <MenuButton
-                icon={<Bookmark size={20} className="text-[#067DB5]" />}
+                icon={<Bookmark size={18} strokeWidth={1.75} className="text-[#067DB5]" />}
                 iconBg="bg-[#E8F3F9]"
                 label="Saved Posts"
+                description="View your saved posts"
                 onClick={() => void openPostsView("Saved Posts", "saved")}
               />
             </MenuGroup>
@@ -1451,36 +1369,19 @@ export default function ProfilePage() {
             <p className="mb-2 text-[14px] leading-5 text-[#839297]">Verification &amp; Privacy</p>
             <MenuGroup>
               <MenuButton
-                icon={<ShieldCheck size={20} className="text-[#D74B66]" />}
+                icon={<ShieldCheck size={18} strokeWidth={1.75} className="text-[#D74B66]" />}
                 iconBg="bg-[#FBEAF0]"
                 label="Verification"
+                description="Manage your identity verification"
                 onClick={handleVerificationClick}
                 showDivider={true}
               />
               <MenuButton
-                icon={<Camera size={20} className="text-[#1CB986]" />}
-                iconBg="bg-[#E8F9F3]"
-                label="Reference Media"
-                onClick={() => router.push("/reference-media?mode=profile")}
-                showDivider={true}
-              />
-              <MenuButton
-                icon={<Shield size={20} className="text-[#C98113]" />}
+                icon={<Shield size={18} strokeWidth={1.75} className="text-[#C98113]" />}
                 iconBg="bg-[#FFF4E0]"
                 label="Privacy Policy"
+                description="Review your privacy & data"
                 onClick={() => router.push("/privacy-policy")}
-              />
-            </MenuGroup>
-          </div>
-
-          <div>
-            <p className="mb-2 text-[14px] leading-5 text-[#839297]">Support</p>
-            <MenuGroup>
-              <MenuButton
-                icon={<LifeBuoy size={20} className="text-[#1497B3]" />}
-                iconBg="bg-[#E8F7FA]"
-                label="Contact Support"
-                onClick={handleContactSupportClick}
               />
             </MenuGroup>
           </div>
@@ -1489,9 +1390,10 @@ export default function ProfilePage() {
             <p className="mb-2 text-[14px] leading-5 text-[#839297]">Account Actions</p>
             <MenuGroup>
               <MenuButton
-                icon={<Trash2 size={20} className="text-[#FD3B3C]" />}
+                icon={<Trash2 size={18} strokeWidth={1.75} className="text-[#FD3B3C]" />}
                 iconBg="bg-[#FFF1F1]"
                 label="Delete Account"
+                description="Permanently remove your account"
                 onClick={() => setShowDeleteAccountModal(true)}
                 variant="danger"
               />
@@ -1589,56 +1491,6 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function MenuButton({
-  icon,
-  label,
-  onClick,
-  variant = "default",
-  showDivider = false,
-  iconBg,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: "default" | "danger";
-  showDivider?: boolean;
-  // Each row gets its own pastel badge color per the reference design —
-  // falls back to the old two-tone (teal/red) behavior when not given.
-  iconBg?: string;
-}) {
-  return (
-    <div>
-      <button
-        onClick={onClick}
-        className="flex h-[49px] w-full items-center justify-between pl-3.5 pr-2 active:scale-[0.99] transition-all"
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-              iconBg || (variant === "danger" ? "bg-[#FFF1F1]" : "bg-[#E8F7FA]")
-            }`}
-          >
-            {icon}
-          </div>
-          <span className="truncate text-[14px] leading-5 text-[#0D1015]">{label}</span>
-        </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-[#9AB1B7]" />
-      </button>
-      {/* Inset divider: starts under the label, stops 14px short of the
-          right edge — matches the reference, not full-width. */}
-      {showDivider && <div className="ml-[49px] mr-3.5 h-px bg-[#E6F0EF]" />}
-    </div>
-  );
-}
-
-function MenuGroup({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="overflow-hidden rounded-3xl border border-[#E6F0F1] bg-[#FCFEFD] py-0.5">
-      {children}
     </div>
   );
 }

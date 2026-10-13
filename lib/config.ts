@@ -23,13 +23,12 @@ export const MAX_SUPPORT_SUBJECT_LENGTH = 120;
 // drift between call sites.
 export const PLAN_DISPLAY_NAME: Record<PlanCode, string> = {
   FREEMIUM: "Freemium",
-  BOOST: "Boost Protection",
   CLOAK_PRO: "Cloak Pro",
 };
 
 // Per-plan limits and perks, enforced by lib/planLimits.ts. null means
 // unlimited. Prices are in ZAR cents (PayFast settles in ZAR only) — the
-// USD figures shown in the UI ($4.99 / $11.99) are a fixed display peg, not
+// USD figure shown in the UI ($11.99) are a fixed display peg, not
 // live FX conversion, and are decoupled from this billed amount.
 //
 // priceZarCents below were computed 2026-08-11 off a live USD/ZAR quote
@@ -45,8 +44,7 @@ export const PLAN_LIMITS: Record<
     searchesPerDay: number | null;
     savedLookupsMax: number | null;
     canPostCommunity: boolean;
-    // Direct-to-inbox contact form (see app/(protected)/support) — a Cloak
-    // Pro-exclusive perk, unlike canPostCommunity above which Boost also gets.
+    // Direct-to-inbox contact form (see app/(protected)/support).
     canContactSupport: boolean;
     xpMultiplier: number;
     priceZarCents: number;
@@ -56,6 +54,12 @@ export const PLAN_LIMITS: Record<
     // cooldown means a paying user's retry-after-failure comes back
     // faster on average. Applies per report, keyed off the reporter's plan.
     retryCooldownMs: number;
+    // How many links one link-discovery run asks the CV service for
+    // (numberOfRequests in lib/fetchLinks.ts).
+    linksPerFetch: number;
+    // How many days back the CV scraper looks for posts on the user's
+    // approved links (numberOfDays in lib/fetchLinks.ts).
+    scrapeDays: number;
   }
 > = {
   FREEMIUM: {
@@ -67,17 +71,8 @@ export const PLAN_LIMITS: Record<
     xpMultiplier: 1,
     priceZarCents: 0,
     retryCooldownMs: 60 * 1000,
-  },
-  BOOST: {
-    reportsPerMonth: 20,
-    searchesPerDay: null,
-    savedLookupsMax: null,
-    canPostCommunity: true,
-    canContactSupport: false,
-    xpMultiplier: 1.5,
-    // $4.99 @ ~16.17 ZAR/USD ≈ R80.71 + buffer -> R84.99. Provisional.
-    priceZarCents: 8499,
-    retryCooldownMs: 20 * 1000,
+    linksPerFetch: 5,
+    scrapeDays: 10,
   },
   CLOAK_PRO: {
     reportsPerMonth: null,
@@ -89,6 +84,8 @@ export const PLAN_LIMITS: Record<
     // $11.99 @ ~16.17 ZAR/USD ≈ R193.93 + buffer -> R199.99. Provisional.
     priceZarCents: 19999,
     retryCooldownMs: 10 * 1000,
+    linksPerFetch: 20,
+    scrapeDays: 30,
   },
 };
 
