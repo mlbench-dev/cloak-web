@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { PlatformGlyph, getSourceLinkLabel } from "@/app/components/reports/reportUi";
 import { detectPlatform } from "@/lib/platform";
+import { useNotifications } from "@/app/components/NotificationsProvider";
 
 // Link discovery runs as a background job on the server (see
 // lib/fetchLinks.ts). These pieces let any screen show it: the identity
@@ -22,6 +23,17 @@ export type LinkFetchStatus = {
   everFetched: boolean;
   // Post scraping on the links kept on Confirm Links.
   scrape: ScrapeStatus;
+  // Watched-link limit and Pro change allowance (lib/fetchLinks.ts).
+  links: LinkAllowance;
+};
+
+export type LinkAllowance = {
+  limit: number;
+  count: number;
+  room: number;
+  changesPerWindow: number;
+  changesLeft: number;
+  nextChangeAt: string | null;
 };
 
 export type ScrapeStatus = {
@@ -30,6 +42,8 @@ export type ScrapeStatus = {
   finishedAt: string | null;
   error: string | null;
   linkCount: number;
+  finishedCount: number;
+  failedCount: number;
 };
 
 // Mirrors lib/fetchLinks.ts — the server decides what's missing.
@@ -59,7 +73,11 @@ export function profileCompletionHref(missing: ProfileRequirement[]): string {
     : "/identity-profile";
 }
 
-const POLL_INTERVAL_MS = 3000;
+// Finding links is short and has no callbacks — poll it.
+const FETCH_POLL_MS = 3000;
+// Scraping reports through callbacks -> a Firebase ping, so this is only
+// the safety net for a missed ping.
+const SCRAPE_FALLBACK_POLL_MS = 60_000;
 
 // Tagged explicitly: a successful status has its own (null) `error`
 // field, so checking for that key can't tell success from failure.
@@ -124,12 +142,33 @@ export function useLinkFetchStatus() {
     };
   }, []);
 
-  const isRunning = status?.status === "running" || status?.scrape.status === "running";
+  const fetchRunning = status?.status === "running";
   useEffect(() => {
-    if (!isRunning) return;
-    const interval = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    if (!fetchRunning) return;
+    const interval = setInterval(() => void refresh(), FETCH_POLL_MS);
     return () => clearInterval(interval);
-  }, [isRunning, refresh]);
+  }, [fetchRunning, refresh]);
+
+  // While scraping: refresh when the server pings (each finished link),
+  // when the tab comes back into view, and once a minute as a fallback.
+  const scrapeRunning = status?.scrape.status === "running";
+  const { subscribe } = useNotifications();
+  useEffect(() => {
+    if (!scrapeRunning) return;
+    const unsubscribe = subscribe(() => void refresh());
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, SCRAPE_FALLBACK_POLL_MS);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [scrapeRunning, subscribe, refresh]);
 
   // For responses that already carry a fresh status (e.g. Confirm Links).
   const applyStatus = useCallback((next: LinkFetchStatus) => {
@@ -338,9 +377,17 @@ export function ScrapingPostsScreen({
           ? error || scrape?.error || "Couldn't scrape your links. Please try again."
           : state === "done"
             ? "We've checked your links for posts that match you."
-            : "Checking your links for posts that match you. This may take a few minutes."
+            : "Checking your links for posts that match you. This can take several minutes — you can leave this screen, we'll alert you if we find new posts."
       }
-      rows={[{ label: "Links Being Scanned", value: scrape?.linkCount ?? "—" }]}
+      rows={[
+        {
+          label: "Links Scanned",
+          value: scrape && scrape.linkCount > 0 ? `${scrape.finishedCount} / ${scrape.linkCount}` : "—",
+        },
+        ...(scrape && scrape.failedCount > 0
+          ? [{ label: "Couldn't Scrape", value: scrape.failedCount }]
+          : []),
+      ]}
       onBack={onBack}
       onOk={onOk}
       onRetry={onRetry}
@@ -351,11 +398,14 @@ export function ScrapingPostsScreen({
 export function ConfirmLinksScreen({
   urls,
   subjectName,
+  allowance,
   onBack,
   onDone,
 }: {
   urls: string[];
   subjectName: string;
+  // How many more links fit under the plan's limit.
+  allowance: LinkAllowance;
   // Leaving without choosing keeps the review open for later.
   onBack: () => void;
   // Gets the status after the review — scraping has started by then.
@@ -363,13 +413,24 @@ export function ConfirmLinksScreen({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
-  const allSelected = urls.length > 0 && selected.size === urls.length;
+  // Can't keep more than the plan has room for (the server checks too).
+  const maxSelectable = Math.min(urls.length, allowance.room);
+  const allSelected = maxSelectable > 0 && selected.size === maxSelectable;
+  const slotsLeft = allowance.room - selected.size;
 
   const toggle = (url: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
+      if (next.has(url)) {
+        next.delete(url);
+      } else if (next.size >= allowance.room) {
+        toast.error(`Your plan allows ${allowance.limit} links — ${allowance.room} left to add.`, {
+          id: "link-limit",
+        });
+        return prev;
+      } else {
+        next.add(url);
+      }
       return next;
     });
   };
@@ -406,14 +467,24 @@ export function ConfirmLinksScreen({
         <h1 className="text-[16px] font-medium text-[#2B2B2B]">Confirm Links</h1>
         <button
           type="button"
-          onClick={() => setSelected(allSelected ? new Set() : new Set(urls))}
-          className="min-w-10 text-right text-[12px] text-[#14C3CF]"
+          onClick={() =>
+            setSelected(allSelected ? new Set() : new Set(urls.slice(0, maxSelectable)))
+          }
+          disabled={maxSelectable === 0}
+          className="min-w-10 text-right text-[12px] text-[#14C3CF] disabled:opacity-40"
         >
-          {allSelected ? "Deselect all" : "Select all"}
+          {allSelected
+            ? "Deselect all"
+            : maxSelectable < urls.length
+              ? `Select ${maxSelectable}`
+              : "Select all"}
         </button>
       </header>
       <p className="mt-1 text-center text-[11px] leading-4 text-[#839297]">
         Select the links below that you want to keep
+      </p>
+      <p className="mt-0.5 text-center text-[11px] leading-4 text-[#14C3CF]">
+        {slotsLeft} of {allowance.limit} link{allowance.limit === 1 ? "" : "s"} left on your plan
       </p>
 
       <main className="-mx-4 mt-4 flex-1 min-h-0 overflow-y-auto">

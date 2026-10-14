@@ -1,20 +1,57 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
-import Image from "next/image";
+import { ChevronLeft, Radar } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
-import { getMockPostsForLink, type MockPost } from "../_lib/mockPosts";
+import { useEffect, useState } from "react";
+import { PlatformIcon } from "../_components/IncidentUI";
+import { detectPlatform } from "@/lib/platform";
+import type { CloakWatchPost } from "@/lib/cloakWatchPosts";
 
 const STATUS_TABS = ["All", "New", "Confirmed", "Rejected"] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
 
-function matchTone(matchPercent: number): string {
-  // Reference shows 70% as amber and 60% as red.
-  return matchPercent >= 65
-    ? "bg-[#F8E8C6] text-[#FFAD00]"
-    : "bg-[#F7DEE2] text-[#F40033]";
+// Same scale the match score used: 65%+ amber, below that red.
+function attentionTextTone(percent: number): string {
+  return percent >= 65 ? "text-[#FFAD00]" : "text-[#F40033]";
+}
+
+// "@handle" from a profile URL (instagram.com/name → @name).
+function handleFromUrl(url: string): string {
+  try {
+    const first = new URL(url).pathname.split("/").filter(Boolean)[0];
+    return first ? `@${decodeURIComponent(first)}` : url;
+  } catch {
+    return url;
+  }
+}
+
+type ProfilePreview = { title: string | null; description: string | null; image: string | null };
+
+function dayLabel(iso: string | null): string {
+  if (!iso) return "Earlier";
+  const date = new Date(iso);
+  const today = new Date();
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(today) - startOfDay(date)) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDate(iso: string | null): string {
+  return iso
+    ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "";
+}
+
+function formatTime(iso: string | null): string {
+  return iso
+    ? new Date(iso)
+        .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+        .replace(" ", "")
+        .toLowerCase()
+    : "";
 }
 
 export default function LinkPostsPage() {
@@ -22,12 +59,60 @@ export default function LinkPostsPage() {
   const params = useParams<{ id: string }>();
   const linkUrl = decodeURIComponent(params.id);
 
-  const posts = getMockPostsForLink(linkUrl);
+  const [posts, setPosts] = useState<CloakWatchPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StatusTab>("All");
+  // The watched account's picture/name/bio, from its link preview — often
+  // blocked by Instagram/Facebook, so everything has a fallback.
+  const [profile, setProfile] = useState<ProfilePreview | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/link-preview?url=${encodeURIComponent(linkUrl)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.success || !data.preview) return;
+        setProfile({
+          title: data.preview.title || null,
+          description: data.preview.description || null,
+          image: data.preview.image || null,
+        });
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [linkUrl]);
+
+  // Posts the CV scraper found on this link (GET /api/cloak-watch/posts).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/cloak-watch/posts?link=${encodeURIComponent(linkUrl)}`, { cache: "no-store" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (!res.ok || !data?.success) {
+          setError(data?.error || "Couldn't load posts.");
+          return;
+        }
+        setPosts(data.posts as CloakWatchPost[]);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load posts.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkUrl]);
 
   const filteredPosts =
     activeTab === "All" ? posts : posts.filter((post) => post.status === activeTab);
-  const groups = Array.from(new Set(filteredPosts.map((post) => post.dateLabel)));
+  const groups = Array.from(new Set(filteredPosts.map((post) => dayLabel(post.publishedAt))));
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
@@ -35,12 +120,48 @@ export default function LinkPostsPage() {
         <button type="button" onClick={() => router.back()} className="-ml-3 p-2">
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
-        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Cloak Watch</h1>
+        <h1 className="text-[16px] font-medium text-[#2B2B2B]">Profile</h1>
         <div className="-mr-3 w-10" />
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto py-3 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-        <div className="overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-3 rounded-[20px] bg-[#F5F5F5] px-3 py-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[#839297]">
+            {profile?.image && !avatarFailed ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.image}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarFailed(true)}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <PlatformIcon platform={detectPlatform(linkUrl)} />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">{handleFromUrl(linkUrl)}</p>
+            {profile?.title && (
+              <p className="truncate text-[12px] leading-4 text-[#839297]">{profile.title}</p>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1 text-[12px] leading-4 text-[#0FB87F]">
+            <Radar className="h-3.5 w-3.5" />
+            Monitoring Active
+          </span>
+        </div>
+
+        {profile?.description && (
+          <div className="mt-4">
+            <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">About:</p>
+            <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-[#839297]">
+              {profile.description}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-4 overflow-x-auto no-scrollbar">
           <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
             {STATUS_TABS.map((tab) => (
               <button
@@ -57,13 +178,19 @@ export default function LinkPostsPage() {
           </div>
         </div>
 
-        {groups.length > 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
+          </div>
+        ) : error ? (
+          <p className="py-10 text-center text-[12px] text-[#839297]">{error}</p>
+        ) : groups.length > 0 ? (
           groups.map((group) => (
             <div key={group} className="mt-5">
               <p className="mb-2 text-[14px] leading-5 text-[#839297]">{group}</p>
               <div className="space-y-3">
                 {filteredPosts
-                  .filter((post) => post.dateLabel === group)
+                  .filter((post) => dayLabel(post.publishedAt) === group)
                   .map((post) => (
                     <PostRow key={post.id} linkId={params.id} post={post} />
                   ))}
@@ -71,42 +198,80 @@ export default function LinkPostsPage() {
             </div>
           ))
         ) : (
-          <p className="py-10 text-center text-[12px] text-[#839297]">No posts here</p>
+          <p className="py-10 text-center text-[12px] text-[#839297]">
+            {posts.length === 0 ? "No posts found on this link yet" : "No posts here"}
+          </p>
         )}
       </main>
     </div>
   );
 }
 
-function PostRow({ linkId, post }: { linkId: string; post: MockPost }) {
+function PostRow({ linkId, post }: { linkId: string; post: CloakWatchPost }) {
   return (
     <Link href={`/cloak-watch/${linkId}/${post.id}`} className="block">
-      <div className="flex items-start gap-4 rounded-[20px] bg-[#F6F6F6] px-4 py-3.5">
+      <div className="flex items-center gap-3 rounded-[16px] bg-[#F5F5F5] px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
             <p className="text-[16px] leading-[22px] text-[#2B2B2B]">
-              Post #{String(post.postNumber).padStart(2, "0")}
+              Post #{String(post.number).padStart(2, "0")}
             </p>
             {post.status === "New" && (
-              <span className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-[#E1F1E6] px-2.5 text-[12px] text-[#33C757]">
+              <span className="inline-flex h-[18px] items-center rounded-full bg-[#E1F1E6] px-2 text-[11px] text-[#33C757]">
                 New
               </span>
             )}
           </div>
-          <p className="mt-px flex gap-3 text-[12px] leading-4 text-[#839297]">
-            <span>Sept 1, 2026</span>
-            <span>{post.timeLabel}</span>
+          <p className="mt-1 flex flex-wrap gap-x-2.5 text-[12px] leading-4 text-[#839297]">
+            <span>{formatDate(post.publishedAt)}</span>
+            <span>{formatTime(post.publishedAt)}</span>
+            {post.attentionPercent != null && (
+              <span className={attentionTextTone(post.attentionPercent)}>
+                {post.attentionPercent} % Match
+              </span>
+            )}
           </p>
-          <span
-            className={`mt-3 inline-flex h-[26px] items-center rounded-xl px-2.5 text-[12px] ${matchTone(post.matchPercent)}`}
-          >
-            {post.matchPercent} % Match
-          </span>
         </div>
-        <div className="relative h-[76px] w-[82px] shrink-0 overflow-hidden rounded-xl bg-gray-200">
-          <Image src={post.thumbnailUrl} alt="" fill className="object-cover" />
-        </div>
+        <PostThumbnail url={post.url} />
       </div>
     </Link>
+  );
+}
+
+// The CV API saves no image, so the thumbnail comes from the post's link
+// preview (og:image); the platform icon stands in when there's none —
+// Facebook/Instagram often refuse previews to logged-out requests.
+function PostThumbnail({ url }: { url: string }) {
+  const [image, setImage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/link-preview?url=${encodeURIComponent(url)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success && data.preview?.image) setImage(data.preview.image);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  return (
+    <div className="relative flex h-[50px] w-[50px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#E9ECEE]">
+      {image && !failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={image}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <PlatformIcon platform={detectPlatform(url)} />
+      )}
+    </div>
   );
 }

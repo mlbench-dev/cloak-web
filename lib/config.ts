@@ -26,6 +26,20 @@ export const PLAN_DISPLAY_NAME: Record<PlanCode, string> = {
   CLOAK_PRO: "Cloak Pro",
 };
 
+// Scrape look-back window per plan, from env so it can be tuned without a
+// code change (SCRAPE_DAYS_FREE / SCRAPE_DAYS_PRO). Only read server-side
+// (lib/fetchLinks.ts sends it as numberOfDays); the CV API accepts 1–365.
+function scrapeDaysFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const days = Number(raw);
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    console.warn(`${name}="${raw}" isn't a whole number of days between 1 and 365 — using ${fallback}.`);
+    return fallback;
+  }
+  return days;
+}
+
 // Per-plan limits and perks, enforced by lib/planLimits.ts. null means
 // unlimited. Prices are in ZAR cents (PayFast settles in ZAR only) — the
 // USD figure shown in the UI ($11.99) are a fixed display peg, not
@@ -54,12 +68,21 @@ export const PLAN_LIMITS: Record<
     // cooldown means a paying user's retry-after-failure comes back
     // faster on average. Applies per report, keyed off the reporter's plan.
     retryCooldownMs: number;
-    // How many links one link-discovery run asks the CV service for
-    // (numberOfRequests in lib/fetchLinks.ts).
-    linksPerFetch: number;
+    // Most watched links (approved — typed in or accepted from a fetch) a
+    // user can have. A fetch only asks the CV API for the room left.
+    maxLinks: number;
+    // How many watched links can be removed per LINK_CHANGE_WINDOW_DAYS
+    // (rolling). 0 = saved links can't be removed.
+    linkChangesPerWindow: number;
     // How many days back the CV scraper looks for posts on the user's
     // approved links (numberOfDays in lib/fetchLinks.ts).
     scrapeDays: number;
+    // Re-scrape all watched links this many days after the last scrape
+    // started (app/api/cron/scheduled-scrape). null = no automatic scrapes.
+    autoScrapeEveryDays: number | null;
+    // Manual re-scrapes from the dashboard's Scan button, ever, unlocked
+    // MANUAL_SCAN_UNLOCK_DAYS after the first scrape. 0 = no Scan button.
+    manualScans: number;
   }
 > = {
   FREEMIUM: {
@@ -71,8 +94,11 @@ export const PLAN_LIMITS: Record<
     xpMultiplier: 1,
     priceZarCents: 0,
     retryCooldownMs: 60 * 1000,
-    linksPerFetch: 5,
-    scrapeDays: 10,
+    maxLinks: 5,
+    linkChangesPerWindow: 0,
+    scrapeDays: scrapeDaysFromEnv("SCRAPE_DAYS_FREE", 10),
+    autoScrapeEveryDays: null,
+    manualScans: 1,
   },
   CLOAK_PRO: {
     reportsPerMonth: null,
@@ -84,10 +110,19 @@ export const PLAN_LIMITS: Record<
     // $11.99 @ ~16.17 ZAR/USD ≈ R193.93 + buffer -> R199.99. Provisional.
     priceZarCents: 19999,
     retryCooldownMs: 10 * 1000,
-    linksPerFetch: 20,
-    scrapeDays: 30,
+    maxLinks: 20,
+    linkChangesPerWindow: 2,
+    scrapeDays: scrapeDaysFromEnv("SCRAPE_DAYS_PRO", 30),
+    autoScrapeEveryDays: 2,
+    manualScans: 0,
   },
 };
+
+// PLAN_LIMITS.manualScans unlock this many days after the first scrape.
+export const MANUAL_SCAN_UNLOCK_DAYS = 2;
+
+// Rolling window for PLAN_LIMITS.linkChangesPerWindow.
+export const LINK_CHANGE_WINDOW_DAYS = 15;
 
 // Level thresholds: total XP required to reach each level. Below the first
 // threshold a user is unranked (level 0). Configurable here only — nothing

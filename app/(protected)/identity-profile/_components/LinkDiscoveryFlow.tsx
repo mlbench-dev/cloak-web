@@ -54,6 +54,7 @@ export default function LinkDiscoveryFlow({
       <ConfirmLinksScreen
         urls={status.urls}
         subjectName={subjectName}
+        allowance={status.links}
         onBack={onClose}
         onDone={(next) => {
           // Choosing starts scraping on the server.
