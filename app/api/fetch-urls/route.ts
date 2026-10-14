@@ -5,16 +5,16 @@ import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import {
   FETCH_URL_COLLECTION,
-  LINK_STATUS,
+  getLinkAllowance,
   getLinkFetchStatus,
   getProfileCompleteness,
   reviewLinkFetch,
   runLinkFetch,
-  runScrape,
   startLinkFetch,
-  startScrape,
+  startPendingScrape,
   type FetchUrlDoc,
 } from "@/lib/fetchLinks";
+import { removeWatchedLinks } from "@/lib/watchedLinks";
 
 // The CV call runs in after() below, which gets this route's max duration.
 // FETCH_URL_TIMEOUT_MS in lib/fetchLinks.ts aborts just before it.
@@ -72,6 +72,20 @@ export async function POST() {
       );
     }
 
+    // Typed-in and kept links count against the plan limit.
+    const allowance = await getLinkAllowance(db, userId);
+    if (allowance.room <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            allowance.changesPerWindow > 0
+              ? `You've reached your limit of ${allowance.limit} links. Remove a link to make room for new ones.`
+              : `You've reached your limit of ${allowance.limit} links. Upgrade to Cloak Pro for up to 20.`,
+        },
+        { status: 400 },
+      );
+    }
+
     const claim = await startLinkFetch(db, userId);
     if (claim.started) {
       after(() =>
@@ -93,8 +107,9 @@ export async function POST() {
 }
 
 // Confirm Links: `keep` lists the URLs (from the latest run) to keep; the
-// rest of that run's links are dismissed. Then scraping starts in the
-// background on the kept links — the client follows it via GET.
+// rest of that run's links are dismissed. Then scraping starts on the kept
+// links — the CV API answers "started" right away and reports progress
+// through /api/scrape/callback; the client follows it via GET.
 export async function PATCH(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -111,14 +126,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    const claim = await startScrape(db, userId, result.kept);
-    if (claim.started) {
-      after(() =>
-        runScrape(db, userId, claim.startedAt).catch((error) =>
-          console.error("Scrape job crashed:", error),
-        ),
-      );
-    }
+    // Scrapes the links just kept plus any typed-in links not scraped yet
+    // (they wait for the first scrape). A failed start is recorded on the
+    // scrape job, so the loader shows it with Try Again; the review itself
+    // is already saved either way.
+    const scrape = await startPendingScrape(db, userId);
 
     const status = await getLinkFetchStatus(db, userId);
     return NextResponse.json({
@@ -126,7 +138,7 @@ export async function PATCH(request: Request) {
       ...status,
       approved: result.approved,
       rejected: result.rejected,
-      scrapeStarted: claim.started,
+      scrapeStarted: scrape.ok && scrape.started,
     });
   } catch (error) {
     console.error("Error confirming links:", error);
@@ -161,24 +173,25 @@ export async function DELETE(request: Request) {
     const userId = new ObjectId(session.user.id);
     const collection = db.collection<FetchUrlDoc>(FETCH_URL_COLLECTION);
 
-    const doc = await collection.findOne(
-      { userId },
-      { projection: { links: 1 } },
-    );
+    // Legacy docs from before the service switched to links[] have no
+    // plan rules to apply — just drop the URLs.
+    const doc = await collection.findOne({ userId }, { projection: { links: 1 } });
+    if (!Array.isArray(doc?.links)) {
+      const legacy = await collection.updateOne({ userId }, { $pull: { urls: { $in: urls } } });
+      return NextResponse.json({
+        success: true,
+        deletedCount: legacy.modifiedCount > 0 ? urls.length : 0,
+      });
+    }
 
-    const result = Array.isArray(doc?.links)
-      ? await collection.updateOne(
-          { userId },
-          { $set: { "links.$[removed].status": LINK_STATUS.REJECTED } },
-          { arrayFilters: [{ "removed.url": { $in: urls } }] },
-        )
-      : // Legacy docs from before the service switched to links[].
-        await collection.updateOne({ userId }, { $pull: { urls: { $in: urls } } });
+    // Same rules as Known Websites: Freemium can't remove saved links,
+    // Cloak Pro can change a limited number per period.
+    const result = await removeWatchedLinks(db, userId, urls);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      deletedCount: result.modifiedCount > 0 ? urls.length : 0,
-    });
+    return NextResponse.json({ success: true, deletedCount: result.removed });
   } catch (error) {
     console.error("Error deleting watched links:", error);
     return NextResponse.json(

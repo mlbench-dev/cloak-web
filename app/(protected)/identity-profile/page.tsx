@@ -17,6 +17,11 @@ import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { DetectiveIcon } from "@/public/svgIcons";
 import { MenuButton, MenuGroup } from "@/app/components/MenuList";
 import LinkDiscoveryFlow from "./_components/LinkDiscoveryFlow";
+import ScrapeLoader from "./_components/ScrapeLoader";
+import type { LinkAllowance } from "@/app/components/linkDiscovery/LinkDiscovery";
+import { getSourceLinkLabel } from "@/app/components/reports/reportUi";
+import { parseWatchedLink, watchedLinkKey } from "@/lib/watchedLinkUrl";
+import { LINK_CHANGE_WINDOW_DAYS } from "@/lib/config";
 
 type IdentityProfileData = {
   fullName: string;
@@ -57,6 +62,9 @@ function TagInput({
   onRemove,
   onAdd,
   placeholder,
+  validate,
+  canRemove,
+  display,
 }: {
   values: string[];
   draft: string;
@@ -64,10 +72,25 @@ function TagInput({
   onRemove: (index: number) => void;
   onAdd: (value: string) => void;
   placeholder: string;
+  // Returns an error to show instead of adding, or the value to add
+  // (e.g. a cleaned-up link).
+  validate?: (value: string) => { error: string } | { value: string };
+  // Chips without an × (e.g. saved links the plan doesn't allow removing).
+  canRemove?: (value: string) => boolean;
+  display?: (value: string) => string;
 }) {
+  const [error, setError] = useState<string | null>(null);
+
   const commit = () => {
     const trimmed = draft.trim();
-    if (trimmed && !values.includes(trimmed)) onAdd(trimmed);
+    if (!trimmed) return;
+    const checked = validate ? validate(trimmed) : { value: trimmed };
+    if ("error" in checked) {
+      setError(checked.error);
+      return;
+    }
+    setError(null);
+    if (!values.includes(checked.value)) onAdd(checked.value);
     onDraftChange("");
   };
 
@@ -76,7 +99,10 @@ function TagInput({
       <div className="flex h-[42px] items-center rounded-xl bg-[#F5F5F5] pl-3.5 pr-3">
         <input
           value={draft}
-          onChange={(e) => onDraftChange(e.target.value)}
+          onChange={(e) => {
+            setError(null);
+            onDraftChange(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -95,6 +121,7 @@ function TagInput({
           Add
         </button>
       </div>
+      {error && <p className="mt-1.5 text-[12px] leading-4 text-[#F30131]">{error}</p>}
       {values.length > 0 && (
         <div className="-mx-4 mt-2.5 flex gap-2 overflow-x-auto px-4 no-scrollbar">
           {values.map((value, index) => (
@@ -102,15 +129,17 @@ function TagInput({
               key={`${value}-${index}`}
               className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-[#E6F7F8] pl-2.5 pr-2 text-[13px] text-[#2B2B2B]"
             >
-              {value}
-              <button
-                type="button"
-                onClick={() => onRemove(index)}
-                aria-label={`Remove ${value}`}
-                className="text-[#2B2B2B]"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              {display ? display(value) : value}
+              {(!canRemove || canRemove(value)) && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  aria-label={`Remove ${value}`}
+                  className="text-[#2B2B2B]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </span>
           ))}
         </div>
@@ -175,6 +204,8 @@ export default function IdentityProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showLinkDiscovery, setShowLinkDiscovery] = useState(false);
   const [tagDrafts, setTagDrafts] = useState<Partial<Record<TagField, string>>>({});
+  const [linkAllowance, setLinkAllowance] = useState<LinkAllowance | null>(null);
+  const [showScrapeLoader, setShowScrapeLoader] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +228,7 @@ export default function IdentityProfilePage() {
         if (cancelled) return;
         if (data?.success) {
           setIdentity(toIdentityProfileData(data.profile));
+          if (data.linkAllowance) setLinkAllowance(data.linkAllowance);
         }
       })
       .catch(() => null)
@@ -256,11 +288,16 @@ export default function IdentityProfilePage() {
       }
 
       setIdentity(toIdentityProfileData(data.profile));
+      if (data.linkAllowance) setLinkAllowance(data.linkAllowance);
       setMode("view");
       if (data.shouldFetchLinks) {
         // Server decides when discovery runs (first completion only, for
-        // now) — see shouldAutoFetchLinks in lib/fetchLinks.ts.
+        // now) — see shouldAutoFetchLinks in lib/fetchLinks.ts. Typed-in
+        // links get scraped together with the links kept there.
         setShowLinkDiscovery(true);
+      } else if (data.scrapeStarted) {
+        // New typed-in links started scraping straight away.
+        setShowScrapeLoader(true);
       } else {
         toast.success("Identity profile updated");
       }
@@ -292,6 +329,75 @@ export default function IdentityProfilePage() {
             }))
           }
         />
+      </div>
+    );
+
+    // Known Websites = watched links (lib/watchedLinks.ts): Instagram,
+    // Facebook or X only, capped by plan, and saved ones can only be removed
+    // as the plan allows. The server enforces all of it; this just explains
+    // it up front.
+    const limit = linkAllowance?.limit ?? 0;
+    const changesLeft = linkAllowance?.changesLeft ?? 0;
+    const savedLinks = identity.websites;
+    const removedSaved = savedLinks.filter((url) => !draft.websites.includes(url)).length;
+    const knownWebsitesField = (
+      <div>
+        <label className="mb-2 flex items-baseline justify-between text-[14px] leading-5 text-[#2B2B2B]">
+          <span>
+            Known Websites <span className="text-[11px] text-[#839297]">(Optional)</span>
+          </span>
+          {linkAllowance && (
+            <span className="text-[11px] text-[#839297]">
+              {draft.websites.length} / {limit} links
+            </span>
+          )}
+        </label>
+        <TagInput
+          values={draft.websites}
+          draft={tagDrafts.websites || ""}
+          onDraftChange={(value) => setTagDrafts((prev) => ({ ...prev, websites: value }))}
+          placeholder="Add Instagram, Facebook or X links"
+          display={getSourceLinkLabel}
+          validate={(value) => {
+            const parsed = parseWatchedLink(value);
+            if (!parsed.ok) return { error: parsed.error };
+            if (draft.websites.some((url) => watchedLinkKey(url) === parsed.key)) {
+              return { error: "That link is already added." };
+            }
+            if (linkAllowance && draft.websites.length >= limit) {
+              return {
+                error:
+                  linkAllowance.changesPerWindow > 0
+                    ? `You can have up to ${limit} links.`
+                    : `You can have up to ${limit} links. Upgrade to Cloak Pro for up to 20.`,
+              };
+            }
+            return { value: parsed.url };
+          }}
+          // Links added in this edit can always be taken back; saved ones
+          // only while the plan has changes left.
+          canRemove={(url) => !savedLinks.includes(url) || removedSaved < changesLeft}
+          onAdd={(value) => setDraft((prev) => ({ ...prev, websites: [...prev.websites, value] }))}
+          onRemove={(index) =>
+            setDraft((prev) => ({
+              ...prev,
+              websites: prev.websites.filter((_, i) => i !== index),
+            }))
+          }
+        />
+        {linkAllowance && savedLinks.length > 0 && (
+          <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
+            {linkAllowance.changesPerWindow === 0
+              ? "Saved links can't be removed on the Freemium plan."
+              : changesLeft > 0
+                ? `You can remove ${changesLeft - removedSaved} more saved link${
+                    changesLeft - removedSaved === 1 ? "" : "s"
+                  } in this ${LINK_CHANGE_WINDOW_DAYS}-day period.`
+                : linkAllowance.nextChangeAt
+                  ? `You can change links again on ${new Date(linkAllowance.nextChangeAt).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.`
+                  : "You've used your link changes for now."}
+          </p>
+        )}
       </div>
     );
 
@@ -328,13 +434,7 @@ export default function IdentityProfilePage() {
               "aliases",
               "Add your Aliases",
             )}
-            {tagField(
-              <>
-                Known Websites <span className="text-[11px] text-[#839297]">(Optional)</span>
-              </>,
-              "websites",
-              "Add Websites",
-            )}
+            {knownWebsitesField}
             {tagField("Keywords", "keywords", "Add Keywords")}
           </div>
 
@@ -441,7 +541,10 @@ export default function IdentityProfilePage() {
             <PillGroup values={identity.aliases} toneClassName="bg-[#E9F9F6]" />
           </FieldSection>
           <FieldSection label="Known Websites">
-            <PillGroup values={identity.websites} toneClassName="bg-[#ECF2FE]" />
+            <PillGroup
+              values={identity.websites.map(getSourceLinkLabel)}
+              toneClassName="bg-[#ECF2FE]"
+            />
           </FieldSection>
           <FieldSection label="Keywords">
             <PillGroup values={identity.keywords} toneClassName="bg-[#FFECF8]" />
@@ -462,6 +565,16 @@ export default function IdentityProfilePage() {
           </>
         )}
       </main>
+
+      {showScrapeLoader && (
+        <ScrapeLoader
+          onClose={() => setShowScrapeLoader(false)}
+          onDone={() => {
+            setShowScrapeLoader(false);
+            router.push("/cloak-watch");
+          }}
+        />
+      )}
 
       {showLinkDiscovery && (
         <LinkDiscoveryFlow

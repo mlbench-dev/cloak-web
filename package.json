@@ -42,7 +42,8 @@
     "react-easy-crop": "^5.5.7",
     "react-hot-toast": "^2.6.0",
     "react-webcam": "^7.2.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "sweetalert2": "^11.26.25"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

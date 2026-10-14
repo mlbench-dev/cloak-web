@@ -10,17 +10,20 @@ import {
   Bell,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Crown,
   Crosshair,
   Fingerprint,
   Globe,
   Radar,
   ShieldCheck,
+  XCircle,
   User as UserIcon,
 } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import {
-  ScrapingLinksScreen,
+  ScrapingPostsScreen,
+  type LinkFetchStatus,
   describeMissingProfile,
   profileCompletionHref,
   useLinkFetchStatus,
@@ -43,17 +46,49 @@ interface DashboardUser {
   plan: PlanCode;
 }
 
-// --- Mock monitoring data ---------------------------------------------
-// This dashboard isn't wired to a real scanning pipeline yet — there's no
-// CV<->MERN discovery contract to call (see the Phase 2.0 plan). Numbers
-// below match the Figma reference exactly for visual QA.
-
-const MOCK_STATS = {
-  matches: "24",
-  avgConfidence: "96%",
-  pendingReports: 12,
-  newCloakWatchMatches: 6,
+// Real numbers from GET /api/dashboard/summary.
+type DashboardSummary = {
+  // Watched (approved) links.
+  urlCount: number;
+  lastScan: { status: "never" | "running" | "done" | "failed"; at: string | null };
+  // Paid plans re-scrape automatically; free plans show no schedule.
+  autoScan: boolean;
+  nextScanAt: string | null;
+  matches: number;
+  matchesThisWeek: number;
+  avgMatchConfidence: number | null;
+  pendingReports: number;
+  manualScan: {
+    offered: boolean;
+    available: boolean;
+    availableAt: string | null;
+    reason: "plan" | "no-first-scrape" | "too-early" | "used" | "running" | null;
+  };
 };
+
+function formatAgo(iso: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+// "In 1d 5h" / "In 3h 20m" / "Soon" (the scheduler runs hourly).
+function formatUntil(iso: string): string {
+  const minutes = Math.floor((new Date(iso).getTime() - Date.now()) / 60000);
+  if (minutes <= 0) return "Within the hour";
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) return `In ${days}d ${hours}h`;
+  return hours > 0 ? `In ${hours}h ${minutes % 60}m` : `In ${minutes}m`;
+}
+
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
 
 function StatCard({
   bgClassName,
@@ -96,40 +131,66 @@ export default function DashboardPage() {
   const [user, setUser] = useState<DashboardUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanError, setScanError] = useState<string | null>(null);
-  // Scan runs link discovery as a background job on the server; this
-  // follows it (it may also have been started from the identity profile).
+  // Follows the user's link-discovery and scraping jobs (they may have been
+  // started elsewhere — Confirm Links, Known Websites, the schedule).
   const {
     status: linkFetch,
-    start: startLinkFetch,
     refresh: refreshLinkFetch,
+    retryScrape,
+    applyStatus,
   } = useLinkFetchStatus();
-  const scanning = linkFetch?.status === "running";
-  // Full-screen Scraping Links screen for the Scan action.
+  const scanning = linkFetch?.scrape.status === "running";
+  const [startingScan, setStartingScan] = useState(false);
+  // Full-screen Scraping Posts loader for the Scan action.
   const [showScrapingOverlay, setShowScrapingOverlay] = useState(false);
 
-  // Shared by the mount effect below and handleScanNow, so a completed
-  // scan can refresh the same data without a full page reload.
-  const fetchScanResults = async () => {
-    try {
-      const res = await fetch("/api/scan-results");
-      const data = await res.json().catch(() => null);
-      if (data?.success) setDetectedUrls(data.urls || []);
-    } catch {
-      // leave detectedUrls as-is on a transient failure
-    }
-  };
-
+  // Scan = the free plan's one manual re-scrape of all watched links
+  // (unlocked 2 days after the first scan). Paid plans scan automatically
+  // and don't get the button. The server enforces both.
   const handleScanNow = async () => {
+    if (startingScan) return;
     setScanError(null);
-    setShowScrapingOverlay(true);
-    const error = await startLinkFetch();
-    if (error) {
-      // Couldn't even start — show it inline under the button instead.
-      setScanError(error);
-      setShowScrapingOverlay(false);
+    setStartingScan(true);
+    try {
+      const res = await fetch("/api/scrape/manual", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setScanError(data?.error || "Couldn't start the scan. Please try again.");
+        return;
+      }
+      applyStatus(data as LinkFetchStatus);
+      setShowScrapingOverlay(true);
+    } catch {
+      setScanError("Couldn't start the scan. Please try again.");
+    } finally {
+      setStartingScan(false);
     }
   };
-  const [detectedUrls, setDetectedUrls] = useState<string[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  // Reload the summary when a fetch or scrape starts/finishes WHILE the page
+  // is open — not on the first status load, which isn't a change (that
+  // used to fetch the summary twice on every visit).
+  const jobKey = linkFetch ? `${linkFetch.status}|${linkFetch.scrape.status}` : null;
+  const [seenJobKey, setSeenJobKey] = useState<string | null>(null);
+  const [summaryVersion, setSummaryVersion] = useState(0);
+  if (jobKey !== null && jobKey !== seenJobKey) {
+    setSeenJobKey(jobKey);
+    if (seenJobKey !== null) setSummaryVersion((version) => version + 1);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dashboard/summary", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.success) setSummary(data as DashboardSummary);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [summaryVersion]);
 
   // Swipeable scan-status/upsell carousel — tracks which slide is centered
   // so the dot indicator can reflect it (native CSS scroll-snap, no carousel
@@ -159,15 +220,8 @@ export default function DashboardPage() {
   }, [loading, isFreemiumPlan, activeScanSlide, linkFetch?.profileComplete]);
 
   useEffect(() => {
-    fetchScanResults();
     void refreshLinkFetch();
   }, [refreshLinkFetch]);
-
-  // Refresh the URL count once a run finishes.
-  const linkFetchState = linkFetch?.status;
-  useEffect(() => {
-    if (linkFetchState === "done") fetchScanResults();
-  }, [linkFetchState]);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/user/dashboard")
@@ -210,11 +264,10 @@ export default function DashboardPage() {
   return (
     <>
       {showScrapingOverlay && (
-        <ScrapingLinksScreen
-          status={linkFetch}
+        <ScrapingPostsScreen
+          scrape={linkFetch?.scrape ?? null}
           onBack={() => setShowScrapingOverlay(false)}
-          onRetry={() => void handleScanNow()}
-          // Cloak Watch opens Confirm Links when there's anything to review.
+          onRetry={() => void retryScrape()}
           onOk={() => router.push("/cloak-watch")}
         />
       )}
@@ -229,6 +282,7 @@ export default function DashboardPage() {
               src={avatarUrl}
               alt={user?.username || "user"}
               fill
+              sizes="32px"
               className="object-cover"
             />
           ) : (
@@ -331,29 +385,92 @@ export default function DashboardPage() {
               }`}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-0.5">
-                  <p className="text-[12px] leading-4 text-[#A7ADB2]">Last scan</p>
-                  <p className="flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 fill-[#33C757] text-white" />
-                    Completed
-                  </p>
-                </div>
-                <p className="mt-1 text-[14px] leading-5 text-[#2B2B2B]">12 min ago</p>
-                <button
-                  type="button"
-                  onClick={handleScanNow}
-                  disabled={scanning}
-                  className="mt-3 flex h-7 min-w-[89px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
-                >
-                  {scanning ? (
+                <div className="flex items-start">
+                  {/* Last scan = when posts were last scraped. */}
+                  <div className="min-w-0">
+                    <p className="text-[12px] leading-4 text-[#A7ADB2]">Last scan</p>
+                    <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">
+                      {!summary || summary.lastScan.status === "never" || !summary.lastScan.at
+                        ? "Not yet"
+                        : summary.lastScan.status === "running"
+                          ? "Scanning now"
+                          : formatAgo(summary.lastScan.at)}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
+                      {summary?.lastScan.status === "done" ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 fill-[#33C757] text-white" />
+                          Completed
+                        </>
+                      ) : summary?.lastScan.status === "failed" ? (
+                        <>
+                          <XCircle className="h-3.5 w-3.5 shrink-0 fill-[#F30131] text-white" />
+                          Failed
+                        </>
+                      ) : summary?.lastScan.status === "running" ? (
+                        <>
+                          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-[#14C3CF]/30 border-t-[#14C3CF]" />
+                          In progress
+                        </>
+                      ) : (
+                        "No scans yet"
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Only plans that re-scrape automatically have a next scan. */}
+                  {summary?.autoScan && (
                     <>
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      Scanning…
+                      <div className="mx-2.5 h-[53px] w-px shrink-0 bg-[#F4F4F4]" />
+                      <div className="min-w-0">
+                        <p className="text-[12px] leading-4 text-[#A7ADB2]">Next scheduled scan</p>
+                        <p className="mt-0.5 text-[14px] leading-5 text-[#2B2B2B]">
+                          {summary.lastScan.status === "running"
+                            ? "After this scan"
+                            : summary.nextScanAt
+                              ? formatShortDate(summary.nextScanAt)
+                              : "After first scan"}
+                        </p>
+                        {summary.nextScanAt && summary.lastScan.status !== "running" && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-[#A7ADB2]">
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            {formatUntil(summary.nextScanAt)}
+                          </p>
+                        )}
+                      </div>
                     </>
-                  ) : (
-                    "Scan"
                   )}
-                </button>
+                </div>
+                {summary?.manualScan.offered && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleScanNow}
+                      disabled={!summary.manualScan.available || scanning || startingScan}
+                      className="mt-3 flex h-7 min-w-[89px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-50"
+                    >
+                      {scanning || startingScan ? (
+                        <>
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                          Scanning…
+                        </>
+                      ) : (
+                        "Scan"
+                      )}
+                    </button>
+                    {!summary.manualScan.available && !scanning && (
+                      <p className="mt-1.5 text-[11px] leading-4 text-[#A7ADB2]">
+                        {summary.manualScan.reason === "used"
+                          ? "Manual scan used — upgrade for automatic scans"
+                          : summary.manualScan.reason === "too-early" && summary.manualScan.availableAt
+                            ? `Available on ${formatShortDate(summary.manualScan.availableAt)}`
+                            : summary.manualScan.reason === "no-first-scrape"
+                              ? "Available 2 days after your first scan"
+                              : null}
+                      </p>
+                    )}
+                  </>
+                )}
                 {scanError && (
                   <p className="mt-2 text-[12px] text-[#D14343]">{scanError}</p>
                 )}
@@ -365,6 +482,9 @@ export default function DashboardPage() {
                   alt=""
                   aria-hidden="true"
                   fill
+                  sizes="80px"
+                  // Largest image above the fold on load.
+                  loading="eager"
                   className="absolute inset-0"
                 />
                 <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[#34C759]">
@@ -462,8 +582,8 @@ export default function DashboardPage() {
           }
           Icon={Globe}
           label="URLs Detected"
-          value={hasRequiredIdentityDetails ? detectedUrls.length : "0"}
-          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
+          value={hasRequiredIdentityDetails ? (summary?.urlCount ?? "—") : "0"}
+          trendLabel={hasRequiredIdentityDetails ? "watched" : "Paused"}
         />
         <StatCard
           bgClassName="bg-[#FFF1E6]"
@@ -473,8 +593,12 @@ export default function DashboardPage() {
           }
           Icon={Crosshair}
           label="Matches"
-          value={hasRequiredIdentityDetails ? MOCK_STATS.matches : "0"}
-          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
+          value={hasRequiredIdentityDetails ? (summary?.matches ?? "—") : "0"}
+          trendLabel={
+            hasRequiredIdentityDetails
+              ? `+${summary?.matchesThisWeek ?? 0} this week`
+              : "Paused"
+          }
         />
         <StatCard
           bgClassName="bg-[#ECF2FE]"
@@ -484,8 +608,12 @@ export default function DashboardPage() {
           }
           Icon={BarChart3}
           label="AVG Match Conf"
-          value={hasRequiredIdentityDetails ? MOCK_STATS.avgConfidence : "—"}
-          trendLabel={hasRequiredIdentityDetails ? "this week" : "Paused"}
+          value={
+            hasRequiredIdentityDetails && summary?.avgMatchConfidence != null
+              ? `${summary.avgMatchConfidence}%`
+              : "—"
+          }
+          trendLabel={hasRequiredIdentityDetails ? "all matches" : "Paused"}
         />
       </div>
 
@@ -503,9 +631,9 @@ export default function DashboardPage() {
                   Reports from other users
                 </p>
               </div>
-              {hasRequiredIdentityDetails && MOCK_STATS.pendingReports > 0 && (
+              {(summary?.pendingReports ?? 0) > 0 && (
                 <span className="shrink-0 text-[12px] leading-4 text-[#FE8D27]">
-                  {MOCK_STATS.pendingReports} Pending
+                  {summary?.pendingReports} Pending
                 </span>
               )}
               <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
@@ -522,12 +650,12 @@ export default function DashboardPage() {
                   Matches found by Cloak
                 </p>
               </div>
-              {hasRequiredIdentityDetails &&
-                MOCK_STATS.newCloakWatchMatches > 0 && (
-                  <span className="shrink-0 text-[12px] leading-4 text-[#00C3D0]">
-                    {MOCK_STATS.newCloakWatchMatches} New
-                  </span>
-                )}
+              {/* New = matches found in the last 7 days. */}
+              {hasRequiredIdentityDetails && (summary?.matchesThisWeek ?? 0) > 0 && (
+                <span className="shrink-0 text-[12px] leading-4 text-[#00C3D0]">
+                  {summary?.matchesThisWeek} New
+                </span>
+              )}
               <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
             </div>
           </Link>

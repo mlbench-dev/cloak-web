@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { PlatformIcon } from "./_components/IncidentUI";
-import { detectPlatform } from "@/lib/platform";
-import { getSourceLinkLabel } from "@/app/components/reports/reportUi";
+import { PlatformGlyph, getSourceLinkLabel } from "@/app/components/reports/reportUi";
+import BottomSheet from "@/app/components/BottomSheet";
+import type { CloakWatchOverview, WatchedLinkSummary } from "@/lib/cloakWatchPosts";
+import { LINK_CHANGE_WINDOW_DAYS } from "@/lib/config";
 import {
   ConfirmLinksScreen,
   ScrapingLinksScreen,
@@ -17,29 +18,37 @@ import {
   useLinkFetchStatus,
 } from "@/app/components/linkDiscovery/LinkDiscovery";
 
-interface ScanResultsResponse {
-  success: boolean;
-  urls: string[];
-}
-
 interface IdentityProfileResponse {
   success: boolean;
   profile: { fullName?: string } | null;
 }
 
-async function fetchWatchedUrls(): Promise<string[] | null> {
+// Watched links with their scrape progress + new-post counts, and the
+// stats card (GET /api/cloak-watch/links).
+async function fetchOverview(): Promise<CloakWatchOverview | null> {
   try {
-    const res = await fetch("/api/scan-results", { cache: "no-store" });
-    const data: ScanResultsResponse | null = res.ok ? await res.json() : null;
-    return data?.success ? data.urls : null;
+    const res = await fetch("/api/cloak-watch/links", { cache: "no-store" });
+    const data = res.ok ? await res.json() : null;
+    return data?.success ? (data as CloakWatchOverview) : null;
   } catch {
     return null;
   }
 }
 
+function formatAgo(iso: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 export default function IncidentsPage() {
   const router = useRouter();
-  const [urls, setUrls] = useState<string[]>([]);
+  const [links, setLinks] = useState<WatchedLinkSummary[]>([]);
+  const [stats, setStats] = useState<CloakWatchOverview["stats"] | null>(null);
   const [subjectName, setSubjectName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
@@ -74,37 +83,36 @@ export default function IncidentsPage() {
     setWatchingScrape(true);
   }
 
-  // Keeps what's shown if a reload fails.
-  const reloadUrls = () =>
-    fetchWatchedUrls().then((list) => {
-      if (list) setUrls(list);
-    });
+  const applyOverview = (overview: CloakWatchOverview | null) => {
+    if (!overview) return; // keep what's shown if a reload fails
+    setLinks(overview.links);
+    setStats(overview.stats);
+  };
+  const reloadUrls = () => fetchOverview().then(applyOverview);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchWatchedUrls().then((list) => {
-      if (cancelled) return;
-      if (list) setUrls(list);
-      setLoading(false);
-    });
     void refreshLinkFetch();
-    return () => {
-      cancelled = true;
-    };
   }, [refreshLinkFetch]);
 
-  // New links land in the list as soon as a run finishes.
-  const linkFetchState = linkFetch?.status;
+  // Reload the list on load and whenever a fetch or scrape moves on (a link
+  // finishing updates its row and counts) — not on every status check.
+  const progressKey = linkFetch
+    ? `${linkFetch.status}|${linkFetch.scrape.status}|${linkFetch.scrape.finishedCount}`
+    : "";
   useEffect(() => {
-    if (linkFetchState !== "done") return;
     let cancelled = false;
-    fetchWatchedUrls().then((list) => {
-      if (!cancelled && list) setUrls(list);
+    fetchOverview().then((overview) => {
+      if (cancelled) return;
+      if (overview) {
+        setLinks(overview.links);
+        setStats(overview.stats);
+      }
+      setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [linkFetchState]);
+  }, [progressKey]);
 
   const showConfirm =
     !watchingScrape && Boolean(linkFetch?.awaitingReview) && !reviewDismissed;
@@ -150,18 +158,27 @@ export default function IncidentsPage() {
     setSelected(new Set());
   };
 
+  // Removing links follows the plan: Freemium can't, Cloak Pro can change
+  // a few per period (lib/watchedLinks.ts enforces it on the server).
+  const changesLeft = linkFetch?.links.changesLeft ?? 0;
+  const canRemoveLinks = changesLeft > 0;
+
   const toggleSelected = (url: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
+      if (next.has(url)) {
+        next.delete(url);
+      } else if (next.size >= changesLeft) {
+        toast.error(
+          `You can remove ${changesLeft} more link${changesLeft === 1 ? "" : "s"} right now.`,
+          { id: "link-changes" },
+        );
+        return prev;
+      } else {
+        next.add(url);
+      }
       return next;
     });
-  };
-
-  const allSelected = selected.size === urls.length && urls.length > 0;
-  const toggleSelectAll = () => {
-    setSelected(allSelected ? new Set() : new Set(urls));
   };
 
   const handleDelete = async () => {
@@ -178,16 +195,59 @@ export default function IncidentsPage() {
         toast.error(data?.error || "Couldn't delete selected links.");
         return;
       }
-      setUrls((prev) => prev.filter((url) => !selected.has(url)));
+      setLinks((prev) => prev.filter((link) => !selected.has(link.url)));
       setSelected(new Set());
       setSelectMode(false);
       toast.success("Removed from Cloak Watch");
+      // Uses up changes — refresh what's left.
+      void refreshLinkFetch();
     } catch {
       toast.error("Couldn't delete selected links.");
     } finally {
       setDeleting(false);
     }
   };
+
+  // "Add Link": same rules as Known Websites (server-checked).
+  const [addOpen, setAddOpen] = useState(false);
+  const [newLink, setNewLink] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const handleAddLink = async () => {
+    if (adding || !newLink.trim()) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/cloak-watch/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: newLink }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setAddError(data?.error || "Couldn't add the link.");
+        return;
+      }
+      setAddOpen(false);
+      setNewLink("");
+      toast.success("Link added to Cloak Watch");
+      void reloadUrls();
+      // If it started scraping right away, pick that up (shows the loader).
+      if (data.scrapeStarted) {
+        setPostsDismissed(false);
+        void refreshLinkFetch();
+      }
+    } catch {
+      setAddError("Couldn't add the link.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const scrape = linkFetch?.scrape;
+  const scrapePercent =
+    scrape && scrape.linkCount > 0 ? Math.round((scrape.finishedCount / scrape.linkCount) * 100) : 0;
 
   if (watchingPosts) {
     return (
@@ -233,6 +293,7 @@ export default function IncidentsPage() {
       <ConfirmLinksScreen
         urls={linkFetch.urls}
         subjectName={subjectName || ""}
+        allowance={linkFetch.links}
         onBack={() => setReviewDismissed(true)}
         onDone={(next) => {
           // Choosing starts scraping — show its loader next.
@@ -252,20 +313,38 @@ export default function IncidentsPage() {
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
         <h1 className="text-[16px] font-medium text-[#2B2B2B]">Cloak Watch</h1>
-        {urls.length > 0 ? (
+        {links.length > 0 && (canRemoveLinks || selectMode) ? (
           <button
             type="button"
-            onClick={selectMode ? toggleSelectAll : toggleSelectMode}
+            onClick={toggleSelectMode}
             className="pl-2 text-[14px] text-[#00C2CE]"
           >
-            {selectMode ? (allSelected ? "Deselect all" : "Select all") : "Select"}
+            {selectMode ? "Cancel" : "Select"}
           </button>
         ) : (
           <div className="-mr-3 w-10" />
         )}
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto pt-5 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+      <main className="flex-1 min-h-0 overflow-y-auto pt-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        {stats && links.length > 0 && (
+          <div className="mb-4 grid grid-cols-3 rounded-2xl bg-[#F5F5F5] py-3">
+            {[
+              { label: "Reports", value: stats.found },
+              { label: "Verified", value: stats.confirmed },
+              { label: "Accuracy", value: stats.accuracy != null ? `${stats.accuracy}%` : "—" },
+            ].map((stat, index) => (
+              <div
+                key={stat.label}
+                className={`flex flex-col items-center gap-1 ${index > 0 ? "border-l border-[#E2E2E2]" : ""}`}
+              >
+                <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">{stat.value}</p>
+                <p className="text-[12px] leading-4 text-[#A7ADB2]">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {needsProfile && (
           <div className="mb-4 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
             <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
@@ -322,12 +401,18 @@ export default function IncidentsPage() {
           <button
             type="button"
             onClick={() => setPostsDismissed(false)}
-            className="mb-4 block w-full rounded-3xl bg-[#E9FEFF] px-2.5 pb-3 pt-2 text-left"
+            className="mb-4 block w-full rounded-[20px] bg-[#E9FEFF] px-3 pb-2.5 pt-3 text-left"
           >
-            <p className="px-0.5 text-[12px] leading-4 text-[#2B2B2B]">Scraping posts…</p>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
-              <div className="h-full w-2/3 animate-pulse rounded-full bg-[#00C2CE]" />
+            <p className="text-[14px] leading-5 text-[#2B2B2B]">Scraping is in Progress</p>
+            <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#E3E3E3]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#14C3CF] to-[#2BD9E4] transition-[width] duration-500"
+                style={{ width: `${Math.max(scrapePercent, 4)}%` }}
+              />
             </div>
+            <p className="mt-1.5 text-right text-[11px] leading-4 text-[#14C3CF]">
+              {scrapePercent}% Done
+            </p>
           </button>
         )}
 
@@ -384,59 +469,53 @@ export default function IncidentsPage() {
           <div className="flex justify-center py-10">
             <div className="h-8 w-8 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
           </div>
-        ) : urls.length > 0 ? (
-          <div className="space-y-3">
-            {urls.map((url) => {
-              const isSelected = selected.has(url);
+        ) : links.length > 0 ? (
+          <div className="-mx-4">
+            {links.map((link) => {
+              const isSelected = selected.has(link.url);
               const row = (
                 <div
-                  className={`flex min-h-14 items-center gap-3 rounded-2xl bg-[#F6F6F6] px-2.5 py-2 ${
-                    selectMode && isSelected
-                      ? "ring-[1.5px] ring-[#00C2CE] shadow-[0_0_0_4px_rgba(0,194,206,0.12)]"
-                      : ""
+                  className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
+                    selectMode && isSelected ? "bg-[#E9F9FB]" : ""
                   }`}
                 >
-                  {/* radio + icon sit closer together (9px) than the row's
-                      12px gap, per the reference */}
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    {selectMode && (
-                      <span
-                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
-                          isSelected ? "border-[#00C2CE]" : "border-[#A7AAB1]"
-                        }`}
-                      >
-                        {isSelected && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#00C2CE]" />
-                        )}
-                      </span>
-                    )}
-                    <PlatformIcon platform={detectPlatform(url)} />
-                  </div>
+                  {selectMode && (
+                    <span
+                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
+                        isSelected ? "border-[#00C2CE]" : "border-[#A7AAB1]"
+                      }`}
+                    >
+                      {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-[#00C2CE]" />}
+                    </span>
+                  )}
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E7E7E7] bg-white text-[#839297]">
+                    <PlatformGlyph platform={link.platform} size={16} />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    {/* Full link — several results share a domain, so the
-                        path is what tells them apart. */}
+                    {/* Full link — several watched links can share a domain. */}
                     <p className="break-all text-[14px] leading-5 text-[#2B2B2B]">
-                      {getSourceLinkLabel(url)}
+                      {getSourceLinkLabel(link.url)}
                     </p>
-                    <p className="truncate text-[12px] leading-4 text-[#839297]">
-                      {subjectName || "Pending review"}
+                    <p className="truncate text-[11px] leading-4 text-[#839297]">
+                      {subjectName || ""}
                     </p>
                   </div>
+                  <LinkProgress link={link} scrapeRunning={scrapeState === "running"} />
                   <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
                 </div>
               );
 
               return selectMode ? (
                 <button
-                  key={url}
+                  key={link.uuid}
                   type="button"
-                  onClick={() => toggleSelected(url)}
+                  onClick={() => toggleSelected(link.url)}
                   className="block w-full text-left"
                 >
                   {row}
                 </button>
               ) : (
-                <Link key={url} href={`/cloak-watch/${encodeURIComponent(url)}`} className="block">
+                <Link key={link.uuid} href={`/cloak-watch/${encodeURIComponent(link.url)}`} className="block">
                   {row}
                 </Link>
               );
@@ -451,16 +530,126 @@ export default function IncidentsPage() {
 
       {selectMode && (
         <div className="pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
+          <p className="mb-2 text-center text-[11px] leading-4 text-[#839297]">
+            You can remove {changesLeft} more link{changesLeft === 1 ? "" : "s"} in this{" "}
+            {LINK_CHANGE_WINDOW_DAYS}-day period.
+          </p>
           <button
             type="button"
             onClick={() => void handleDelete()}
             disabled={selected.size === 0 || deleting}
-            className="h-11 w-full rounded-full bg-[#FC383A] text-[16px] font-medium text-white disabled:opacity-50"
+            className="h-12 w-full rounded-full bg-[#FFE5E5] text-[16px] text-[#F30131] disabled:opacity-50"
           >
             {deleting ? "Deleting..." : `Delete (${selected.size})`}
           </button>
         </div>
       )}
+
+      {!selectMode && !needsProfile && links.length > 0 && (
+        <div className="pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAddError(null);
+              setAddOpen(true);
+            }}
+            className="h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white"
+          >
+            Add Link
+          </button>
+        </div>
+      )}
+
+      <BottomSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Add Link"
+        dismissible={!adding}
+      >
+        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4">
+          <input
+            value={newLink}
+            onChange={(e) => {
+              setNewLink(e.target.value);
+              setAddError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleAddLink();
+            }}
+            placeholder="Paste an Instagram, Facebook or X profile link"
+            className="h-[42px] w-full rounded-xl bg-[#F5F5F5] px-3.5 text-[14px] text-[#2B2B2B] outline-none placeholder:text-[#A7ADB2] focus:ring-2 ring-[#14C3CF]/20"
+          />
+          {addError ? (
+            <p className="mt-1.5 text-[12px] leading-4 text-[#F30131]">{addError}</p>
+          ) : (
+            linkFetch && (
+              <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
+                {linkFetch.links.count} / {linkFetch.links.limit} links on your plan
+              </p>
+            )
+          )}
+          <button
+            type="button"
+            onClick={() => void handleAddLink()}
+            disabled={adding || !newLink.trim()}
+            className="mt-5 h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
+          >
+            {adding ? "Adding..." : "Add Link"}
+          </button>
+        </div>
+      </BottomSheet>
     </div>
   );
+}
+
+// Right side of a link row: live scrape progress while a scrape runs, the
+// number of posts still to review, or when it was last checked.
+function LinkProgress({
+  link,
+  scrapeRunning,
+}: {
+  link: WatchedLinkSummary;
+  scrapeRunning: boolean;
+}) {
+  if (scrapeRunning && (link.scrapeStatus === "in_progress" || link.scrapeStatus === "queued")) {
+    const active = link.scrapeStatus === "in_progress";
+    return (
+      <span className="flex shrink-0 items-center gap-1.5 text-[11px] leading-4 text-[#14C3CF]">
+        <span
+          className={`h-4 w-4 rounded-full border-2 ${
+            active ? "animate-spin border-[#14C3CF]/25 border-t-[#14C3CF]" : "border-[#E3E3E3]"
+          }`}
+        />
+        <span className={active ? "" : "text-[#A7ADB2]"}>{active ? "Scanning" : "Queued"}</span>
+      </span>
+    );
+  }
+  if (scrapeRunning && link.scrapeStatus === "complete") {
+    return (
+      <span className="flex shrink-0 items-center gap-1.5 text-[11px] leading-4 text-[#14C3CF]">
+        <span className="h-4 w-4 rounded-full border-2 border-[#14C3CF]" />
+        Completed
+      </span>
+    );
+  }
+  if (link.newPosts > 0) {
+    return (
+      <span
+        aria-label={`${link.newPosts} new posts`}
+        className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[#14C3CF] px-1 text-[10px] text-white"
+      >
+        {link.newPosts}
+      </span>
+    );
+  }
+  if (link.scrapeUpdatedAt) {
+    return (
+      <span className="shrink-0 text-right text-[10px] leading-[14px] text-[#839297]">
+        Last Checked
+        <br />
+        {formatAgo(link.scrapeUpdatedAt)}
+      </span>
+    );
+  }
+  return null;
 }
