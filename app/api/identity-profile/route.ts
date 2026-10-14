@@ -4,8 +4,27 @@ import { ObjectId, type Db } from "mongodb";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import type { IdentityProfileDoc } from "@/models/IdentityProfile";
+import {
+  IDENTITY_PROFILES_COLLECTION,
+  getApprovedLinks,
+  getLinkAllowance,
+  getProfileCompleteness,
+  hasFirstScrapeRun,
+  shouldAutoFetchLinks,
+  startPendingScrape,
+} from "@/lib/fetchLinks";
+import { setWatchedLinks } from "@/lib/watchedLinks";
 
-const IDENTITY_PROFILES_COLLECTION = "identityProfiles";
+// Known Websites = the user's watched links (fetchUrl.links, approved):
+// typed in here or kept on Confirm Links. Returned with the plan's limit
+// and change allowance so the form can show what's allowed.
+async function readKnownWebsites(db: Db, userId: ObjectId) {
+  const [approved, allowance] = await Promise.all([
+    getApprovedLinks(db, userId),
+    getLinkAllowance(db, userId),
+  ]);
+  return { websites: approved.map((link) => link.url), linkAllowance: allowance };
+}
 
 const MAX_FULL_NAME_LENGTH = 100;
 const MAX_TAG_LENGTH = 100;
@@ -52,11 +71,17 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const profile = await db
-      .collection(IDENTITY_PROFILES_COLLECTION)
-      .findOne({ userId: new ObjectId(session.user.id) });
+    const userId = new ObjectId(session.user.id);
+    const [profile, known] = await Promise.all([
+      db.collection(IDENTITY_PROFILES_COLLECTION).findOne({ userId }),
+      readKnownWebsites(db, userId),
+    ]);
 
-    return NextResponse.json({ success: true, profile: profile || null });
+    return NextResponse.json({
+      success: true,
+      profile: profile ? { ...profile, websites: known.websites } : null,
+      linkAllowance: known.linkAllowance,
+    });
   } catch (error) {
     console.error("Error fetching identity profile:", error);
     return NextResponse.json(
@@ -82,12 +107,21 @@ export async function POST(request: Request) {
     const userId = new ObjectId(session.user.id);
     const now = new Date();
 
+    // Known Websites first: if a link is invalid, over the limit or can't
+    // be removed yet, nothing is saved.
+    const linkChange = await setWatchedLinks(db, userId, sanitizeTagArray(body?.websites));
+    if (!linkChange.ok) {
+      return NextResponse.json({ error: linkChange.error }, { status: 400 });
+    }
+    const known = await readKnownWebsites(db, userId);
+
     const update: Omit<IdentityProfileDoc, "_id" | "createdAt"> = {
       userId,
       fullName,
       usernames: sanitizeTagArray(body?.usernames),
       aliases: sanitizeTagArray(body?.aliases),
-      websites: sanitizeTagArray(body?.websites),
+      // Mirror of the watched links (fetchUrl holds the real list).
+      websites: known.websites,
       keywords: sanitizeTagArray(body?.keywords),
       updatedAt: now,
     };
@@ -102,10 +136,34 @@ export async function POST(request: Request) {
     );
 
     const saved = await db
-      .collection(IDENTITY_PROFILES_COLLECTION)
+      .collection<IdentityProfileDoc>(IDENTITY_PROFILES_COLLECTION)
       .findOne({ userId });
 
-    return NextResponse.json({ success: true, profile: saved });
+    // Tells the client to run link discovery (Scraping Links -> Confirm
+    // Links). The fetch itself goes through POST /api/fetch-urls.
+    const shouldFetchLinks = await shouldAutoFetchLinks(db, userId);
+
+    // Newly typed-in links: scraped with the first scrape if it hasn't run
+    // yet (Confirm Links starts it), otherwise straight away. With no fetch
+    // coming (e.g. the plan's link limit is already full) the first scrape
+    // starts now instead.
+    let scrapeStarted = false;
+    if (linkChange.added > 0 && (await getProfileCompleteness(db, userId)).complete) {
+      const firstScrapeDone = await hasFirstScrapeRun(db, userId);
+      if (firstScrapeDone || !shouldFetchLinks) {
+        const scrape = await startPendingScrape(db, userId);
+        // 409 = a scrape is already running; these links follow it.
+        scrapeStarted = scrape.ok && scrape.started;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      profile: saved,
+      linkAllowance: known.linkAllowance,
+      shouldFetchLinks,
+      scrapeStarted,
+    });
   } catch (error) {
     console.error("Error saving identity profile:", error);
     return NextResponse.json(

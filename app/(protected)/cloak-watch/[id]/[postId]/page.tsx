@@ -1,22 +1,35 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Gauge } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { IncidentStatusPill, PlatformGlyph, PlatformIcon } from "../../_components/IncidentUI";
-import { getMockPostById, type PostStatus } from "../../_lib/mockPosts";
 import { detectPlatform } from "@/lib/platform";
+import type { CloakWatchPost, PostStatus } from "@/lib/cloakWatchPosts";
+import toast from "react-hot-toast";
+import { confirmAction } from "@/app/components/confirmAction";
 
-const REJECTION_REASONS = [
-  "Not me",
-  "Incorrect Context",
-  "Poor image match",
-  "Other",
-] as const;
+function formatDetected(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+}
 
-type ResultView = "detail" | "confirmed" | "reject-reason";
+function formatAgo(iso: string | null): string {
+  if (!iso) return "";
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 60) return `${Math.max(1, minutes)} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 interface LinkPreview {
   url: string;
@@ -43,48 +56,54 @@ function ResultHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-// The 3D result icons from the reference design. The PNGs carry ~2px of
-// transparent padding around the 115px artwork, hence 119px with a negative
-// margin so the visible icon still sits exactly where the design has it.
-function ResultIcon({ tone }: { tone: "success" | "error" }) {
-  return (
-    <Image
-      src={
-        tone === "success"
-          ? "/images/incidents/match-confirmed.png"
-          : "/images/incidents/match-rejected.png"
-      }
-      alt=""
-      width={119}
-      height={119}
-      priority
-      className="-my-0.5 mx-auto block"
-    />
-  );
-}
-
 export default function PostDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string; postId: string }>();
   const linkUrl = decodeURIComponent(params.id);
-  const post = getMockPostById(linkUrl, params.postId);
 
-  const [view, setView] = useState<ResultView>("detail");
-  const [rejectionReason, setRejectionReason] = useState<string>(REJECTION_REASONS[0]);
-  const [status, setStatus] = useState<PostStatus>(post?.status ?? "New");
+  const [status, setStatus] = useState<PostStatus>("New");
+  const [saving, setSaving] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(true);
 
+  // The post, from the same per-link list (GET /api/cloak-watch/posts).
+  const [post, setPost] = useState<CloakWatchPost | null>(null);
+  const [loadingPost, setLoadingPost] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/cloak-watch/posts?link=${encodeURIComponent(linkUrl)}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.success) return;
+        const found = (data.posts as CloakWatchPost[]).find((item) => item.id === params.postId);
+        if (found) {
+          setPost(found);
+          setStatus(found.status);
+        }
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setLoadingPost(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkUrl, params.postId]);
+
+  // Evidence = the post's own preview, not the profile's.
+  const postUrl = post?.url ?? null;
   const [preview, setPreview] = useState<LinkPreview | null>(null);
   const [previewReachable, setPreviewReachable] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const previewLoading = previewUrl !== linkUrl;
+  const previewLoading = previewUrl !== postUrl;
   // Scraped preview images can expire or refuse hotlinking after a
   // "successful" lookup — fall back to the no-image state instead of a
   // broken image.
   const [previewImageFailed, setPreviewImageFailed] = useState(false);
 
   useEffect(() => {
+    if (!postUrl) return;
     let cancelled = false;
-    fetch(`/api/link-preview?url=${encodeURIComponent(linkUrl)}`)
+    fetch(`/api/link-preview?url=${encodeURIComponent(postUrl)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: LinkPreviewResponse | null) => {
         if (cancelled || !data?.success) return;
@@ -94,12 +113,20 @@ export default function PostDetailPage() {
       })
       .catch(() => null)
       .finally(() => {
-        if (!cancelled) setPreviewUrl(linkUrl);
+        if (!cancelled) setPreviewUrl(postUrl);
       });
     return () => {
       cancelled = true;
     };
-  }, [linkUrl]);
+  }, [postUrl]);
+
+  if (loadingPost) {
+    return (
+      <div className="flex h-full items-center justify-center bg-white">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -117,169 +144,62 @@ export default function PostDetailPage() {
     );
   }
 
-  const platform = detectPlatform(linkUrl);
-  const platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
-  const backToPosts = `/cloak-watch/${params.id}`;
+  const platform = detectPlatform(post.url);
+  const platformLabel = platform === "twitter" ? "X" : capitalize(platform);
 
-  const handleConfirm = () => {
-    setStatus("Confirmed");
-    setView("confirmed");
+  // Saves the user's decision so the post moves to Confirmed/Rejected.
+  const saveReview = async (next: Exclude<PostStatus, "New">) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cloak-watch/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ link: linkUrl, postId: post.id, status: next }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        toast.error(data?.error || "Couldn't save your decision.");
+        return false;
+      }
+      setStatus(next);
+      return true;
+    } catch {
+      toast.error("Couldn't save your decision.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleReject = () => {
-    setStatus("Rejected");
-    setView("reject-reason");
+  // Both decisions are final (the buttons turn into "Confirmed/Rejected
+  // Match"), so each asks first.
+  const handleConfirm = async () => {
+    const ok = await confirmAction({
+      title: "Confirm this match?",
+      text: "You're confirming this post shows you.",
+      confirmText: "Confirm Match",
+    });
+    if (ok) await saveReview("Confirmed");
   };
 
-  if (view === "confirmed") {
-    return (
-      <div className="flex h-full flex-col bg-white font-sf-pro-display">
-        <ResultHeader>
-          <button type="button" onClick={() => router.push(backToPosts)} className="-ml-3 p-2">
-            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
-          </button>
-        </ResultHeader>
+  const handleReject = async () => {
+    const ok = await confirmAction({
+      title: "Reject this match?",
+      text: "You're marking this post as not related to you.",
+      confirmText: "Reject Match",
+      tone: "danger",
+    });
+    if (ok) await saveReview("Rejected");
+  };
 
-        <main className="flex-1 min-h-0 overflow-y-auto mt-2 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <div className="rounded-[32px] bg-gradient-to-b from-[#DDFEF5] to-white px-[15px] pb-[15px] pt-[38px]">
-            <ResultIcon tone="success" />
-
-            <h1 className="mt-10 text-center text-[24px] font-medium leading-[30px] text-[#0B1014]">
-              Match Confirmed
-            </h1>
-            <p className="mx-auto mt-3 max-w-[250px] text-center text-[12px] leading-4 text-[#829194]">
-              This incident has been confirmed as a match to your identity.
-            </p>
-
-            <div className="mt-[42px] rounded-3xl border border-[#F6F6F6] bg-white">
-              <div className="flex items-center gap-3 p-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F6F6F6]">
-                  <PlatformGlyph platform={platform} size={24} />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">
-                    {platformLabel.toLowerCase()}.com/p/{post.id}...
-                  </p>
-                  <p className="mt-1 text-[12px] leading-4 text-[#839297]">
-                    {post.matchPercent} % Attention Score
-                  </p>
-                </div>
-              </div>
-              <div className="mx-[13px] h-px bg-[#F6F6F6]" />
-              <Link
-                href={backToPosts}
-                className="flex items-center justify-between px-[13px] pb-2 pt-2.5"
-              >
-                <div className="min-w-0">
-                  <p className="text-[12px] leading-4 text-[#839297]">Detected</p>
-                  <p className="mt-1.5 truncate text-[14px] leading-5 text-[#2B2B2B]">
-                    {post.detectedAt}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-[#9AB1B7]" />
-              </Link>
-              <div className="mx-[13px] h-px bg-[#F6F6F6]" />
-              <Link
-                href={backToPosts}
-                className="flex items-center justify-between px-[13px] pb-2.5 pt-2.5"
-              >
-                <div className="min-w-0">
-                  <p className="text-[12px] leading-4 text-[#839297]">Discovery Method</p>
-                  <p className="mt-1.5 truncate text-[14px] leading-5 text-[#2B2B2B]">
-                    {post.discoveryMethod}
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-[#9AB1B7]" />
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <Link
-              href="/submit-report"
-              className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#00C2CE] text-[16px] font-medium text-white"
-            >
-              Start Reporting
-            </Link>
-            <button
-              type="button"
-              onClick={() => router.push(backToPosts)}
-              className="h-[46px] w-full rounded-full border border-[#00C3D1] bg-white text-[16px] font-medium text-[#00C2CE]"
-            >
-              Done
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (view === "reject-reason") {
-    return (
-      <div className="flex h-full flex-col bg-white font-sf-pro-display">
-        <ResultHeader>
-          <button type="button" onClick={() => setView("detail")} className="-ml-3 p-2">
-            <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
-          </button>
-        </ResultHeader>
-
-        <main className="flex-1 min-h-0 overflow-y-auto mt-2 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <div className="rounded-[32px] bg-gradient-to-b from-[#FFE3E5] to-white px-[14px] pb-3 pt-[38px]">
-            <ResultIcon tone="error" />
-
-            <h1 className="mt-10 text-center text-[24px] font-medium leading-[30px] text-[#0B1014]">
-              Match Rejected
-            </h1>
-            <p className="mx-auto mt-3 max-w-[250px] text-center text-[12px] leading-4 text-[#829194]">
-              This incident has been marked as not related to your identity.
-            </p>
-
-            <div className="mt-[88px] rounded-3xl border border-[#F6F6F6] bg-white p-3.5">
-              <p className="text-[14px] leading-5 text-[#2B2B2B]">
-                Why are you rejecting this match?
-              </p>
-              <div className="mt-3.5 grid grid-cols-2 gap-x-2.5 gap-y-3">
-                {REJECTION_REASONS.map((reason) => {
-                  const isActive = rejectionReason === reason;
-                  return (
-                    <button
-                      key={reason}
-                      type="button"
-                      onClick={() => setRejectionReason(reason)}
-                      className={`flex min-h-10 min-w-0 items-center gap-3 rounded-xl border px-2.5 py-2 text-left ${
-                        isActive
-                          ? "border-[#00C3CF] shadow-[0_0_0_2px_#D8F6F8]"
-                          : "border-[#E7E7E7]"
-                      }`}
-                    >
-                      <span
-                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
-                          isActive ? "border-[#00C3CF]" : "border-[#A7AAB1]"
-                        }`}
-                      >
-                        {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#00C3CF]" />}
-                      </span>
-                      <span className="min-w-0 break-words text-[12px] leading-4 text-[#2B2B2B]">{reason}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-20">
-            <button
-              type="button"
-              onClick={() => router.push(backToPosts)}
-              className="h-11 w-full rounded-full bg-[#FF383B] text-[16px] font-medium text-white"
-            >
-              Confirm Rejection
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  const analysis = [
+    post.matchLevel ? `${capitalize(post.matchLevel)} with your identity.` : null,
+    post.sentiment
+      ? `Sentiment: ${post.sentiment}${post.sentimentPercent != null ? ` (${post.sentimentPercent}% confidence)` : ""}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
@@ -296,70 +216,96 @@ export default function PostDetailPage() {
           <IncidentStatusPill status={status} />
         </div>
 
-        <div className="relative mt-3.5 h-[227px] w-full overflow-hidden rounded-[20px] bg-gray-100">
-          {previewLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="h-8 w-8 rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF] animate-spin" />
-            </div>
-          ) : preview?.image && !previewImageFailed ? (
-            <Image
-              src={preview.image}
-              alt={preview.title || "Evidence"}
-              fill
-              className="object-cover"
-              unoptimized
-              referrerPolicy="no-referrer"
-              onError={() => setPreviewImageFailed(true)}
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 pb-12 text-center">
-              <PlatformIcon platform={platform} size="lg" />
-              <p className="text-[12px] text-[#839297]">
-                {previewReachable
-                  ? "No preview image available for this link."
-                  : "This link couldn't be reached — it may require login or have been taken down."}
-              </p>
-            </div>
-          )}
-
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent pb-4 pl-2.5 pr-2 pt-8">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-white">
-                <PlatformGlyph platform={platform} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[16px] leading-[22px] text-white">{platformLabel}</p>
-                <p className="truncate text-[14px] leading-5 text-white">Detected {post.timeLabel}</p>
-              </div>
-            </div>
-            <Link
-              href={linkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-[25px] shrink-0 items-center rounded-full bg-[#00C3CF] px-2 text-[14px] text-white"
-            >
-              Open Source
-            </Link>
+        {/* Tapping it opens the post itself. */}
+        <Link
+          href={post.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center gap-3 rounded-[20px] bg-[#F5F5F5] px-3 py-3"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#14C3CF] text-white">
+            <PlatformGlyph platform={platform} size={20} />
           </div>
-        </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[16px] leading-[22px] text-[#2B2B2B]">{platformLabel}</p>
+            <p className="truncate text-[13px] leading-5 text-[#2B2B2B]">
+              Detected {formatAgo(post.scrapedAt)}
+            </p>
+          </div>
+          <div className="relative flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#E9ECEE]">
+            {previewLoading ? (
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#14C3CF]/20 border-t-[#14C3CF]" />
+            ) : preview?.image && !previewImageFailed ? (
+              <Image
+                src={preview.image}
+                alt={preview.title || "Evidence"}
+                fill
+                sizes="56px"
+                className="object-cover"
+                unoptimized
+                referrerPolicy="no-referrer"
+                onError={() => setPreviewImageFailed(true)}
+              />
+            ) : (
+              <PlatformIcon platform={platform} />
+            )}
+          </div>
+        </Link>
+        {!previewLoading && !previewReachable && (
+          <p className="mt-1.5 text-[11px] leading-4 text-[#A7ADB2]">
+            Preview unavailable — the post may need a login to view.
+          </p>
+        )}
 
         <div className="mt-4">
-          <p className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">AI Analysis on post:</p>
-          <p className="mt-2 text-[14px] leading-[21px] text-[#829194]">{post.aiAnalysis}</p>
+          <button
+            type="button"
+            onClick={() => setAnalysisOpen((open) => !open)}
+            aria-expanded={analysisOpen}
+            className="flex w-full items-center justify-between text-left"
+          >
+            <span className="text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
+              AI Analysis on post:
+            </span>
+            {analysisOpen ? (
+              <ChevronUp className="h-5 w-5 text-[#2B2B2B]" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-[#2B2B2B]" />
+            )}
+          </button>
+          {analysisOpen &&
+            (post.contentAnalysis ? (
+              // The CV API's own write-up of the post.
+              <p className="mt-2 whitespace-pre-line text-[14px] leading-[21px] text-[#829194]">
+                {post.contentAnalysis}
+              </p>
+            ) : (
+              // Older scrapes have no analysis text — show what we know:
+              // match level, sentiment and the post's caption.
+              <>
+                {analysis && (
+                  <p className="mt-2 text-[14px] leading-[21px] text-[#829194]">{analysis}</p>
+                )}
+                {post.content && (
+                  <p className="mt-2 line-clamp-6 whitespace-pre-line text-[14px] leading-[21px] text-[#829194]">
+                    {post.content}
+                  </p>
+                )}
+              </>
+            ))}
         </div>
 
+        {/* The CV API's attentionscore (0–1). Older scrapes don't have one. */}
         <div className="mt-4 rounded-[20px] bg-[#E5F9FA] px-4 pb-4 pt-4">
-          <p className="flex items-center gap-2.5 text-[14px] leading-6 text-[#829196]">
-            <Gauge className="h-6 w-6 shrink-0 text-[#00C2CE]" />
-            Match Confidence
+          <p className="text-[16px] leading-[22px] text-[#2A2A28]">
+            {post.attentionPercent != null
+              ? `${post.attentionPercent}% Attention Score`
+              : "Attention Score unavailable"}
           </p>
-          <p className="mt-1 text-[16px] leading-[22px] text-[#2A2A28]">
-            {post.matchPercent}% Attention Score
-          </p>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
+          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#E3E3E3]">
             <div
-              className="h-full rounded-full bg-[#00C2CE]"
-              style={{ width: `${post.matchPercent}%` }}
+              className="h-full rounded-full bg-gradient-to-r from-[#14C3CF] to-[#2BD9E4]"
+              style={{ width: `${post.attentionPercent ?? 0}%` }}
             />
           </div>
         </div>
@@ -369,11 +315,15 @@ export default function PostDetailPage() {
           <div className="mt-2.5 space-y-[9px]">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[14px] leading-5 text-[#829194]">Detected</p>
-              <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">{post.detectedAt}</p>
+              <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">{formatDetected(post.scrapedAt)}</p>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[14px] leading-5 text-[#829194]">Posted</p>
+              <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">{formatDetected(post.publishedAt)}</p>
             </div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-[14px] leading-5 text-[#829194]">Discovery Method</p>
-              <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">{post.discoveryMethod}</p>
+              <p className="truncate text-[14px] leading-5 text-[#2B2B2B]">AI scan</p>
             </div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-[14px] leading-5 text-[#829194]">Source</p>
@@ -384,22 +334,36 @@ export default function PostDetailPage() {
       </main>
 
       {/* Pinned outside the scroll area so the decision is always visible */}
-      <div className="flex shrink-0 items-center gap-2.5 bg-white pt-3">
-        <button
-          type="button"
-          onClick={handleConfirm}
-          className="h-11 flex-1 rounded-full bg-[#00C2CE] text-[16px] font-medium text-white"
-        >
-          Confirm Match
-        </button>
-        <button
-          type="button"
-          onClick={handleReject}
-          className="h-11 flex-1 rounded-full bg-[#FFEBEC] text-[16px] font-medium text-[#FC383A]"
-        >
-          Reject Match
-        </button>
-      </div>
+      {status !== "New" ? (
+        <div className="shrink-0 bg-white pt-3">
+          <button
+            type="button"
+            disabled
+            className="h-11 w-full rounded-full bg-[#9AA3A8] text-[16px] text-white"
+          >
+            {status === "Confirmed" ? "Confirmed Match" : "Rejected Match"}
+          </button>
+        </div>
+      ) : (
+        <div className="flex shrink-0 items-center gap-2.5 bg-white pt-3">
+          <button
+            type="button"
+            onClick={() => void handleConfirm()}
+            disabled={saving}
+            className="h-11 flex-1 rounded-full bg-[#00C2CE] text-[16px] font-medium text-white disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Confirm Match"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleReject()}
+            disabled={saving}
+            className="h-11 flex-1 rounded-full bg-[#FFEBEC] text-[16px] font-medium text-[#FC383A] disabled:opacity-60"
+          >
+            Reject Match
+          </button>
+        </div>
+      )}
     </div>
   );
 }

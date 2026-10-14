@@ -60,8 +60,7 @@ function startOfCurrentMonthUtc(): Date {
 }
 
 function upgradeTargetsFor(plan: PlanCode): PlanCode[] {
-  if (plan === "FREEMIUM") return ["BOOST", "CLOAK_PRO"];
-  if (plan === "BOOST") return ["CLOAK_PRO"];
+  if (plan === "FREEMIUM") return ["CLOAK_PRO"];
   return [];
 }
 
@@ -84,7 +83,10 @@ export async function resolveUserPlan(
   const user = await db
     .collection("users")
     .findOne({ _id: userId }, { projection: { plan: 1 } });
-  const cachedPlan = (user?.plan as PlanCode) || "FREEMIUM";
+  // Anything not in PLAN_LIMITS (e.g. a retired plan code left in old data)
+  // is treated as Freemium rather than breaking every limit lookup.
+  const cachedPlan: PlanCode =
+    user?.plan && user.plan in PLAN_LIMITS ? (user.plan as PlanCode) : "FREEMIUM";
 
   if (cachedPlan === "FREEMIUM") return "FREEMIUM";
 
@@ -187,7 +189,7 @@ export async function checkLimit(
   // COMMUNITY_POST — pure boolean, no counter.
   if (limits.canPostCommunity) return { allowed: true, plan, usage: 0, limit: null };
   {
-    const nextTier = nextTierName(plan) || PLAN_DISPLAY_NAME.BOOST;
+    const nextTier = nextTierName(plan) || PLAN_DISPLAY_NAME.CLOAK_PRO;
     return {
       allowed: false,
       plan,

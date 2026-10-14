@@ -43,6 +43,7 @@ function buildAlertHref(doc: any): string | undefined {
     // which side of the report this notification was about.
     case "REPORT_RECEIVED":
     case "REPORT_VERIFIED":
+    case "REPORT_REJECTED":
       return typeof reportId === "string" ? `/reports/${reportId}` : undefined;
     case "POST_VOTE":
     case "POST_RAPID_ACTION":
@@ -51,6 +52,8 @@ function buildAlertHref(doc: any): string | undefined {
         : undefined;
     case "VERIFICATION_RESULT":
       return "/verification";
+    case "SCRAPE_COMPLETE":
+      return "/cloak-watch";
     case "SUBSCRIPTION_EXPIRING":
     case "SUBSCRIPTION_EXPIRED":
       return "/subscription";
@@ -197,7 +200,9 @@ export async function createNotification(
 // listening side. Best-effort: the Mongo write above is the actual
 // notification and must succeed regardless of whether Firebase is
 // configured yet (see lib/firebaseAdmin.ts's prerequisite check).
-async function pingLiveNotification(userId: ObjectId): Promise<void> {
+// Tells the user's open app "something changed" (Firebase Realtime DB) —
+// alerts use it, and so does scraping progress (see app/api/scrape/callback).
+export async function pingLiveNotification(userId: ObjectId): Promise<void> {
   try {
     await getAdminDb()
       .ref(`notificationPings/${userId.toString()}`)
@@ -329,6 +334,59 @@ export async function notifyReportVerified(
     avatarUrl: pickAvatarUrl(input.targetUser),
     data: { reportId: input.reportId.toString() },
     dedupeKey: input.dedupeKey,
+  });
+}
+
+export async function notifyReportRejected(
+  db: Db,
+  input: {
+    reporterId: ObjectId;
+    targetUser: any;
+    reportId: ObjectId;
+  },
+): Promise<void> {
+  const targetUsername = String(input.targetUser?.username || "user");
+
+  await createNotification(db, {
+    userId: input.reporterId,
+    type: "REPORT_REJECTED",
+    filter: "Community",
+    title: `Report rejected for @${targetUsername}`,
+    // The reason itself is shown on the report, not in the alert.
+    description: "Your report was not verified",
+    avatarType: "image",
+    avatarUrl: pickAvatarUrl(input.targetUser),
+    data: { reportId: input.reportId.toString() },
+  });
+}
+
+// Sent when a scrape ends (once per run — dedupeKey = that run): either
+// how many new posts it found, or that it failed. Runs that find nothing
+// new send nothing (see finalizeScrapeIfDone in lib/fetchLinks.ts).
+export async function notifyScrapeComplete(
+  db: Db,
+  input: {
+    userId: ObjectId;
+    runStartedAt: Date;
+    newPosts: number;
+    failed?: boolean;
+  },
+): Promise<void> {
+  const failed = Boolean(input.failed);
+  await createNotification(db, {
+    userId: input.userId,
+    type: "SCRAPE_COMPLETE",
+    filter: "System",
+    title: failed
+      ? "Scraping failed"
+      : `${input.newPosts} new post${input.newPosts === 1 ? "" : "s"} found`,
+    description: failed
+      ? "We couldn't check your links this time. Open Cloak Watch to try again."
+      : `Cloak found ${input.newPosts} new post${
+          input.newPosts === 1 ? "" : "s"
+        } on your watched links. Tap to review ${input.newPosts === 1 ? "it" : "them"}.`,
+    avatarType: "info",
+    dedupeKey: `scrape-complete-${input.userId.toString()}-${input.runStartedAt.getTime()}`,
   });
 }
 

@@ -2,7 +2,7 @@
 // the plan-picker page (UpgradeModal onConfirm) and the per-plan detail
 // pages (CancelSubscriptionBlock onCancel).
 
-export type PlanSlug = "boost-protection" | "cloak-pro";
+export type PlanSlug = "cloak-pro";
 
 // PayFast's checkout is a redirect + form POST, not a fetch — build a
 // hidden form from the fields the server returned and submit it, which

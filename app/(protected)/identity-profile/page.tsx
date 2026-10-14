@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import {
+  Camera,
   ChevronLeft,
   Edit3,
-  Plus,
   ShieldCheck,
   User as UserIcon,
   X,
@@ -15,6 +15,13 @@ import {
 import toast from "react-hot-toast";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import { DetectiveIcon } from "@/public/svgIcons";
+import { MenuButton, MenuGroup } from "@/app/components/MenuList";
+import LinkDiscoveryFlow from "./_components/LinkDiscoveryFlow";
+import ScrapeLoader from "./_components/ScrapeLoader";
+import type { LinkAllowance } from "@/app/components/linkDiscovery/LinkDiscovery";
+import { getSourceLinkLabel } from "@/app/components/reports/reportUi";
+import { parseWatchedLink, watchedLinkKey } from "@/lib/watchedLinkUrl";
+import { LINK_CHANGE_WINDOW_DAYS } from "@/lib/config";
 
 type IdentityProfileData = {
   fullName: string;
@@ -23,6 +30,9 @@ type IdentityProfileData = {
   websites: string[];
   keywords: string[];
 };
+
+const TAG_FIELDS = ["usernames", "aliases", "websites", "keywords"] as const;
+type TagField = (typeof TAG_FIELDS)[number];
 
 const EMPTY_IDENTITY: IdentityProfileData = {
   fullName: "",
@@ -42,74 +52,97 @@ function toIdentityProfileData(profile: Partial<IdentityProfileData> | null): Id
   };
 }
 
-function TagBox({
+// The typed-but-not-yet-added text is owned by the parent so Save can
+// include it — otherwise typing a handle and hitting Save without "Add"
+// would silently drop it.
+function TagInput({
   values,
+  draft,
+  onDraftChange,
   onRemove,
   onAdd,
   placeholder,
+  validate,
+  canRemove,
+  display,
 }: {
   values: string[];
+  draft: string;
+  onDraftChange: (value: string) => void;
   onRemove: (index: number) => void;
   onAdd: (value: string) => void;
   placeholder: string;
+  // Returns an error to show instead of adding, or the value to add
+  // (e.g. a cleaned-up link).
+  validate?: (value: string) => { error: string } | { value: string };
+  // Chips without an × (e.g. saved links the plan doesn't allow removing).
+  canRemove?: (value: string) => boolean;
+  display?: (value: string) => string;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const commit = () => {
     const trimmed = draft.trim();
-    if (trimmed) onAdd(trimmed);
-    setDraft("");
-    setAdding(false);
+    if (!trimmed) return;
+    const checked = validate ? validate(trimmed) : { value: trimmed };
+    if ("error" in checked) {
+      setError(checked.error);
+      return;
+    }
+    setError(null);
+    if (!values.includes(checked.value)) onAdd(checked.value);
+    onDraftChange("");
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-[#F5F5F5] p-3">
-      {values.map((value, index) => (
-        <span
-          key={`${value}-${index}`}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[14px] text-[#2D2D2D]"
-        >
-          {value}
-          <button
-            type="button"
-            onClick={() => onRemove(index)}
-            aria-label={`Remove ${value}`}
-            className="text-[#8F98A0]"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </span>
-      ))}
-
-      {adding ? (
+    <div>
+      <div className="flex h-[42px] items-center rounded-xl bg-[#F5F5F5] pl-3.5 pr-3">
         <input
-          autoFocus
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
+          onChange={(e) => {
+            setError(null);
+            onDraftChange(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               commit();
             }
-            if (e.key === "Escape") {
-              setDraft("");
-              setAdding(false);
-            }
           }}
           placeholder={placeholder}
-          className="min-w-[100px] flex-1 bg-transparent text-[14px] outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[14px] text-[#2B2B2B] outline-none placeholder:text-[#A7ADB2]"
         />
-      ) : (
         <button
           type="button"
-          onClick={() => setAdding(true)}
-          className="ml-auto inline-flex items-center gap-1 text-[14px] font-medium text-[#2D2D2D]"
+          onClick={commit}
+          disabled={!draft.trim()}
+          className="shrink-0 pl-2 text-[14px] text-[#14C3CF] disabled:opacity-50"
         >
-          <Plus className="h-4 w-4" />
           Add
         </button>
+      </div>
+      {error && <p className="mt-1.5 text-[12px] leading-4 text-[#F30131]">{error}</p>}
+      {values.length > 0 && (
+        <div className="-mx-4 mt-2.5 flex gap-2 overflow-x-auto px-4 no-scrollbar">
+          {values.map((value, index) => (
+            <span
+              key={`${value}-${index}`}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg bg-[#E6F7F8] pl-2.5 pr-2 text-[13px] text-[#2B2B2B]"
+            >
+              {display ? display(value) : value}
+              {(!canRemove || canRemove(value)) && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  aria-label={`Remove ${value}`}
+                  className="text-[#2B2B2B]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -148,8 +181,8 @@ function FieldSection({
   isFirst?: boolean;
 }) {
   return (
-    <div className="px-3.5">
-      <div className={`pb-3 pt-3 ${isFirst ? "" : "border-t border-[#E6F0F1]"}`}>
+    <div className="px-3">
+      <div className={`pb-3 pt-3 ${isFirst ? "" : "border-t border-[#E6F0EF]"}`}>
         <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">{label}</p>
         {children}
       </div>
@@ -169,6 +202,10 @@ export default function IdentityProfilePage() {
   const [level, setLevel] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showLinkDiscovery, setShowLinkDiscovery] = useState(false);
+  const [tagDrafts, setTagDrafts] = useState<Partial<Record<TagField, string>>>({});
+  const [linkAllowance, setLinkAllowance] = useState<LinkAllowance | null>(null);
+  const [showScrapeLoader, setShowScrapeLoader] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +228,7 @@ export default function IdentityProfilePage() {
         if (cancelled) return;
         if (data?.success) {
           setIdentity(toIdentityProfileData(data.profile));
+          if (data.linkAllowance) setLinkAllowance(data.linkAllowance);
         }
       })
       .catch(() => null)
@@ -211,15 +249,15 @@ export default function IdentityProfilePage() {
     user?.identityVerificationStatus === "APPROVED" || user?.isVerified || false;
 
   const startEdit = () => {
-    setDraft({
-      ...identity,
-      // Always show at least one website field to type into, even for a
-      // brand-new/empty profile — the backend already drops blank entries
-      // on save, so an unfilled placeholder here is harmless.
-      websites: identity.websites.length > 0 ? identity.websites : [""],
-    });
+    setDraft(identity);
+    setTagDrafts({});
     setMode("edit");
   };
+
+  const isNewProfile =
+    !identity.fullName &&
+    identity.usernames.length === 0 &&
+    identity.aliases.length === 0;
 
   const cancelEdit = () => {
     setMode("view");
@@ -229,10 +267,18 @@ export default function IdentityProfilePage() {
     if (isSaving) return;
     setIsSaving(true);
     try {
+      const toSave = { ...draft };
+      for (const field of TAG_FIELDS) {
+        const pending = tagDrafts[field]?.trim();
+        if (pending && !toSave[field].includes(pending)) {
+          toSave[field] = [...toSave[field], pending];
+        }
+      }
+
       const res = await fetch("/api/identity-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(toSave),
       });
       const data = await res.json().catch(() => null);
 
@@ -242,8 +288,19 @@ export default function IdentityProfilePage() {
       }
 
       setIdentity(toIdentityProfileData(data.profile));
+      if (data.linkAllowance) setLinkAllowance(data.linkAllowance);
       setMode("view");
-      toast.success("Identity profile updated");
+      if (data.shouldFetchLinks) {
+        // Server decides when discovery runs (first completion only, for
+        // now) — see shouldAutoFetchLinks in lib/fetchLinks.ts. Typed-in
+        // links get scraped together with the links kept there.
+        setShowLinkDiscovery(true);
+      } else if (data.scrapeStarted) {
+        // New typed-in links started scraping straight away.
+        setShowScrapeLoader(true);
+      } else {
+        toast.success("Identity profile updated");
+      }
     } catch {
       toast.error("Couldn't save your identity profile. Please try again.");
     } finally {
@@ -252,103 +309,133 @@ export default function IdentityProfilePage() {
   };
 
   if (mode === "edit") {
+    const tagField = (
+      label: React.ReactNode,
+      key: TagField,
+      placeholder: string,
+    ) => (
+      <div>
+        <label className="mb-2 block text-[14px] leading-5 text-[#2B2B2B]">{label}</label>
+        <TagInput
+          values={draft[key]}
+          draft={tagDrafts[key] || ""}
+          onDraftChange={(value) => setTagDrafts((prev) => ({ ...prev, [key]: value }))}
+          placeholder={placeholder}
+          onAdd={(value) => setDraft((prev) => ({ ...prev, [key]: [...prev[key], value] }))}
+          onRemove={(index) =>
+            setDraft((prev) => ({
+              ...prev,
+              [key]: prev[key].filter((_, i) => i !== index),
+            }))
+          }
+        />
+      </div>
+    );
+
+    // Known Websites = watched links (lib/watchedLinks.ts): Instagram,
+    // Facebook or X only, capped by plan, and saved ones can only be removed
+    // as the plan allows. The server enforces all of it; this just explains
+    // it up front.
+    const limit = linkAllowance?.limit ?? 0;
+    const changesLeft = linkAllowance?.changesLeft ?? 0;
+    const savedLinks = identity.websites;
+    const removedSaved = savedLinks.filter((url) => !draft.websites.includes(url)).length;
+    const knownWebsitesField = (
+      <div>
+        <label className="mb-2 flex items-baseline justify-between text-[14px] leading-5 text-[#2B2B2B]">
+          <span>
+            Known Websites <span className="text-[11px] text-[#839297]">(Optional)</span>
+          </span>
+          {linkAllowance && (
+            <span className="text-[11px] text-[#839297]">
+              {draft.websites.length} / {limit} links
+            </span>
+          )}
+        </label>
+        <TagInput
+          values={draft.websites}
+          draft={tagDrafts.websites || ""}
+          onDraftChange={(value) => setTagDrafts((prev) => ({ ...prev, websites: value }))}
+          placeholder="Add Instagram, Facebook or X links"
+          display={getSourceLinkLabel}
+          validate={(value) => {
+            const parsed = parseWatchedLink(value);
+            if (!parsed.ok) return { error: parsed.error };
+            if (draft.websites.some((url) => watchedLinkKey(url) === parsed.key)) {
+              return { error: "That link is already added." };
+            }
+            if (linkAllowance && draft.websites.length >= limit) {
+              return {
+                error:
+                  linkAllowance.changesPerWindow > 0
+                    ? `You can have up to ${limit} links.`
+                    : `You can have up to ${limit} links. Upgrade to Cloak Pro for up to 20.`,
+              };
+            }
+            return { value: parsed.url };
+          }}
+          // Links added in this edit can always be taken back; saved ones
+          // only while the plan has changes left.
+          canRemove={(url) => !savedLinks.includes(url) || removedSaved < changesLeft}
+          onAdd={(value) => setDraft((prev) => ({ ...prev, websites: [...prev.websites, value] }))}
+          onRemove={(index) =>
+            setDraft((prev) => ({
+              ...prev,
+              websites: prev.websites.filter((_, i) => i !== index),
+            }))
+          }
+        />
+        {linkAllowance && savedLinks.length > 0 && (
+          <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
+            {linkAllowance.changesPerWindow === 0
+              ? "Saved links can't be removed on the Freemium plan."
+              : changesLeft > 0
+                ? `You can remove ${changesLeft - removedSaved} more saved link${
+                    changesLeft - removedSaved === 1 ? "" : "s"
+                  } in this ${LINK_CHANGE_WINDOW_DAYS}-day period.`
+                : linkAllowance.nextChangeAt
+                  ? `You can change links again on ${new Date(linkAllowance.nextChangeAt).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.`
+                  : "You've used your link changes for now."}
+          </p>
+        )}
+      </div>
+    );
+
     return (
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="flex items-center justify-between py-4 bg-white z-10">
           <button type="button" onClick={cancelEdit} className="-ml-3 p-2">
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
           </button>
-          <h1 className="text-[16px] font-medium text-[#2B2B2B]">Edit Identity Profile</h1>
+          <h1 className="text-[16px] font-medium text-[#2B2B2B]">
+            {isNewProfile ? "Create Identity Profile" : "Edit Identity Profile"}
+          </h1>
           <div className="-mr-3 w-10" />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1.5rem)]">
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="block text-[14px] text-[#2D2D2D]">Full Name</label>
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+          <div className="space-y-5">
+            <div>
+              <label className="mb-2 block text-[14px] leading-5 text-[#2B2B2B]">Full Name</label>
               <input
                 type="text"
                 value={draft.fullName}
                 onChange={(e) => setDraft({ ...draft, fullName: e.target.value })}
-                className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-base"
+                placeholder="Your full name"
+                className="h-[42px] w-full rounded-xl bg-[#F5F5F5] px-3.5 text-[14px] text-[#2B2B2B] outline-none placeholder:text-[#A7ADB2] focus:ring-2 ring-[#14C3CF]/20"
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-[14px] text-[#2D2D2D]">Usernames / Handles</label>
-              <TagBox
-                values={draft.usernames}
-                placeholder="@handle"
-                onAdd={(value) =>
-                  setDraft({ ...draft, usernames: [...draft.usernames, value] })
-                }
-                onRemove={(index) =>
-                  setDraft({
-                    ...draft,
-                    usernames: draft.usernames.filter((_, i) => i !== index),
-                  })
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-[14px] text-[#2D2D2D]">Aliases / Other Names</label>
-              <TagBox
-                values={draft.aliases}
-                placeholder="Alias"
-                onAdd={(value) => setDraft({ ...draft, aliases: [...draft.aliases, value] })}
-                onRemove={(index) =>
-                  setDraft({
-                    ...draft,
-                    aliases: draft.aliases.filter((_, i) => i !== index),
-                  })
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-[14px] text-[#2D2D2D]">
-                Known Websites <span className="text-[#8F98A0]">(Optional)</span>
-              </label>
-              {draft.websites.map((site, index) => (
-                <input
-                  key={index}
-                  type="text"
-                  value={site}
-                  onChange={(e) => {
-                    const next = [...draft.websites];
-                    next[index] = e.target.value;
-                    setDraft({ ...draft, websites: next });
-                  }}
-                  className="w-full h-14 bg-[#F5F5F5] rounded-2xl px-5 outline-none focus:ring-2 ring-[#14C3CF]/20 text-base"
-                />
-              ))}
-              <button
-                type="button"
-                onClick={() => setDraft({ ...draft, websites: [...draft.websites, ""] })}
-                className="inline-flex items-center gap-1 text-[14px] font-medium text-[#2D2D2D]"
-              >
-                <Plus className="h-4 w-4" />
-                Add another <span className="text-[#8F98A0]">(Optional)</span>
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-[14px] text-[#2D2D2D]">
-                Keywords <span className="text-[#8F98A0]">(Optional)</span>
-              </label>
-              <TagBox
-                values={draft.keywords}
-                placeholder="Keyword"
-                onAdd={(value) => setDraft({ ...draft, keywords: [...draft.keywords, value] })}
-                onRemove={(index) =>
-                  setDraft({
-                    ...draft,
-                    keywords: draft.keywords.filter((_, i) => i !== index),
-                  })
-                }
-              />
-            </div>
+            {tagField("Usernames / Handles", "usernames", "Add your usernames")}
+            {tagField(
+              <>
+                Aliases / Other Names <span className="text-[11px] text-[#839297]">(Optional)</span>
+              </>,
+              "aliases",
+              "Add your Aliases",
+            )}
+            {knownWebsitesField}
+            {tagField("Keywords", "keywords", "Add Keywords")}
           </div>
 
           <div className="mt-10 flex items-center gap-3">
@@ -356,7 +443,7 @@ export default function IdentityProfilePage() {
               type="button"
               onClick={cancelEdit}
               disabled={isSaving}
-              className="h-11 flex-1 rounded-full bg-[#EEEEEE] text-[16px] font-medium text-[#9AA3AA] disabled:opacity-50"
+              className="h-12 flex-1 rounded-full bg-[#F5F5F5] text-[16px] text-[#839297] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -364,7 +451,7 @@ export default function IdentityProfilePage() {
               type="button"
               onClick={() => void saveEdit()}
               disabled={isSaving}
-              className="h-11 flex-1 rounded-full bg-[#14C3CF] text-[16px] font-medium text-white disabled:opacity-60"
+              className="h-12 flex-1 rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-60"
             >
               {isSaving ? "Saving..." : "Save Changes"}
             </button>
@@ -394,8 +481,8 @@ export default function IdentityProfilePage() {
           </div>
         ) : (
           <>
-        <div className="flex items-start gap-3 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3">
-          <div className="relative h-[42px] w-[42px] shrink-0 overflow-hidden rounded-full bg-gray-200">
+        <div className="flex items-center gap-3 rounded-[20px] border border-[#C8EEF1] bg-[#E7F9FB] px-3 py-3.5">
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-gray-200">
             {avatarUrl ? (
               <Image src={avatarUrl} alt={username} fill className="object-cover" />
             ) : (
@@ -410,7 +497,9 @@ export default function IdentityProfilePage() {
               <h2 className="truncate text-[16px] font-medium leading-[22px] text-[#2B2B2B]">
                 {username}
               </h2>
-              <VerifiedBadge className="h-[15px] w-[15px] shrink-0 text-[#00C3D0]" />
+              {isVerified && (
+                <VerifiedBadge className="h-[15px] w-[15px] shrink-0 text-[#00C3D0]" />
+              )}
             </div>
             {isVerified && (
               <div className="flex items-center gap-1 text-[12px] leading-[19px] text-[#10B981]">
@@ -428,18 +517,18 @@ export default function IdentityProfilePage() {
           <button
             type="button"
             onClick={startEdit}
-            className="inline-flex h-7 shrink-0 items-center gap-2 self-center rounded-full bg-[#00C3D0] pl-2 pr-2.5 text-[12px] font-medium text-white"
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-[#00C3D0] pl-2 pr-2.5 text-[12px] font-medium text-white"
           >
             <Edit3 className="h-4 w-4" />
-            Edit 
+            Edit Identity info
           </button>
         </div>
 
-        <p className="mt-6 mb-3 text-[14px] font-medium leading-5 text-[#2B2B2B]">
+        <p className="mb-2 mt-5 text-[14px] leading-5 text-[#2B2B2B]">
           Identity Information
         </p>
 
-        <div className="rounded-3xl border border-[#E6F0F1] bg-[#FCFEFD]">
+        <div className="rounded-[20px] border border-[#E6F0F1] bg-white">
           <FieldSection label="Full Name" isFirst>
             <p className="mt-1 text-[14px] leading-5 text-[#839297]">
               {identity.fullName || "Not set"}
@@ -452,25 +541,51 @@ export default function IdentityProfilePage() {
             <PillGroup values={identity.aliases} toneClassName="bg-[#E9F9F6]" />
           </FieldSection>
           <FieldSection label="Known Websites">
-            <PillGroup values={identity.websites} toneClassName="bg-[#ECF2FE]" />
+            <PillGroup
+              values={identity.websites.map(getSourceLinkLabel)}
+              toneClassName="bg-[#ECF2FE]"
+            />
           </FieldSection>
           <FieldSection label="Keywords">
             <PillGroup values={identity.keywords} toneClassName="bg-[#FFECF8]" />
           </FieldSection>
         </div>
 
-        <div className="mt-10">
-          <button
-            type="button"
-            onClick={() => router.push("/reference-media?mode=profile")}
-            className="h-11 w-full rounded-full border-2 border-[#14C3CF] bg-white text-[16px] font-medium text-[#14C3CF]"
-          >
-            Reference Media
-          </button>
+        <div className="mt-4">
+          <MenuGroup>
+            <MenuButton
+              icon={<Camera size={18} strokeWidth={1.75} className="text-[#1CB986]" />}
+              iconBg="bg-[#E8F9F3]"
+              label="Reference Media"
+              description="Manage your reference photos"
+              onClick={() => router.push("/reference-media?mode=profile")}
+            />
+          </MenuGroup>
         </div>
           </>
         )}
       </main>
+
+      {showScrapeLoader && (
+        <ScrapeLoader
+          onClose={() => setShowScrapeLoader(false)}
+          onDone={() => {
+            setShowScrapeLoader(false);
+            router.push("/cloak-watch");
+          }}
+        />
+      )}
+
+      {showLinkDiscovery && (
+        <LinkDiscoveryFlow
+          subjectName={identity.fullName}
+          onClose={() => setShowLinkDiscovery(false)}
+          onDone={() => {
+            setShowLinkDiscovery(false);
+            router.push("/cloak-watch");
+          }}
+        />
+      )}
     </div>
   );
 }

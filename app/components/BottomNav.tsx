@@ -3,19 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  AlertsNavIcon,
   CloakWatchNavIcon,
+  CommunityNavIcon,
   HomeNavIcon,
   ProfileNavIcon,
   SubmitReportNavIcon,
 } from "../../public/svgIcons";
-import { useNotifications } from "./NotificationsProvider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: HomeNavIcon },
-  { href: "/community", label: "Community", icon: CloakWatchNavIcon },
+  { href: "/cloak-watch", label: "Cloak Watch", icon: CloakWatchNavIcon },
   { href: "/submit-report", label: "Submit Report", icon: SubmitReportNavIcon },
-  { href: "/alerts", label: "Alerts", icon: AlertsNavIcon },
+  { href: "/community", label: "Community", icon: CommunityNavIcon },
   { href: "/profile", label: "Profile", icon: ProfileNavIcon },
 ] as const;
 
@@ -34,7 +33,6 @@ function isActivePath(pathname: string, href: string) {
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { unreadCount: unreadAlerts } = useNotifications();
 
   return (
     <nav className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">
@@ -54,19 +52,12 @@ export default function BottomNav() {
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
-                <span className="relative inline-flex">
-                  <Icon
-                    isActive={active}
-                    size={24}
-                    activeColor="#00C3D0"
-                    inactiveColor="#94a3b8"
-                  />
-                  {item.href === "/alerts" && unreadAlerts > 0 && (
-                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FF3B30] px-1 text-[9px] font-semibold leading-none text-white">
-                      {unreadAlerts > 9 ? "9+" : unreadAlerts}
-                    </span>
-                  )}
-                </span>
+                <Icon
+                  isActive={active}
+                  size={24}
+                  activeColor="#00C3D0"
+                  inactiveColor="#94a3b8"
+                />
                 <span className="text-[10px] font-medium leading-tight">
                   {item.label}
                 </span>

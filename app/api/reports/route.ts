@@ -406,7 +406,7 @@ export async function GET(request: Request) {
       .toArray();
 
     // Batched so the retry-cooldown lookup below doesn't cost one query
-    // per report — Boost/Cloak Pro reporters get a shorter cooldown
+    // per report — Cloak Pro reporters get a shorter cooldown
     // between automatic retries (see lib/config.ts PLAN_LIMITS).
     const reporterIds = Array.from(
       new Set(reports.map((report) => report.reportedBy.toString())),
