@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { PlatformGlyph, getSourceLinkLabel } from "@/app/components/reports/reportUi";
-import BottomSheet from "@/app/components/BottomSheet";
+import AddLinkSheet from "@/app/components/linkDiscovery/AddLinkSheet";
 import type { CloakWatchOverview, WatchedLinkSummary } from "@/lib/cloakWatchPosts";
 import { LINK_CHANGE_WINDOW_DAYS } from "@/lib/config";
 import {
@@ -208,42 +208,9 @@ export default function IncidentsPage() {
     }
   };
 
-  // "Add Link": same rules as Known Websites (server-checked).
-  const [addOpen, setAddOpen] = useState(false);
-  const [newLink, setNewLink] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-
-  const handleAddLink = async () => {
-    if (adding || !newLink.trim()) return;
-    setAdding(true);
-    setAddError(null);
-    try {
-      const res = await fetch("/api/cloak-watch/links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: newLink }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        setAddError(data?.error || "Couldn't add the link.");
-        return;
-      }
-      setAddOpen(false);
-      setNewLink("");
-      toast.success("Link added to Cloak Watch");
-      void reloadUrls();
-      // If it started scraping right away, pick that up (shows the loader).
-      if (data.scrapeStarted) {
-        setPostsDismissed(false);
-        void refreshLinkFetch();
-      }
-    } catch {
-      setAddError("Couldn't add the link.");
-    } finally {
-      setAdding(false);
-    }
-  };
+  // Add Link sheet: "add" from the button, "prompt" right after the user
+  // dismissed every suggested link (offering their own links instead).
+  const [addSheet, setAddSheet] = useState<"add" | "prompt" | null>(null);
 
   const scrape = linkFetch?.scrape;
   const scrapePercent =
@@ -295,12 +262,17 @@ export default function IncidentsPage() {
         subjectName={subjectName || ""}
         allowance={linkFetch.links}
         onBack={() => setReviewDismissed(true)}
-        onDone={(next) => {
-          // Choosing starts scraping — show its loader next.
+        onDone={(next, { keptCount }) => {
           applyStatus(next);
+          void reloadUrls();
+          if (keptCount === 0) {
+            // Dismissed them all — offer adding their own links instead.
+            setAddSheet("prompt");
+            return;
+          }
+          // Choosing starts scraping — show its loader next.
           setPostsDismissed(false);
           setWatchingPosts(true);
-          void reloadUrls();
         }}
       />
     );
@@ -521,10 +493,24 @@ export default function IncidentsPage() {
               );
             })}
           </div>
-        ) : needsProfile || canStartFirstScan ? null : (
-          <p className="py-10 text-center text-[12px] text-[#839297]">
-            No links detected yet
-          </p>
+        ) : needsProfile || canStartFirstScan || linkFetch?.status === "running" ? null : (
+          // No watched links (e.g. every suggestion was dismissed) — keep
+          // a way forward on screen.
+          <div className="rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
+            <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+              No links being monitored yet
+            </p>
+            <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
+              Add your Instagram, Facebook or X profiles and Cloak will watch them for posts about you.
+            </p>
+            <button
+              type="button"
+              onClick={() => setAddSheet("add")}
+              className="mt-3 inline-flex h-[30px] items-center justify-center rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white"
+            >
+              Add Link
+            </button>
+          </div>
         )}
       </main>
 
@@ -549,10 +535,7 @@ export default function IncidentsPage() {
         <div className="pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
           <button
             type="button"
-            onClick={() => {
-              setAddError(null);
-              setAddOpen(true);
-            }}
+            onClick={() => setAddSheet("add")}
             className="h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white"
           >
             Add Link
@@ -560,44 +543,27 @@ export default function IncidentsPage() {
         </div>
       )}
 
-      <BottomSheet
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        title="Add Link"
-        dismissible={!adding}
-      >
-        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4">
-          <input
-            value={newLink}
-            onChange={(e) => {
-              setNewLink(e.target.value);
-              setAddError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleAddLink();
-            }}
-            placeholder="Paste an Instagram, Facebook or X profile link"
-            className="h-[42px] w-full rounded-xl bg-[#F5F5F5] px-3.5 text-[14px] text-[#2B2B2B] outline-none placeholder:text-[#A7ADB2] focus:ring-2 ring-[#14C3CF]/20"
-          />
-          {addError ? (
-            <p className="mt-1.5 text-[12px] leading-4 text-[#F30131]">{addError}</p>
-          ) : (
-            linkFetch && (
-              <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
-                {linkFetch.links.count} / {linkFetch.links.limit} links on your plan
-              </p>
-            )
-          )}
-          <button
-            type="button"
-            onClick={() => void handleAddLink()}
-            disabled={adding || !newLink.trim()}
-            className="mt-5 h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
-          >
-            {adding ? "Adding..." : "Add Link"}
-          </button>
-        </div>
-      </BottomSheet>
+      <AddLinkSheet
+        open={addSheet !== null}
+        onClose={() => setAddSheet(null)}
+        title={addSheet === "prompt" ? "Add your own links?" : "Add Link"}
+        intro={
+          addSheet === "prompt"
+            ? "No problem — if you have Instagram, Facebook or X profiles, add them and Cloak will watch them for you."
+            : undefined
+        }
+        dismissLabel={addSheet === "prompt" ? "Maybe later" : undefined}
+        limitText={
+          linkFetch ? `${linkFetch.links.count} / ${linkFetch.links.limit} links on your plan` : undefined
+        }
+        onAdded={({ scrapeStarted }) => {
+          setAddSheet(null);
+          void reloadUrls();
+          // If it started scraping right away, pick that up (shows the loader).
+          if (scrapeStarted) setPostsDismissed(false);
+          void refreshLinkFetch();
+        }}
+      />
     </div>
   );
 }

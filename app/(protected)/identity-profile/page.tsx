@@ -18,6 +18,7 @@ import { DetectiveIcon } from "@/public/svgIcons";
 import { MenuButton, MenuGroup } from "@/app/components/MenuList";
 import LinkDiscoveryFlow from "./_components/LinkDiscoveryFlow";
 import ScrapeLoader from "./_components/ScrapeLoader";
+import AddLinkSheet from "@/app/components/linkDiscovery/AddLinkSheet";
 import type { LinkAllowance } from "@/app/components/linkDiscovery/LinkDiscovery";
 import { getSourceLinkLabel } from "@/app/components/reports/reportUi";
 import { parseWatchedLink, watchedLinkKey } from "@/lib/watchedLinkUrl";
@@ -206,6 +207,19 @@ export default function IdentityProfilePage() {
   const [tagDrafts, setTagDrafts] = useState<Partial<Record<TagField, string>>>({});
   const [linkAllowance, setLinkAllowance] = useState<LinkAllowance | null>(null);
   const [showScrapeLoader, setShowScrapeLoader] = useState(false);
+  // "Add your own links?" after every suggested link was dismissed.
+  const [showAddOwnLinks, setShowAddOwnLinks] = useState(false);
+
+  // Re-reads the profile (Known Websites) after a link is added from here.
+  const reloadIdentity = () =>
+    fetch("/api/identity-profile", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.success) return;
+        setIdentity(toIdentityProfileData(data.profile));
+        if (data.linkAllowance) setLinkAllowance(data.linkAllowance);
+      })
+      .catch(() => null);
 
   useEffect(() => {
     let cancelled = false;
@@ -584,8 +598,28 @@ export default function IdentityProfilePage() {
             setShowLinkDiscovery(false);
             router.push("/cloak-watch");
           }}
+          onDismissedAll={() => {
+            setShowLinkDiscovery(false);
+            setShowAddOwnLinks(true);
+          }}
         />
       )}
+
+      <AddLinkSheet
+        open={showAddOwnLinks}
+        onClose={() => setShowAddOwnLinks(false)}
+        title="Add your own links?"
+        intro="No problem — if you have Instagram, Facebook or X profiles, add them and Cloak will watch them for you."
+        dismissLabel="Maybe later"
+        limitText={
+          linkAllowance ? `${linkAllowance.count} / ${linkAllowance.limit} links on your plan` : undefined
+        }
+        onAdded={({ scrapeStarted }) => {
+          setShowAddOwnLinks(false);
+          void reloadIdentity();
+          if (scrapeStarted) setShowScrapeLoader(true);
+        }}
+      />
     </div>
   );
 }
