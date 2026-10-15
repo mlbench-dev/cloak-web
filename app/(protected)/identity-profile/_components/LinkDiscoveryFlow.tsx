@@ -17,10 +17,13 @@ export default function LinkDiscoveryFlow({
   subjectName,
   onClose,
   onDone,
+  onDismissedAll,
 }: {
   subjectName: string;
   onClose: () => void;
   onDone: () => void;
+  // The user rejected every suggested link ("None of these").
+  onDismissedAll: () => void;
 }) {
   const { status, startError, start, retryScrape, applyStatus } = useLinkFetchStatus();
   const [stage, setStage] = useState<"links" | "confirm" | "posts">("links");
@@ -56,9 +59,13 @@ export default function LinkDiscoveryFlow({
         subjectName={subjectName}
         allowance={status.links}
         onBack={onClose}
-        onDone={(next) => {
-          // Choosing starts scraping on the server.
+        onDone={(next, { keptCount }) => {
           applyStatus(next);
+          if (keptCount === 0) {
+            onDismissedAll();
+            return;
+          }
+          // Choosing starts scraping on the server.
           setStage("posts");
         }}
       />

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { PlatformGlyph, getSourceLinkLabel } from "@/app/components/reports/reportUi";
 import { detectPlatform } from "@/lib/platform";
 import { useNotifications } from "@/app/components/NotificationsProvider";
+import { confirmAction } from "@/app/components/confirmAction";
 
 // Link discovery runs as a background job on the server (see
 // lib/fetchLinks.ts). These pieces let any screen show it: the identity
@@ -408,8 +409,9 @@ export function ConfirmLinksScreen({
   allowance: LinkAllowance;
   // Leaving without choosing keeps the review open for later.
   onBack: () => void;
-  // Gets the status after the review — scraping has started by then.
-  onDone: (status: LinkFetchStatus) => void;
+  // Gets the status after the review (scraping has started if any links
+  // were kept). keptCount 0 = the user rejected every suggestion.
+  onDone: (status: LinkFetchStatus, result: { keptCount: number }) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -435,27 +437,46 @@ export function ConfirmLinksScreen({
     });
   };
 
-  const handleChoose = async () => {
-    if (selected.size === 0 || saving) return;
+  // Saves the review: `keep` approved, the rest of the suggestions
+  // rejected. An empty `keep` rejects them all and closes the review.
+  const submitReview = async (keep: string[]) => {
     setSaving(true);
     try {
       const res = await fetch("/api/fetch-urls", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keep: Array.from(selected) }),
+        body: JSON.stringify({ keep }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) {
         toast.error(data?.error || "Couldn't save your selection.");
         return;
       }
-      toast.success("Links added to Cloak Watch");
-      onDone(data as LinkFetchStatus);
+      if (keep.length > 0) toast.success("Links added to Cloak Watch");
+      onDone(data as LinkFetchStatus, { keptCount: keep.length });
     } catch {
       toast.error("Couldn't save your selection.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleChoose = async () => {
+    if (selected.size === 0 || saving) return;
+    await submitReview(Array.from(selected));
+  };
+
+  // None of the suggestions are the user — dismiss them all so the review
+  // doesn't keep coming back.
+  const handleNoneOfThese = async () => {
+    if (saving) return;
+    const ok = await confirmAction({
+      title: "None of these are you?",
+      text: "All suggested links will be dismissed. You can still add your own links.",
+      confirmText: "Dismiss All",
+      tone: "danger",
+    });
+    if (ok) await submitReview([]);
   };
 
   return (
@@ -539,12 +560,20 @@ export function ConfirmLinksScreen({
         })}
       </main>
 
-      <div className="pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
+      <div className="flex items-center gap-2.5 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
+        <button
+          type="button"
+          onClick={() => void handleNoneOfThese()}
+          disabled={saving}
+          className="h-12 flex-1 rounded-full bg-[#F5F5F5] text-[15px] text-[#839297] disabled:opacity-50"
+        >
+          None of these
+        </button>
         <button
           type="button"
           onClick={() => void handleChoose()}
           disabled={selected.size === 0 || saving}
-          className="h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
+          className="h-12 flex-1 rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
         >
           {saving ? "Saving..." : `Choose (${selected.size})`}
         </button>

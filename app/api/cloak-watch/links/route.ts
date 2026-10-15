@@ -6,6 +6,7 @@ import { getDb } from "@/lib/mongodb";
 import { getCloakWatchOverview } from "@/lib/cloakWatchPosts";
 import {
   getApprovedLinks,
+  getLinkFetchStatus,
   getProfileCompleteness,
   hasFirstScrapeRun,
   startPendingScrape,
@@ -56,10 +57,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "That link is already in Cloak Watch." }, { status: 400 });
     }
 
+    // Scrape it now — unless a link search or review is still underway, in
+    // which case it's included in the scrape that review starts. (Waiting
+    // for "the first scrape" alone would strand it if the user dismissed
+    // every suggestion and so never had one.)
     let scrapeStarted = false;
-    if ((await getProfileCompleteness(db, userId)).complete && (await hasFirstScrapeRun(db, userId))) {
-      const scrape = await startPendingScrape(db, userId);
-      scrapeStarted = scrape.ok && scrape.started;
+    if ((await getProfileCompleteness(db, userId)).complete) {
+      const status = await getLinkFetchStatus(db, userId);
+      const reviewPending = status.status === "running" || status.awaitingReview;
+      if ((await hasFirstScrapeRun(db, userId)) || !reviewPending) {
+        const scrape = await startPendingScrape(db, userId);
+        scrapeStarted = scrape.ok && scrape.started;
+      }
     }
 
     return NextResponse.json({ success: true, scrapeStarted });
