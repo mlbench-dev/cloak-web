@@ -152,6 +152,7 @@ export default function SubmitReportPage() {
   const linkCheckAbortRef = useRef<AbortController | null>(null);
   const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [isReachableLink, setIsReachableLink] = useState<boolean | null>(null);
+  const [isContentVerified, setIsContentVerified] = useState(false);
   const [linkStatusCode, setLinkStatusCode] = useState<number | null>(null);
 
   // Fetch recent searches on load
@@ -317,12 +318,14 @@ export default function SubmitReportPage() {
     if (!validSourceUrl) {
       setIsCheckingLink(false);
       setIsReachableLink(null);
+      setIsContentVerified(false);
       setLinkStatusCode(null);
       return;
     }
 
     setIsCheckingLink(true);
     setIsReachableLink(null);
+    setIsContentVerified(false);
     setLinkStatusCode(null);
 
     linkCheckTimeoutRef.current = setTimeout(async () => {
@@ -336,6 +339,7 @@ export default function SubmitReportPage() {
         });
         const data = await response.json().catch(() => null);
         setIsReachableLink(Boolean(data?.reachable));
+        setIsContentVerified(Boolean(data?.contentVerified));
         setLinkStatusCode(
           typeof data?.statusCode === "number" ? data.statusCode : null,
         );
@@ -397,7 +401,10 @@ export default function SubmitReportPage() {
       const data = await res.json();
       if (data.success) {
         toast.success("Report submitted successfully!");
-        router.push("/profile");
+        // Land on the list of submitted reports, which is where someone who
+        // just filed one expects to go — not the profile settings screen
+        // (RPT-001).
+        router.push("/my-reports");
       } else if (data.code === "PLAN_LIMIT_REACHED") {
         showPlanLimitToast(data.error);
       } else {
@@ -639,14 +646,18 @@ export default function SubmitReportPage() {
                     isCheckingLink
                       ? "text-[#839297]"
                       : isReachableLink
-                        ? "text-[#14C3CF]"
+                        ? isContentVerified
+                          ? "text-[#14C3CF]"
+                          : "text-[#C98A00]"
                         : "text-[#FF6B6B]"
                   }`}
                 >
                   {isCheckingLink
                     ? "Checking link..."
                     : isReachableLink
-                      ? "Link looks reachable."
+                      ? isContentVerified
+                        ? "Link verified."
+                        : "Reachable, but we couldn't confirm the exact post (it may require login or no longer exist)."
                       : `Link is not reachable${
                           linkStatusCode ? ` (HTTP ${linkStatusCode})` : ""
                         }.`}

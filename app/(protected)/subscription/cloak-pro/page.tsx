@@ -20,10 +20,12 @@ export default function CloakProSubscriptionPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [accessUntilDate, setAccessUntilDate] = useState("—");
+  const [isCancelled, setIsCancelled] = useState(false);
 
   useEffect(() => {
     void fetchSubscriptionStatus().then((status) => {
       setAccessUntilDate(formatPlanDate(status?.currentPeriodEnd || null));
+      setIsCancelled(Boolean(status?.cancelAtPeriodEnd));
     });
   }, []);
 
@@ -58,6 +60,7 @@ export default function CloakProSubscriptionPage() {
           <BillingCard
             price={cloakProPlan.price}
             nextChargeDate={accessUntilDate}
+            isCancelled={isCancelled}
           />
         </div>
 

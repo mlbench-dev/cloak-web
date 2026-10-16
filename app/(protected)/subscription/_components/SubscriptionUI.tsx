@@ -187,9 +187,14 @@ export function PlanUpsellCard({
 export function BillingCard({
   price,
   nextChargeDate,
+  // When the plan is cancelled (lapses at period end) there is no next
+  // charge — the date is when access ends, so label it accordingly instead
+  // of implying another payment (SUB-002).
+  isCancelled = false,
 }: {
   price: string;
   nextChargeDate: string;
+  isCancelled?: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#EDEDED] bg-white px-3">
@@ -210,7 +215,13 @@ export function BillingCard({
       </div>
       <div className="flex items-center justify-between py-3">
         <span className="text-[13px] leading-5 text-[#2B2B2B]">
-          Next Charge: <span className="text-[#14C3CF]">{price}</span>
+          {isCancelled ? (
+            "Access until"
+          ) : (
+            <>
+              Next Charge: <span className="text-[#14C3CF]">{price}</span>
+            </>
+          )}
         </span>
         <span className="text-[13px] leading-5 text-[#839297]">
           {nextChargeDate}

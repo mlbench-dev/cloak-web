@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { uploadFileToFirebase } from "@/lib/firebaseUtils";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
+    // Owner comes from the session, not a form field. The route used to
+    // take `userId` from the request body with no auth, letting anyone
+    // upload files into any user's storage path (AUTH-005).
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const type = formData.get("type") as string; // 'profile' or 'identity'
-    const userId = formData.get("userId") as string;
 
-    if (!file || !userId) {
+    if (!file) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 

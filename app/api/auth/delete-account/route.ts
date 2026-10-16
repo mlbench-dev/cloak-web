@@ -80,6 +80,19 @@ export async function DELETE() {
       reportResult,
       recentSearchResult,
       otpResult,
+      // Previously orphaned on deletion — a data-retention / erasure gap
+      // (DEL-001 covered billing; CW-002 covered the Cloak Watch + identity
+      // profile data). All of a user's personal records now go together.
+      identityProfileResult,
+      fetchUrlResult,
+      scrapingUrlResult,
+      subscriptionResult,
+      subscriptionEventResult,
+      usageCounterResult,
+      notificationResult,
+      cloakWatchReviewResult,
+      cloakWatchVoteResult,
+      cloakWatchSaveResult,
     ] = await Promise.all([
       db.collection("users").deleteOne({ _id: userId }),
       db.collection("referenceMedia").deleteMany({ userId }),
@@ -89,6 +102,16 @@ export async function DELETE() {
       }),
       db.collection("recentSearches").deleteMany(deleteFilter),
       db.collection("otps").deleteMany({ email: user.email }),
+      db.collection("identityProfiles").deleteMany({ userId }),
+      db.collection("fetchUrl").deleteMany({ userId }),
+      db.collection("scrapingUrl").deleteMany({ userId }),
+      db.collection("subscriptions").deleteMany({ userId }),
+      db.collection("subscriptionEvents").deleteMany({ userId }),
+      db.collection("usageCounters").deleteMany({ userId }),
+      db.collection("notifications").deleteMany({ userId }),
+      db.collection("cloakWatchPostReviews").deleteMany({ userId }),
+      db.collection("cloakWatchPostVotes").deleteMany({ userId }),
+      db.collection("cloakWatchPostSaves").deleteMany({ userId }),
     ]);
 
     return NextResponse.json({
@@ -100,6 +123,16 @@ export async function DELETE() {
         reports: reportResult.deletedCount,
         recentSearches: recentSearchResult.deletedCount,
         otps: otpResult.deletedCount,
+        identityProfiles: identityProfileResult.deletedCount,
+        fetchUrl: fetchUrlResult.deletedCount,
+        scrapingUrl: scrapingUrlResult.deletedCount,
+        subscriptions: subscriptionResult.deletedCount,
+        subscriptionEvents: subscriptionEventResult.deletedCount,
+        usageCounters: usageCounterResult.deletedCount,
+        notifications: notificationResult.deletedCount,
+        cloakWatchPostReviews: cloakWatchReviewResult.deletedCount,
+        cloakWatchPostVotes: cloakWatchVoteResult.deletedCount,
+        cloakWatchPostSaves: cloakWatchSaveResult.deletedCount,
         storageFiles: storagePaths.size - failedStorageDeletes,
       },
       failedStorageDeletes,

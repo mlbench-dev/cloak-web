@@ -125,10 +125,11 @@ export async function POST(request: Request) {
   // Answer fast (the CV API wants a 2xx within 20s); the rest runs after.
   after(async () => {
     try {
-      // Closing the run sends the "Scraping complete" alert, which pings
-      // the app itself; otherwise ping so open screens show the progress.
-      const closed = await finalizeScrapeIfDone(db, userId);
-      if (!closed) await pingLiveNotification(userId);
+      await finalizeScrapeIfDone(db, userId);
+      // Always ping, so open screens pick up this link's progress — and the
+      // run finishing. (Closing a run only sends an alert, which pings too,
+      // when new posts were found, so that can't be relied on.)
+      await pingLiveNotification(userId);
     } catch (error) {
       console.error("Scrape callback follow-up failed:", error);
     }
