@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, History, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { goBack } from "@/lib/navigation";
 
 type VerificationStatusScreenProps = {
   status: "APPROVED" | "REJECTED";
@@ -153,9 +154,7 @@ export default function VerificationStatusScreen({
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-4 pb-[max(env(safe-area-inset-bottom),20px)] pt-[max(env(safe-area-inset-top),16px)]">
         <header className="flex items-center justify-between bg-white z-10">
           <button
-            onClick={() => {
-              router.push("/profile");
-            }}
+            onClick={() => goBack(router, "/profile")}
             className="p-2"
           >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
