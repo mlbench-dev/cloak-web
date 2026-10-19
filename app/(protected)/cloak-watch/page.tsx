@@ -298,7 +298,7 @@ export default function IncidentsPage() {
         )}
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto pt-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+      <main className="-mx-4 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         {stats && links.length > 0 && (
           <div className="mb-4 grid grid-cols-3 rounded-2xl bg-[#F5F5F5] py-3">
             {[
