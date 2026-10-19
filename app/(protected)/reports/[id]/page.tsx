@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { goBack } from "@/lib/navigation";
 import { ChevronLeft } from "lucide-react";
 import Image from "next/image";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
@@ -387,7 +388,7 @@ export default function ReportDetailsPage({
       <header className="flex items-center justify-between  bg-white z-10">
         <button
           onClick={() =>
-            router.push(reportViewType === "sent" ? "/my-reports" : "/reports")
+            goBack(router, reportViewType === "sent" ? "/my-reports" : "/reports")
           }
           className="-ml-3 p-2"
         >

@@ -12,6 +12,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { PlanFeature, PlanSummary, PlanTone } from "../_lib/plans";
 import { useRouter } from "next/navigation";
+import { goBack } from "@/lib/navigation";
 import BottomSheet from "@/app/components/BottomSheet";
 const toneClasses: Record<
   PlanTone,
@@ -59,7 +60,7 @@ export function SubscriptionHeader() {
   const router = useRouter();
   return (
     <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
-      <button onClick={() => router.push("/profile")} className="p-2">
+      <button type="button" onClick={() => goBack(router, "/profile")} className="p-2">
         <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
       </button>
       <h1 className="text-[16px] font-medium text-[#2B2B2B]">Subscription</h1>

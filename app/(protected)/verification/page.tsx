@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { goBack } from "@/lib/navigation";
 import { useSession } from "next-auth/react";
 import { ChevronLeft } from "lucide-react";
 import VerificationStatusScreen from "@/app/components/verification/VerificationStatusScreen";
@@ -135,9 +136,7 @@ export default function VerificationPage() {
         <div className="mx-auto flex min-h-[100dvh] w-full max-w-[430px] flex-col px-5 pb-[max(env(safe-area-inset-bottom),20px)] pt-[max(env(safe-area-inset-top),16px)]">
           <header className="flex items-center justify-between  bg-white z-10">
             <button
-              onClick={() => {
-                router.push("/profile");
-              }}
+              onClick={() => goBack(router, "/profile")}
               className="p-2"
             >
               <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />

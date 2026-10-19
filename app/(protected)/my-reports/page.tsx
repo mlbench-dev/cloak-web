@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { goBack } from "@/lib/navigation";
 import { ChevronLeft } from "lucide-react";
 import VerifiedBadge from "@/app/components/VerifiedBadge";
 import {
@@ -100,7 +101,13 @@ export default function MyReportsPage() {
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
       <header className="flex items-center justify-between  bg-white z-10">
-        <button onClick={() => router.push("/profile")} className="-ml-3 p-2">
+        <button
+          type="button"
+          // Opened from Submit Report or Profile — go back to whichever it
+          // was; fall back to Profile when there's no history (direct link).
+          onClick={() => goBack(router, "/profile")}
+          className="-ml-3 p-2"
+        >
           <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
         </button>
         <h1 className="text-[16px] font-medium text-[#2B2B2B]">My Reports</h1>
