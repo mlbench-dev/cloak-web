@@ -158,6 +158,7 @@ export default function SubscriptionPage() {
             <BillingCard
               price={currentPlanSummary.price}
               nextChargeDate={accessUntilDate}
+              isCancelled={isCancelledButStillActive}
             />
           </div>
         )}

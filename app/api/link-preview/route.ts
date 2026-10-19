@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { isPublicHttpUrl, safeFetch } from "@/lib/ssrf";
 
 const DIRECT_IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i;
 const REACHABILITY_TIMEOUT_MS = 6000;
@@ -173,11 +174,13 @@ type FetchedPage = {
 
 async function fetchPage(url: URL, userAgent: string): Promise<FetchedPage | null> {
   try {
-    const response = await fetch(url, {
+    // safeFetch validates every redirect hop so the page can't bounce us
+    // onto an internal host (SSRF-001). A null result = unsafe/too many hops.
+    const response = await safeFetch(url, {
       headers: getRequestHeaders(userAgent),
       signal: AbortSignal.timeout(REACHABILITY_TIMEOUT_MS),
-      redirect: "follow",
     });
+    if (!response) return null;
     const finalUrl = response.url || url.toString();
     const contentType = response.headers.get("content-type") || "";
     if (!response.ok || !contentType.includes("text/html")) {
@@ -262,7 +265,32 @@ export async function GET(request: Request) {
       });
     }
 
-    const normalizedUrl = new URL(url);
+    let normalizedUrl: URL;
+    try {
+      normalizedUrl = new URL(url);
+    } catch {
+      return NextResponse.json({
+        success: true,
+        preview: null,
+        reachable: false,
+        statusCode: null,
+        finalUrl: null,
+      });
+    }
+
+    // Refuse to fetch internal / loopback / link-local / private-range
+    // targets (SSRF-001). Answer with the same benign "not reachable" shape
+    // so the caller learns nothing about internal hosts.
+    if (!(await isPublicHttpUrl(normalizedUrl))) {
+      return NextResponse.json({
+        success: true,
+        preview: null,
+        reachable: false,
+        statusCode: null,
+        finalUrl: null,
+      });
+    }
+
     const cacheKey = normalizedUrl.toString();
     const cached = getCachedPreview(cacheKey);
     if (cached) {
@@ -285,15 +313,18 @@ export async function GET(request: Request) {
 
     if (DIRECT_IMAGE_EXTENSIONS.test(normalizedUrl.pathname)) {
       try {
-        const headResponse = await fetch(normalizedUrl, {
+        const headResponse = await safeFetch(normalizedUrl, {
           method: "HEAD",
           headers: getRequestHeaders(BROWSER_USER_AGENT),
           signal: AbortSignal.timeout(REACHABILITY_TIMEOUT_MS),
-          redirect: "follow",
         });
-        statusCode = headResponse.status;
-        finalUrl = headResponse.url || normalizedUrl.toString();
-        reachable = statusCode < 500 && statusCode !== 404;
+        if (headResponse) {
+          statusCode = headResponse.status;
+          finalUrl = headResponse.url || normalizedUrl.toString();
+          reachable = statusCode < 500 && statusCode !== 404;
+        } else {
+          reachable = false;
+        }
       } catch {
         reachable = false;
       }
@@ -359,7 +390,26 @@ export async function GET(request: Request) {
       }
     }
 
-    const responseBody = { success: true, preview, reachable, statusCode, finalUrl };
+    // "Reachable" only means the host responded — on IG/TikTok/etc. a
+    // non-existent or removed post still returns 200 behind a login wall. We
+    // can only claim the specific post exists when we actually extracted
+    // post-specific metadata (a share image, a description, or a real title
+    // distinct from the bare domain). Surfaced so the UI doesn't overstate
+    // what was verified (RPT-003).
+    const contentVerified = Boolean(
+      preview.image ||
+        preview.description ||
+        (preview.title && preview.title !== preview.domain),
+    );
+
+    const responseBody = {
+      success: true,
+      preview,
+      reachable,
+      contentVerified,
+      statusCode,
+      finalUrl,
+    };
     // Only cache reachable/successful lookups — a transient failure
     // shouldn't get stuck in the cache for 15 minutes.
     if (reachable) {

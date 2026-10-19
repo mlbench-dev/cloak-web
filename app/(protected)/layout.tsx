@@ -1,6 +1,7 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOutToLogin } from "@/lib/signOutToLogin";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import BottomNav from "../components/BottomNav";
@@ -48,7 +49,7 @@ export default function ProtectedLayout({
       status === "authenticated" &&
       ((session as any)?.sessionExpired || !(session as any)?.user?.id)
     ) {
-      void signOut({ callbackUrl: "/?authStep=EMAIL" });
+      void signOutToLogin();
       return;
     }
 

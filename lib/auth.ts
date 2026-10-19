@@ -3,6 +3,7 @@ import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { ObjectId } from "mongodb";
+import { normalizeEmail } from "@/lib/email";
 
 // How often the jwt() callback is allowed to re-query Mongo for fresh user
 // data. This callback runs on every session check (client session fetch AND
@@ -30,13 +31,17 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        // Normalize before the lookup so the session is tied to the same
+        // canonical account the OTP flow created, and so a non-string value
+        // can't become a Mongo operator in the query (AUTH-001 / AUTH-007).
+        const email = normalizeEmail(credentials?.email);
+        if (!email) return null;
 
         const client = await clientPromise;
         const db = client.db();
         const user = await db
           .collection("users")
-          .findOne({ email: credentials.email });
+          .findOne({ email });
 
         if (user) {
           return {
@@ -60,7 +65,17 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         try {
-          console.log("Google sign-in callback started for:", user.email);
+          // Canonical lowercase email so a Google login resolves to the
+          // same account an OTP login created for the same address, instead
+          // of forking a duplicate on a casing difference (AUTH-007).
+          const email = normalizeEmail(user.email);
+          if (!email) {
+            console.error("Google sign-in without a usable email:", user.email);
+            return false;
+          }
+          user.email = email;
+
+          console.log("Google sign-in callback started");
           const client = await clientPromise;
           const db = client.db();
 
@@ -68,7 +83,7 @@ export const authOptions: NextAuthOptions = {
           // Manual user management to avoid separate 'accounts' collection
           const existingUser = await db
             .collection("users")
-            .findOne({ email: user.email });
+            .findOne({ email });
 
           if (existingUser) {
             console.log("Existing user found, updating...");
@@ -101,7 +116,7 @@ export const authOptions: NextAuthOptions = {
             console.log("New user, creating record...");
             // Create new user for first time OAuth
             const result = await db.collection("users").insertOne({
-              email: user.email,
+              email,
               name: user.name,
               image: user.image,
               emailVerified: new Date(),

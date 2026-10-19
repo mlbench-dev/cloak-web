@@ -7,6 +7,11 @@ import {
 
 export { resolveUserPlan } from "@/lib/planLimits";
 
+// Upper bound on the PayFast subscription-cancel call so a slow/unreachable
+// management API returns a clean error instead of hanging the request
+// (SUB-004).
+const CANCEL_API_TIMEOUT_MS = 12_000;
+
 // createIndex is idempotent but still costs a round trip — cache the
 // promise so this only runs once per server process (mirrors
 // ensureCloakWatchIndexes in lib/cloakWatch.ts and ensurePlanIndexes in
@@ -147,7 +152,14 @@ export async function cancelSubscription(
       const url =
         `${PAYFAST_SUBSCRIPTIONS_API_BASE}/subscriptions/${subscription.payfastToken}/cancel` +
         (queryString ? `?${queryString}` : "");
-      const response = await fetch(url, { method: "PUT", headers });
+      // Bound the call so a slow/unreachable PayFast management API fails
+      // fast with a clear "try again" instead of the UI hanging on a spinner
+      // for the platform's full timeout (SUB-004).
+      const response = await fetch(url, {
+        method: "PUT",
+        headers,
+        signal: AbortSignal.timeout(CANCEL_API_TIMEOUT_MS),
+      });
       if (!response.ok) {
         console.error(
           `PayFast subscription cancel call failed: ${response.status}`,

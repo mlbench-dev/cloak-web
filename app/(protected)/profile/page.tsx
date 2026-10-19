@@ -21,7 +21,8 @@ import {
   Search,
   Settings,
 } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOutToLogin } from "@/lib/signOutToLogin";
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import toast from "react-hot-toast";
@@ -448,7 +449,7 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    await signOut({ callbackUrl: "/?authStep=EMAIL" });
+    await signOutToLogin();
   };
 
   const handleDeleteAccount = async () => {
@@ -468,7 +469,7 @@ export default function ProfilePage() {
       }
 
       toast.success("Account deleted permanently.", { id: toastId });
-      await signOut({ callbackUrl: "/?authStep=EMAIL" });
+      await signOutToLogin();
     } catch (error) {
       console.error("Failed to delete account", error);
       toast.error(
@@ -693,9 +694,8 @@ export default function ProfilePage() {
       <div className="flex h-full flex-col">
         <header className="flex items-center justify-between  bg-white z-10">
           <button
-            onClick={() => {
-              router.push("/profile");
-            }}
+            type="button"
+            onClick={() => setView("main")}
             className="-ml-3 p-2"
           >
             <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />

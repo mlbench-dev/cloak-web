@@ -69,8 +69,9 @@ export async function POST(request: Request) {
       amountZar,
       // Kept ASCII and free of ! ' ( ) * ~ — see pfEncode's comment in
       // lib/payfast.ts for why those specifically are risky in a signed
-      // field.
-      itemName: `Cloak ${PLAN_DISPLAY_NAME[plan]} Monthly Subscription`,
+      // field. PLAN_DISPLAY_NAME already includes the "Cloak" brand
+      // ("Cloak Pro"), so don't prefix it again (SUB-001).
+      itemName: `${PLAN_DISPLAY_NAME[plan]} Monthly Subscription`,
       returnUrl: `${appUrl}/subscription/success`,
       cancelUrl: `${appUrl}/subscription?checkout=cancelled`,
       notifyUrl: `${appUrl}/api/subscriptions/notify`,

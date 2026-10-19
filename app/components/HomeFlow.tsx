@@ -1,6 +1,7 @@
 "use client";
 
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
+import { signOutToLogin } from "@/lib/signOutToLogin";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef, Suspense, useCallback } from "react";
 import toast from "react-hot-toast";
@@ -145,7 +146,7 @@ function HomeFlowContent() {
       const user = session.user as any;
 
       if ((session as any).sessionExpired || user.sessionExpired || !user.id) {
-        void signOut({ callbackUrl: "/?authStep=EMAIL" });
+        void signOutToLogin();
         return;
       }
 

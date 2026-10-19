@@ -99,6 +99,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // A user can't report themselves (RPT-002).
+    if (String(targetUserId) === session.user.id) {
+      return NextResponse.json(
+        { error: "You can't report yourself." },
+        { status: 400 },
+      );
+    }
+
     const db = await getDb();
     await ensurePlanIndexes(db);
     const usersCollection = db.collection("users");
@@ -114,6 +122,24 @@ export async function POST(request: Request) {
     }
 
     const reporterId = new ObjectId(session.user.id);
+
+    // Block an exact duplicate: the same reporter re-filing the same link
+    // against the same user while a previous report is still open or already
+    // upheld (RPT-002). A link that was dismissed (REJECTED/FALSE_POSITIVE)
+    // can be reported again.
+    const duplicate = await db.collection("reports").findOne({
+      reportedBy: reporterId,
+      targetUserId: new ObjectId(targetUserId),
+      sourceLink,
+      status: { $in: ["PENDING", "VERIFIED"] },
+    });
+    if (duplicate) {
+      return NextResponse.json(
+        { error: "You've already reported this link for this user." },
+        { status: 409 },
+      );
+    }
+
     const reporterPlan = await resolveUserPlan(db, reporterId);
     const reportsCheck = await checkLimit(db, {
       userId: reporterId,

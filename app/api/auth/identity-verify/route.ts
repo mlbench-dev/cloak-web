@@ -52,10 +52,19 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { userId, documentType, documentUrls } = await request.json();
+    // Identity comes from the session, not the request body. The route used
+    // to trust a body `userId` with no auth, so anyone could submit identity
+    // documents and flip verification state for any user (AUTH-006). The GET
+    // handler on this route already authenticates — this matches it.
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
+    const { documentType, documentUrls } = await request.json();
 
     if (
-      !userId ||
       !documentType ||
       !documentUrls ||
       !Array.isArray(documentUrls)

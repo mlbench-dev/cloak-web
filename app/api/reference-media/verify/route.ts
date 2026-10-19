@@ -14,6 +14,11 @@ import { notifyVerificationResult } from "@/lib/notifications";
 // min-instances > 0 to stay warm.
 export const maxDuration = 60;
 
+// Abort the external verification call a little before `maxDuration` so the
+// route stays in control of the response (reset progress, return a clear
+// "try again") instead of being killed mid-request by the platform (CW-001).
+const VERIFICATION_API_TIMEOUT_MS = 50_000;
+
 // Takes only the first line of an env var, then trims it — Secret Manager
 // values pasted from a .env file sometimes carry an extra newline plus a
 // trailing comment/line for a *different* variable (that's what actually
@@ -348,13 +353,26 @@ export async function POST() {
       requestBody,
     });
 
-    const externalResponse = await fetch(verificationEndpoint, {
-      method: verificationMethod,
-      headers: getVerificationApiHeaders({
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify(requestBody),
-    });
+    // Bound the call so a slow/cold CV service fails cleanly within the
+    // function's budget instead of hanging until the platform kills it,
+    // which left verification stuck "in progress" with no feedback (CW-001).
+    // Kept below `maxDuration` (60s) so we still control the response.
+    let externalResponse: Response;
+    try {
+      externalResponse = await fetch(verificationEndpoint, {
+        method: verificationMethod,
+        headers: getVerificationApiHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(VERIFICATION_API_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // Timeout (AbortError) or a network failure — the check never ran, so
+      // reset progress and let the user retry rather than marking REJECTED.
+      console.error("Verification service call did not complete:", error);
+      return respondServiceUnavailable();
+    }
 
     const externalJson = await externalResponse.json().catch(() => null);
 
