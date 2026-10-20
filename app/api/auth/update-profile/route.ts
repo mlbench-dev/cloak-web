@@ -55,7 +55,16 @@ export async function POST(request: Request) {
 
     if (typeof profileImage === "string") updateData.profileImage = profileImage;
     if (typeof image === "string") updateData.image = image;
-    if (typeof name === "string") updateData.name = name.slice(0, MAX_NAME_LENGTH);
+    if (name !== undefined && name !== null) {
+      const trimmedName = typeof name === "string" ? name.trim() : "";
+      if (!trimmedName) {
+        return NextResponse.json(
+          { error: "Display name can't be empty." },
+          { status: 400 },
+        );
+      }
+      updateData.name = trimmedName.slice(0, MAX_NAME_LENGTH);
+    }
 
     // Check for username uniqueness if being updated. Stored usernames are
     // always lowercase (above), so an exact match on the normalized value is
