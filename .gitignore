@@ -103,8 +103,6 @@ dist-ssr
 .vite
 branch_structure.json
 
-# Sentry Config File
-.env.sentry-build-plugin
 
 appflow.md
 memory.md

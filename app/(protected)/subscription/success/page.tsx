@@ -38,17 +38,10 @@ export default function SubscriptionSuccessPage() {
             checkout, so it must not stay reachable via back. */}
         <button
           type="button"
-          onClick={() => router.replace("/dashboard")}
+          onClick={() => router.replace("/subscription?checkout=success")}
           className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
         >
-          Go to Dashboard
-        </button>
-        <button
-          type="button"
-          onClick={() => router.replace("/subscription?checkout=success")}
-          className="mt-3 w-full max-w-[280px] rounded-full bg-[#F6F6F6] px-4 py-2.5 text-[16px] font-medium text-[#2B2B2B]"
-        >
-          View Subscription
+          Back to Subscription
         </button>
       </div>
     </SubscriptionScreenShell>

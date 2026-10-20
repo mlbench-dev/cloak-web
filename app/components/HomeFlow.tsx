@@ -561,7 +561,6 @@ function HomeFlowContent() {
         onContinueToDashboard={() => router.replace("/dashboard")}
         error={error}
         status={user?.identityVerificationStatus}
-        showSkip={false}
         isLoading={isLoading}
         draftScopeKey={user?.id || userId}
       />

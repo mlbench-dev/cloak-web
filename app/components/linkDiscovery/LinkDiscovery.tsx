@@ -45,6 +45,9 @@ export type ScrapeStatus = {
   linkCount: number;
   finishedCount: number;
   failedCount: number;
+  postsFetched: number;
+  // Per link uuid; links with no posts saved this run aren't listed.
+  postsByLink: Record<string, number>;
 };
 
 // Mirrors lib/fetchLinks.ts — the server decides what's missing.
@@ -384,6 +387,10 @@ export function ScrapingPostsScreen({
         {
           label: "Links Scanned",
           value: scrape && scrape.linkCount > 0 ? `${scrape.finishedCount} / ${scrape.linkCount}` : "—",
+        },
+        {
+          label: "Posts Fetched",
+          value: scrape && scrape.finishedCount > 0 ? scrape.postsFetched : "—",
         },
         ...(scrape && scrape.failedCount > 0
           ? [{ label: "Couldn't Scrape", value: scrape.failedCount }]

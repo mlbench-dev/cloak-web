@@ -39,6 +39,21 @@ function dayLabel(iso: string | null): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// Day headers are the scrape date — with "Scraped" in front, since each
+// row underneath shows the post's own publish date.
+function scrapedDayLabel(iso: string | null): string {
+  const label = dayLabel(iso);
+  return /^(Today|Yesterday|Earlier)$/.test(label)
+    ? `Scraped ${label.toLowerCase()}`
+    : `Scraped ${label}`;
+}
+
+function startOfDayTime(iso: string | null): number {
+  if (!iso) return 0;
+  const date = new Date(iso);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
 function formatDate(iso: string | null): string {
   return iso
     ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -110,9 +125,14 @@ export default function LinkPostsPage() {
     };
   }, [linkUrl]);
 
-  const filteredPosts =
-    activeTab === "All" ? posts : posts.filter((post) => post.status === activeTab);
-  const groups = Array.from(new Set(filteredPosts.map((post) => dayLabel(post.publishedAt))));
+  // Newest scrape day first; within a day the server's order (newest post
+  // first) is kept, since sort is stable.
+  const filteredPosts = (
+    activeTab === "All" ? posts : posts.filter((post) => post.status === activeTab)
+  )
+    .slice()
+    .sort((a, b) => startOfDayTime(b.scrapedAt) - startOfDayTime(a.scrapedAt));
+  const groups = Array.from(new Set(filteredPosts.map((post) => scrapedDayLabel(post.scrapedAt))));
 
   return (
     <div className="flex h-full flex-col bg-white font-sf-pro-display">
@@ -190,7 +210,7 @@ export default function LinkPostsPage() {
               <p className="mb-2 text-[14px] leading-5 text-[#839297]">{group}</p>
               <div className="space-y-3">
                 {filteredPosts
-                  .filter((post) => dayLabel(post.publishedAt) === group)
+                  .filter((post) => scrapedDayLabel(post.scrapedAt) === group)
                   .map((post) => (
                     <PostRow key={post.id} linkId={params.id} post={post} />
                   ))}
