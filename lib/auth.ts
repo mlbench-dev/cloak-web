@@ -80,10 +80,11 @@ export const authOptions: NextAuthOptions = {
               googleId: user.id,
             };
 
-            // Prioritize existing DB data
+            // Prioritize existing DB data. An empty image means the user
+            // removed their photo — don't bring the Google one back.
             updatedData.name = existingUser.name || user.name;
             updatedData.image =
-              existingUser.image || existingUser.profileImage || user.image;
+              existingUser.image ?? existingUser.profileImage ?? user.image;
 
             await db
               .collection("users")
@@ -147,7 +148,8 @@ export const authOptions: NextAuthOptions = {
 
       if (trigger === "update") {
         if (session?.username) token.username = session.username;
-        if (session?.image) token.image = session.image;
+        // "" (photo removed) must clear it too, so check for presence.
+        if (session?.image !== undefined) token.image = session.image || null;
         if (session?.name) token.name = session.name;
         if (session?.identityVerificationStatus)
           token.identityVerificationStatus = session.identityVerificationStatus;
@@ -184,8 +186,7 @@ export const authOptions: NextAuthOptions = {
             token.documentType = userFromDb.documentType || null;
             token.role = userFromDb.role || "USER";
             token.plan = userFromDb.plan || "FREEMIUM";
-            token.image =
-              userFromDb.image || userFromDb.profileImage || token.image;
+            token.image = userFromDb.image || userFromDb.profileImage || null;
             token.name = userFromDb.name || token.name;
             token.email = userFromDb.email || token.email;
           }

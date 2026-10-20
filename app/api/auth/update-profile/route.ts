@@ -17,9 +17,19 @@ export async function POST(request: Request) {
       updatedAt: new Date(),
     };
     if (username) updateData.username = username;
-    if (profileImage) updateData.profileImage = profileImage;
-    if (image) updateData.image = image;
-    if (name) updateData.name = String(name).slice(0, 30);
+    // "" is allowed for the images — it clears the photo (Remove Photo).
+    if (typeof profileImage === "string") updateData.profileImage = profileImage;
+    if (typeof image === "string") updateData.image = image;
+    if (name !== undefined && name !== null) {
+      const trimmedName = typeof name === "string" ? name.trim() : "";
+      if (!trimmedName) {
+        return NextResponse.json(
+          { error: "Display name can't be empty." },
+          { status: 400 },
+        );
+      }
+      updateData.name = trimmedName.slice(0, 30);
+    }
 
     // Check for username uniqueness if being updated
     if (username) {

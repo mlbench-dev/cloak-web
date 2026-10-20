@@ -1,4 +1,4 @@
-"use client";
+e client";
 
 import Link from "next/link";
 import {
@@ -65,11 +65,17 @@ export function SubscriptionScreenShell({
   );
 }
 
-export function SubscriptionHeader() {
+// `backHref` replaces history-based back after a PayFast checkout — history
+// there leads back into PayFast / the success screen (a loop).
+export function SubscriptionHeader({ backHref }: { backHref?: string } = {}) {
   const router = useRouter();
   return (
     <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
-      <button onClick={() => router.push("/profile")} className="p-2">
+      <button
+        type="button"
+        onClick={() => (backHref ? router.replace(backHref) : router.push("/profile"))}
+        className="p-2"
+      >
         <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
       </button>
       <h1 className="text-[16px] font-medium text-[#2B2B2B]">Subscription</h1>
