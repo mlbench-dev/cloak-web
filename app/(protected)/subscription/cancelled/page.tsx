@@ -14,7 +14,7 @@ export default function SubscriptionCancelledPage() {
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader />
+      <SubscriptionHeader backHref="/profile" />
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#F05B5B]/10">
           <XCircle className="h-8 w-8 text-[#F05B5B]" />
@@ -25,7 +25,7 @@ export default function SubscriptionCancelledPage() {
         </p>
         <button
           type="button"
-          onClick={() => router.push("/subscription")}
+          onClick={() => router.replace("/subscription?checkout=cancelled")}
           className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
         >
           Back to Subscription

@@ -31,6 +31,11 @@ import {
 
 export default function SubscriptionPage() {
   const searchParams = useSearchParams();
+  // Arrived back from PayFast (success or cancel) — history behind this
+  // page is the checkout, so back goes to Profile instead. Captured once,
+  // since the param is stripped below.
+  const [cameFromCheckout] = useState(() => searchParams.has("checkout"));
+  const backHref = cameFromCheckout ? "/profile" : undefined;
   const [activeModal, setActiveModal] = useState<PlanSlug | null>(null);
   const [pendingUpgrade, setPendingUpgrade] = useState<PlanSlug | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -69,11 +74,14 @@ export default function SubscriptionPage() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("checkout") !== "cancelled") return;
+    const checkout = searchParams.get("checkout");
+    if (!checkout) return;
 
-    toast.error("Checkout cancelled. No payment was made.", {
-      id: "checkout-cancelled",
-    });
+    if (checkout === "cancelled") {
+      toast.error("Checkout cancelled. No payment was made.", {
+        id: "checkout-cancelled",
+      });
+    }
     window.history.replaceState(null, "", "/subscription");
   }, [searchParams]);
 
@@ -116,7 +124,7 @@ export default function SubscriptionPage() {
   if (loading) {
     return (
       <SubscriptionScreenShell>
-        <SubscriptionHeader />
+        <SubscriptionHeader backHref={backHref} />
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
         </div>
@@ -133,7 +141,7 @@ export default function SubscriptionPage() {
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader />
+      <SubscriptionHeader backHref={backHref} />
 
       <div className="custom-scrollbar flex flex-1 flex-col overflow-y-auto px-5 py-4">
         <SectionLabel>Current Plan</SectionLabel>

@@ -45,6 +45,7 @@ const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
 
 const MAX_DISPLAY_NAME_LENGTH = 30;
+const PLACEHOLDER_AVATAR = "/images/placeholder_avatar.png";
 
 type ProfileView =
   | "main"
@@ -71,6 +72,8 @@ export default function ProfilePage() {
   const [pendingProfileImageFile, setPendingProfileImageFile] =
     useState<File | null>(null);
   const [pendingProfileImageUrl, setPendingProfileImageUrl] = useState("");
+  // "Remove Photo" was picked — saved as an empty image on Save Changes.
+  const [pendingPhotoRemoval, setPendingPhotoRemoval] = useState(false);
   const [profileCropImageSrc, setProfileCropImageSrc] = useState<string | null>(
     null,
   );
@@ -105,9 +108,14 @@ export default function ProfilePage() {
     user?.username || user?.name?.split(" ")[0].toLowerCase() || "user";
   const email = user?.email || "";
   // Placeholder only once the session user is known to have no image.
+  const hasProfilePhoto = Boolean(user?.image || user?.profileImage);
   const profileImage = user
-    ? user.image || user.profileImage || "/images/placeholder_avatar.png"
+    ? user.image || user.profileImage || PLACEHOLDER_AVATAR
     : undefined;
+  // What Edit Profile shows: a picked photo, the default after "Remove
+  // Photo", or the saved one.
+  const editPreviewImage =
+    pendingProfileImageUrl || (pendingPhotoRemoval ? PLACEHOLDER_AVATAR : profileImage);
   const isVerified =
     user?.identityVerificationStatus === "APPROVED" ||
     user?.isVerified ||
@@ -137,7 +145,11 @@ export default function ProfilePage() {
   // name and a pending new avatar can actually make the form dirty.
   const isProfileEditDirty =
     editData.displayName !== (user?.name || "") ||
-    pendingProfileImageFile !== null;
+    pendingProfileImageFile !== null ||
+    pendingPhotoRemoval;
+
+  // Display name is required — saving a blank one used to be allowed.
+  const isDisplayNameEmpty = editData.displayName.trim() === "";
 
   const exitEditProfile = () => router.push("/profile");
 
@@ -150,6 +162,7 @@ export default function ProfilePage() {
     }
     setPendingProfileImageFile(null);
     setPendingProfileImageUrl("");
+    setPendingPhotoRemoval(false);
     setEditData({ username, displayName: user?.name || "", email });
     exitEditProfile();
   };
@@ -438,6 +451,7 @@ export default function ProfilePage() {
       const previewUrl = URL.createObjectURL(croppedFile);
       setPendingProfileImageFile(croppedFile);
       setPendingProfileImageUrl(previewUrl);
+      setPendingPhotoRemoval(false);
       setProfileCropImageSrc(null);
       setProfileCrop({ x: 0, y: 0 });
       setProfileZoom(1);
@@ -481,10 +495,17 @@ export default function ProfilePage() {
   };
 
   const handleEditProfile = async () => {
+    if (isDisplayNameEmpty) {
+      toast.error("Display name can't be empty.");
+      return;
+    }
     try {
+      // "" clears the saved photo (both fields) so the default shows.
       let nextImage = pendingProfileImageFile
         ? undefined
-        : user?.image || user?.profileImage;
+        : pendingPhotoRemoval
+          ? ""
+          : user?.image || user?.profileImage;
 
       if (pendingProfileImageFile) {
         setIsUploading(true);
@@ -513,14 +534,17 @@ export default function ProfilePage() {
         body: JSON.stringify({
           userId: user.id,
           username: editData.username,
-          name: editData.displayName,
+          name: editData.displayName.trim(),
           image: nextImage,
+          ...(pendingPhotoRemoval && !pendingProfileImageFile
+            ? { profileImage: "" }
+            : {}),
         }),
       });
       if (response.ok) {
         await update({
           username: editData.username,
-          name: editData.displayName,
+          name: editData.displayName.trim(),
           image: nextImage,
         });
         toast.success("Profile updated successfully.");
@@ -529,6 +553,7 @@ export default function ProfilePage() {
         }
         setPendingProfileImageFile(null);
         setPendingProfileImageUrl("");
+        setPendingPhotoRemoval(false);
         router.replace("/profile?view=edit");
       } else {
         const data = await response.json().catch(() => ({}));
@@ -920,9 +945,9 @@ export default function ProfilePage() {
                 {imageLoading && !profileImage && (
                   <UserIcon className="h-16 w-16 text-gray-400" />
                 )}
-                {(pendingProfileImageUrl || profileImage) && (
+                {editPreviewImage && (
                   <Image
-                    src={pendingProfileImageUrl || profileImage}
+                    src={editPreviewImage}
                     alt="Profile"
                     fill
                     className="object-cover"
@@ -981,9 +1006,14 @@ export default function ProfilePage() {
                 maxLength={MAX_DISPLAY_NAME_LENGTH}
                 className="h-10 w-full rounded-full bg-[#F6F6F6] px-[17px] text-base text-[#2B2B2B] outline-none focus:ring-2 focus:ring-[#14C3CF]/20"
               />
-              <p className="mt-1 text-right text-[12px] leading-4 text-[#839297]">
-                {editData.displayName.length}/{MAX_DISPLAY_NAME_LENGTH}
-              </p>
+              <div className="mt-1 flex items-start justify-between gap-2 text-[12px] leading-4">
+                <span className="text-red-500">
+                  {isDisplayNameEmpty ? "Display name can't be empty." : ""}
+                </span>
+                <span className="shrink-0 text-[#839297]">
+                  {editData.displayName.length}/{MAX_DISPLAY_NAME_LENGTH}
+                </span>
+              </div>
             </div>
             <div>
               <label className="mb-[5px] block text-[14px] leading-5 text-[#2B2B2B]">
@@ -1003,7 +1033,7 @@ export default function ProfilePage() {
         <div className="shrink-0 bg-white pt-3">
           <button
             onClick={handleEditProfile}
-            disabled={isUploading || !isProfileEditDirty}
+            disabled={isUploading || !isProfileEditDirty || isDisplayNameEmpty}
             className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#01C3CF] text-[14px] text-white transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isUploading ? (
@@ -1090,6 +1120,25 @@ export default function ProfilePage() {
               >
                 Upload From Device
               </button>
+              {(pendingProfileImageFile ||
+                (hasProfilePhoto && !pendingPhotoRemoval)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Back to the default image; saved on Save Changes.
+                    if (pendingProfileImageUrl) {
+                      URL.revokeObjectURL(pendingProfileImageUrl);
+                    }
+                    setPendingProfileImageFile(null);
+                    setPendingProfileImageUrl("");
+                    setPendingPhotoRemoval(hasProfilePhoto);
+                    setShowPhotoSourceModal(false);
+                  }}
+                  className="flex h-[45px] w-full items-center justify-center rounded-full bg-[#FFE5E5] text-[14px] text-[#F30131]"
+                >
+                  Remove Photo
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPhotoSourceModal(false)}
