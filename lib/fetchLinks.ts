@@ -340,6 +340,10 @@ export type ScrapeStatus = {
   // Links that reached complete/failed so far.
   finishedCount: number;
   failedCount: number;
+  // Posts saved during this run (scrapedAt after it started), in total and
+  // per link uuid — links with none aren't listed.
+  postsFetched: number;
+  postsByLink: Record<string, number>;
 };
 
 function isStale(job: { status: string; startedAt: Date }): boolean {
@@ -605,9 +609,14 @@ function summarizeRun(job: ScrapeJob, runLinks: RunLink[]) {
   return { total, finished, failed, allDone: total > 0 && finished === total };
 }
 
-// Posts the CV API saved for this run's links since it started (each
-// scraped post carries scrapedAt; already-saved posts are skipped by them).
-async function countPostsSavedSince(db: Db, userId: ObjectId, job: ScrapeJob): Promise<number> {
+// Posts the CV API saved for this run's links since it started, as unique
+// post URLs per link uuid (each scraped post carries scrapedAt;
+// already-saved posts are skipped by them).
+async function postsSavedSinceByLink(
+  db: Db,
+  userId: ObjectId,
+  job: ScrapeJob,
+): Promise<Map<string, Set<string>>> {
   const doc = await db
     .collection<{ scrapingResults?: { uuid?: string; url?: string; scrapedAt?: string | Date }[] }>(
       "scrapingUrl",
@@ -615,18 +624,19 @@ async function countPostsSavedSince(db: Db, userId: ObjectId, job: ScrapeJob): P
     .findOne({ userId }, { projection: { "scrapingResults.uuid": 1, "scrapingResults.url": 1, "scrapingResults.scrapedAt": 1 } });
   const runUuids = new Set(job.links.map((link) => link.uuid));
   const since = new Date(job.startedAt).getTime();
-  const fresh = new Set(
-    (doc?.scrapingResults ?? [])
-      .filter(
-        (post) =>
-          post.uuid &&
-          runUuids.has(post.uuid) &&
-          post.scrapedAt &&
-          new Date(post.scrapedAt).getTime() >= since,
-      )
-      .map((post) => post.url),
-  );
-  return fresh.size;
+  const byLink = new Map<string, Set<string>>();
+  for (const post of doc?.scrapingResults ?? []) {
+    if (!post.uuid || !post.url || !runUuids.has(post.uuid)) continue;
+    if (!post.scrapedAt || new Date(post.scrapedAt).getTime() < since) continue;
+    if (!byLink.has(post.uuid)) byLink.set(post.uuid, new Set());
+    byLink.get(post.uuid)!.add(post.url);
+  }
+  return byLink;
+}
+
+async function countPostsSavedSince(db: Db, userId: ObjectId, job: ScrapeJob): Promise<number> {
+  const byLink = await postsSavedSinceByLink(db, userId, job);
+  return new Set(Array.from(byLink.values()).flatMap((urls) => Array.from(urls))).size;
 }
 
 // Closes the run once every queued link has finished: marks it done and
@@ -694,6 +704,8 @@ export async function getScrapeStatus(
       linkCount: 0,
       finishedCount: 0,
       failedCount: 0,
+      postsFetched: 0,
+      postsByLink: {},
     };
   }
 
@@ -713,6 +725,13 @@ export async function getScrapeStatus(
     }
   }
 
+  const postsByLink: Record<string, number> = {};
+  if (current.links.length > 0) {
+    for (const [uuid, urls] of await postsSavedSinceByLink(db, userId, current)) {
+      postsByLink[uuid] = urls.size;
+    }
+  }
+
   return {
     status: current.status,
     startedAt: new Date(current.startedAt).toISOString(),
@@ -721,6 +740,8 @@ export async function getScrapeStatus(
     linkCount: summary.total,
     finishedCount: summary.finished,
     failedCount: summary.failed,
+    postsFetched: Object.values(postsByLink).reduce((sum, count) => sum + count, 0),
+    postsByLink,
   };
 }
 

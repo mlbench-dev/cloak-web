@@ -7,6 +7,8 @@ import { Check, X } from "lucide-react";
 type CropModalProps = {
   imageSrc: string;
   aspect?: number;
+  // Restores the previous crop when re-cropping an image.
+  initialCroppedAreaPixels?: Area;
   onCancel: () => void;
   onConfirmCrop: (pixels: Area) => void;
 };
@@ -14,6 +16,7 @@ type CropModalProps = {
 export function CropModal({
   imageSrc,
   aspect = 1,
+  initialCroppedAreaPixels,
   onCancel,
   onConfirmCrop,
 }: CropModalProps) {
@@ -33,6 +36,7 @@ export function CropModal({
           crop={crop}
           zoom={zoom}
           aspect={aspect}
+          initialCroppedAreaPixels={initialCroppedAreaPixels}
           onCropChange={setCrop}
           onZoomChange={setZoom}
           onCropComplete={handleCropComplete}

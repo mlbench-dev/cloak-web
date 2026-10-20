@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -24,9 +23,6 @@ export function generateMetadata(): Metadata {
       capable: true,
       statusBarStyle: "default",
       title: "CLOAK",
-    },
-    other: {
-      ...Sentry.getTraceData(),
     },
   };
 }

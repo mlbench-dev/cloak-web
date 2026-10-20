@@ -648,11 +648,16 @@ export default function IdentityVerificationStep({
             </div>
           </div>
           <div className="w-full pt-6 flex gap-3 shrink-0">
-            {/* {showSkip && (
-              <button onClick={onSkip} className="flex-1 h-14 rounded-full bg-[#ECECEC] text-[16px] font-medium text-[#2D2D2D]">
+            {showSkip && (
+              <button
+                type="button"
+                onClick={onSkip}
+                disabled={isLoading}
+                className="flex-1 h-12 rounded-full bg-[#ECECEC] text-[16px] font-medium text-[#2D2D2D] hover:bg-[#E0E0E0] transition-colors disabled:opacity-60"
+              >
                 Skip
               </button>
-            )} */}
+            )}
             <button
               onClick={handleSubmit}
               disabled={isLoading}

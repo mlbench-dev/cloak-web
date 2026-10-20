@@ -472,7 +472,11 @@ export default function IncidentsPage() {
                       {subjectName || ""}
                     </p>
                   </div>
-                  <LinkProgress link={link} scrapeRunning={scrapeState === "running"} />
+                  <LinkProgress
+                    link={link}
+                    scrapeRunning={scrapeState === "running"}
+                    postsFetched={linkFetch?.scrape.postsByLink[link.uuid] ?? 0}
+                  />
                   <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />
                 </div>
               );
@@ -573,9 +577,12 @@ export default function IncidentsPage() {
 function LinkProgress({
   link,
   scrapeRunning,
+  postsFetched,
 }: {
   link: WatchedLinkSummary;
   scrapeRunning: boolean;
+  // Posts saved for this link during the current run.
+  postsFetched: number;
 }) {
   if (scrapeRunning && (link.scrapeStatus === "in_progress" || link.scrapeStatus === "queued")) {
     const active = link.scrapeStatus === "in_progress";
@@ -594,7 +601,12 @@ function LinkProgress({
     return (
       <span className="flex shrink-0 items-center gap-1.5 text-[11px] leading-4 text-[#14C3CF]">
         <span className="h-4 w-4 rounded-full border-2 border-[#14C3CF]" />
-        Completed
+        <span>
+          Completed
+          <span className="block text-[10px] text-[#839297]">
+            {postsFetched} post{postsFetched === 1 ? "" : "s"}
+          </span>
+        </span>
       </span>
     );
   }

@@ -17,7 +17,7 @@ export const maxDuration = 60;
 // Abort the external verification call a little before `maxDuration` so the
 // route stays in control of the response (reset progress, return a clear
 // "try again") instead of being killed mid-request by the platform (CW-001).
-const VERIFICATION_API_TIMEOUT_MS = 50_000;
+const VERIFICATION_API_TIMEOUT_MS = 90_000;
 
 // Takes only the first line of an env var, then trims it — Secret Manager
 // values pasted from a .env file sometimes carry an extra newline plus a
