@@ -167,7 +167,7 @@ export function ReportFilterPills({
   getCount: (filter: ReportFilter) => number;
 }) {
   return (
-    <div className="flex flex-nowrap gap-1.5 overflow-x-auto no-scrollbar">
+    <div className="flex gap-1.5">
       {REPORT_FILTERS.map((filter) => {
         const isActive = active === filter.id;
         return (
@@ -175,7 +175,7 @@ export function ReportFilterPills({
             key={filter.id}
             type="button"
             onClick={() => onChange(filter.id)}
-            className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[12px] leading-4 transition-colors ${
+            className={`min-w-0 flex-auto truncate rounded-full px-2 py-2 text-[12px] leading-4 transition-colors ${
               isActive ? "bg-[#14C3CF] text-white" : "bg-[#F5F5F5] text-[#2B2B2B]"
             }`}
           >

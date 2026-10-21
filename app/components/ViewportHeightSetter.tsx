@@ -8,6 +8,12 @@ export default function ViewportHeightSetter() {
     const setHeight = () => {
       const height = window.visualViewport?.height ?? window.innerHeight;
       document.documentElement.style.setProperty("--app-height", `${height}px`);
+      // iOS Safari doesn't shrink the page when the keyboard opens — it
+      // scrolls it to keep the input visible. The app shrinks to the visible
+      // height above, so it must also move down by that scroll, or the body
+      // background shows as a gap between the app and the keyboard.
+      const top = Math.max(0, window.visualViewport?.pageTop ?? 0);
+      document.documentElement.style.setProperty("--app-top", `${top}px`);
     };
 
     setHeight();
