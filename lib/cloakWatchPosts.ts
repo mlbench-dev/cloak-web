@@ -38,7 +38,7 @@ export type CloakWatchPost = {
   publishedAt: string | null;
   scrapedAt: string | null;
   // 0–100, from the CV API's matchingscore (0–1).
-  matchPercent: number;
+  matchPercent: number | null;
   matchLevel: string | null;
   sentiment: string | null;
   sentimentPercent: number | null;
@@ -126,7 +126,7 @@ export async function getLinkPosts(
       url: post.url as string,
       publishedAt: toIso(post.publishedAt),
       scrapedAt: toIso(post.scrapedAt),
-      matchPercent: toPercent(post.matchingscore) ?? 0,
+      matchPercent: toPercent(post.matchingscore),
       matchLevel: post.matchinglevel ?? null,
       sentiment: post.sentiment ?? null,
       sentimentPercent: toPercent(post.sentimentscore),

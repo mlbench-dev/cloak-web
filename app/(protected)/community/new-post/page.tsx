@@ -298,16 +298,18 @@ export default function NewPostPage() {
             <div>
               <div className="flex items-center gap-1">
                 <p className="text-[15px] font-medium text-[#2D2D2D]">
-                  {session?.user?.username || "harry67"}
+                  {session?.user?.username}
                 </p>
                 {(session?.user as any)?.identityVerificationStatus ===
                   "APPROVED" && (
                   <VerifiedBadge className="h-4 w-4 text-[#14C3CF]" />
                 )}
               </div>
-              <p className="text-[13px] text-[#98A0A7]">
-                {session?.user?.name || "Harry"}
-              </p>
+              {session?.user?.name && (
+                <p className="text-[13px] text-[#98A0A7]">
+                  {session.user.name}
+                </p>
+              )}
             </div>
           </div>
 
@@ -388,13 +390,19 @@ export default function NewPostPage() {
             </div>
           )}
 
-          <div className="rounded-[18px] bg-[#F3F3F3] px-4 py-3">
+          {/* A post needs media, so the description unlocks once some is added. */}
+          <div
+            className={`rounded-[18px] bg-[#F3F3F3] px-4 py-3 transition-opacity ${
+              media.length === 0 ? "opacity-60" : ""
+            }`}
+          >
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value.slice(0, 200))}
-              placeholder="Add a description..."
+              placeholder={media.length === 0 ? "Add media to write a description" : "Add a description..."}
               rows={3}
-              className="w-full resize-none bg-transparent text-[14px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7]"
+              disabled={media.length === 0}
+              className="w-full resize-none bg-transparent text-[14px] text-[#2D2D2D] outline-none placeholder:text-[#98A0A7] disabled:cursor-not-allowed"
             />
             <div className="flex justify-end text-[12px] text-[#98A0A7]">
               {description.length}/200

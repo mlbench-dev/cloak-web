@@ -263,8 +263,8 @@ export default function AlertsPage() {
       <div className="flex-1 min-h-0 overflow-y-auto bg-white no-scrollbar">
         <div className="w-full pb-[max(env(safe-area-inset-bottom),1.5rem)]">
           <section>
-            <div className="overflow-x-auto no-scrollbar">
-              <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
+            <div>
+              <div className="flex items-center gap-2">
                 {filters.map((filter) => {
                   const isActive = activeFilter === filter;
 
@@ -273,7 +273,7 @@ export default function AlertsPage() {
                       key={filter}
                       type="button"
                       onClick={() => setActiveFilter(filter)}
-                      className={`h-[30px] min-w-[68px] shrink-0 whitespace-nowrap rounded-full px-2.5 text-[14px] transition-all ${
+                      className={`h-[30px] min-w-0 flex-auto truncate rounded-full px-2 text-[14px] transition-all ${
                         isActive
                           ? "bg-[#01C3CF] text-white"
                           : "bg-[#F6F6F6] text-[#2B2B2B]"

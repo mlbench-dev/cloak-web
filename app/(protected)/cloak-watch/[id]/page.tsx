@@ -181,21 +181,19 @@ export default function LinkPostsPage() {
           </div>
         )}
 
-        <div className="mt-4 overflow-x-auto no-scrollbar">
-          <div className="flex w-max min-w-full flex-nowrap items-center gap-2">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`h-[30px] shrink-0 whitespace-nowrap rounded-full px-5 text-[14px] transition-all ${
-                  activeTab === tab ? "bg-[#01C3CF] text-white" : "bg-[#F6F6F6] text-[#2A2A2A]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        <div className="mt-4 flex items-center gap-2">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`h-[30px] min-w-0 flex-auto truncate rounded-full px-2 text-[14px] transition-all ${
+                activeTab === tab ? "bg-[#01C3CF] text-white" : "bg-[#F6F6F6] text-[#2A2A2A]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
 
         {loading ? (

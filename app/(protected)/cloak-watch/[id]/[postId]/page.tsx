@@ -295,6 +295,24 @@ export default function PostDetailPage() {
             ))}
         </div>
 
+        {/* The CV API's matchingscore (0–1). */}
+        <div className="mt-4 rounded-[20px] bg-[#E5F9FA] px-4 pb-4 pt-4">
+          <p className="text-[16px] leading-[22px] text-[#2A2A28]">
+            {post.matchPercent != null
+              ? `${post.matchPercent}% Match Score`
+              : "Match Score unavailable"}
+          </p>
+          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#E3E3E3]">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#14C3CF] to-[#2BD9E4]"
+              style={{ width: `${post.matchPercent ?? 0}%` }}
+            />
+          </div>
+          <p className="mt-2 text-[12px] leading-4 text-[#829194]">
+            How closely faces here match your reference photos. Higher means more likely you.
+          </p>
+        </div>
+
         {/* The CV API's attentionscore (0–1). Older scrapes don't have one. */}
         <div className="mt-4 rounded-[20px] bg-[#E5F9FA] px-4 pb-4 pt-4">
           <p className="text-[16px] leading-[22px] text-[#2A2A28]">
@@ -308,6 +326,9 @@ export default function PostDetailPage() {
               style={{ width: `${post.attentionPercent ?? 0}%` }}
             />
           </div>
+          <p className="mt-2 text-[12px] leading-4 text-[#829194]">
+            How much this post may need your attention. Highest when it&apos;s negative about you.
+          </p>
         </div>
 
         <div className="mt-4 rounded-[20px] border border-[#E1E1E1] bg-white px-4 pb-3 pt-3.5">

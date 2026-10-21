@@ -399,6 +399,9 @@ export default function IdentityProfilePage() {
             }))
           }
         />
+        <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
+          Only public profiles can be monitored. Private accounts can&apos;t be added.
+        </p>
         {linkAllowance && savedLinks.length > 0 && (
           <p className="mt-1.5 text-[11px] leading-4 text-[#839297]">
             {linkAllowance.changesPerWindow === 0
