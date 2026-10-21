@@ -70,6 +70,17 @@ body {
   background: #CBD5E1;
 }
 
+/* Hide scrollbars app-wide (content stays scrollable). Windows browsers
+   otherwise render a classic scrollbar on every overflow container. */
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
