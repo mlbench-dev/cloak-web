@@ -12,11 +12,13 @@ import {
   type FetchUrlDoc,
   type ScrapeJob,
 } from "@/lib/fetchLinks";
+import { getReviewedPostIds, postIdFor } from "@/lib/cloakWatchPosts";
 
 // Real numbers for the dashboard's scan card, stat tiles and activity rows.
 
 // One post the CV scraper saved (scrapingUrl.scrapingResults).
 type ScrapedPost = {
+  url?: string;
   matchinglevel?: string;
   matchingscore?: number;
   scrapedAt?: string | Date;
@@ -41,7 +43,7 @@ export async function GET() {
     const db = await getDb();
     const userId = new ObjectId(session.user.id);
 
-    const [plan, user, scraped, pendingReports, manualScan, fetchUrlDoc] = await Promise.all([
+    const [plan, user, scraped, pendingReports, manualScan, fetchUrlDoc, reviewedPostIds] = await Promise.all([
       resolveUserPlan(db, userId),
       db
         .collection<{ scrapeJob?: ScrapeJob }>("users")
@@ -50,7 +52,7 @@ export async function GET() {
         .collection<{ scrapingResults?: ScrapedPost[]; updatedAt?: Date }>("scrapingUrl")
         .findOne(
           { userId },
-          { projection: { updatedAt: 1, "scrapingResults.matchinglevel": 1, "scrapingResults.matchingscore": 1, "scrapingResults.scrapedAt": 1 } },
+          { projection: { updatedAt: 1, "scrapingResults.url": 1, "scrapingResults.matchinglevel": 1, "scrapingResults.matchingscore": 1, "scrapingResults.scrapedAt": 1 } },
         ),
       // Reports other users filed against this user, still to be decided.
       db.collection("reports").countDocuments({ targetUserId: userId, status: "PENDING" }),
@@ -59,6 +61,8 @@ export async function GET() {
       getManualScanState(db, userId),
       // URLs Detected = the user's watched links (was /api/scan-results).
       db.collection<FetchUrlDoc>(FETCH_URL_COLLECTION).findOne({ userId }, { projection: { links: 1, urls: 1 } }),
+      // Confirmed/rejected posts aren't "New" any more.
+      getReviewedPostIds(db, userId),
     ]);
 
     // Last scan = the latest scrape: when it finished (or started, if it's
@@ -86,8 +90,14 @@ export async function GET() {
 
     const matches = (scraped?.scrapingResults ?? []).filter(isMatch);
     const weekAgo = Date.now() - WEEK_MS;
-    const matchesThisWeek = matches.filter(
+    const thisWeek = matches.filter(
       (post) => post.scrapedAt && new Date(post.scrapedAt).getTime() >= weekAgo,
+    );
+    const matchesThisWeek = thisWeek.length;
+    // Cloak Watch's "New": this week's matches the user hasn't confirmed or
+    // rejected yet.
+    const newMatches = thisWeek.filter(
+      (post) => !(post.url && reviewedPostIds.has(postIdFor(post.url))),
     ).length;
     const scores = matches
       .map((post) => post.matchingscore)
@@ -105,6 +115,7 @@ export async function GET() {
       nextScanAt,
       matches: matches.length,
       matchesThisWeek,
+      newMatches,
       avgMatchConfidence,
       pendingReports,
       manualScan,

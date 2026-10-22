@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { CheckCircle2 } from "lucide-react";
 import { SubscriptionHeader, SubscriptionScreenShell } from "../_components/SubscriptionUI";
@@ -14,7 +13,6 @@ import { useCheckoutBackGuard } from "../_lib/useCheckoutBackGuard";
 // dbRefreshedAt reset in lib/auth.ts's jwt() callback) and lets the user
 // head back in either case.
 export default function SubscriptionSuccessPage() {
-  const router = useRouter();
   const { update } = useSession();
   const [refreshed, setRefreshed] = useState(false);
   // Browser back from here would land on PayFast and loop back to this page.
@@ -38,10 +36,13 @@ export default function SubscriptionSuccessPage() {
             : "Confirming your payment..."}
         </p>
         {/* replace, not push: history behind this page is the PayFast
-            checkout, so it must not stay reachable via back. */}
+            checkout, so it must not stay reachable via back. A full load,
+            not router.replace: /subscription reads ?checkout= from the real
+            URL on first render, which a client-side navigation hasn't
+            updated yet — it would miss it and skip the back guard. */}
         <button
           type="button"
-          onClick={() => router.replace("/subscription?checkout=success")}
+          onClick={() => window.location.replace("/subscription?checkout=success")}
           className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
         >
           Back to Subscription
