@@ -31,6 +31,22 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+// The CV API's matchinglevel ("high level matching", "low level matching",
+// ...) as a short label and pill colours.
+function matchLevelBadge(level: string | null): { label: string; className: string } | null {
+  const word = level?.trim().split(/\s+/)[0]?.toLowerCase();
+  if (!word) return null;
+  const className =
+    word === "high"
+      ? "bg-[#1CCF84]/15 text-[#0E9F62]"
+      : word === "medium"
+        ? "bg-[#FFAD00]/15 text-[#B87A00]"
+        : word === "low"
+          ? "bg-[#EDEDED] text-[#829194]"
+          : "bg-white text-[#14C3CF]";
+  return { label: capitalize(word), className };
+}
+
 interface LinkPreview {
   url: string;
   domain: string;
@@ -192,6 +208,7 @@ export default function PostDetailPage() {
     if (ok) await saveReview("Rejected");
   };
 
+  const matchLevel = matchLevelBadge(post.matchLevel);
   const analysis = [
     post.matchLevel ? `${capitalize(post.matchLevel)} with your identity.` : null,
     post.sentiment
@@ -295,18 +312,19 @@ export default function PostDetailPage() {
             ))}
         </div>
 
-        {/* The CV API's matchingscore (0–1). */}
+        {/* The CV API's matchinglevel. */}
         <div className="mt-4 rounded-[20px] bg-[#E5F9FA] px-4 pb-4 pt-4">
-          <p className="text-[16px] leading-[22px] text-[#2A2A28]">
-            {post.matchPercent != null
-              ? `${post.matchPercent}% Match Score`
-              : "Match Score unavailable"}
-          </p>
-          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#E3E3E3]">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#14C3CF] to-[#2BD9E4]"
-              style={{ width: `${post.matchPercent ?? 0}%` }}
-            />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[16px] leading-[22px] text-[#2A2A28]">Match Level</p>
+            {matchLevel ? (
+              <span
+                className={`rounded-full px-3 py-1 text-[13px] font-medium leading-4 ${matchLevel.className}`}
+              >
+                {matchLevel.label}
+              </span>
+            ) : (
+              <span className="text-[13px] leading-4 text-[#829194]">Unavailable</span>
+            )}
           </div>
           <p className="mt-2 text-[12px] leading-4 text-[#829194]">
             How closely faces here match your reference photos. Higher means more likely you.
