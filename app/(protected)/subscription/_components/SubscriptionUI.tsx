@@ -56,15 +56,22 @@ export function SubscriptionScreenShell({
   );
 }
 
-// `backHref` replaces history-based back after a PayFast checkout — history
-// there leads back into PayFast / the success screen (a loop).
-export function SubscriptionHeader({ backHref }: { backHref?: string } = {}) {
+// `onBack` / `backHref` replace history-based back after a PayFast checkout —
+// history there leads back into PayFast / the success screen (a loop).
+export function SubscriptionHeader({
+  backHref,
+  onBack,
+}: { backHref?: string; onBack?: () => void } = {}) {
   const router = useRouter();
   return (
     <header className="flex items-center justify-between px-4 py-4 bg-white z-10">
       <button
         type="button"
-        onClick={() => (backHref ? router.replace(backHref) : goBack(router, "/profile"))}
+        onClick={() => {
+          if (onBack) onBack();
+          else if (backHref) router.replace(backHref);
+          else goBack(router, "/profile");
+        }}
         className="p-2"
       >
         <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />

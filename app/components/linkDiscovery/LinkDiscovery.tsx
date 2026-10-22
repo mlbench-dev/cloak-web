@@ -126,8 +126,16 @@ export function useLinkFetchStatus() {
     return error;
   }, []);
 
-  // Re-runs the last scrape ("Try Again" on Scraping Posts).
+  // Re-runs the last scrape ("Try Again" on Scraping Posts). Starting can
+  // take a while (the CV API call), so `retrying` drives the button's
+  // loading state — and repeat taps meanwhile are ignored instead of
+  // hitting "already in progress".
+  const [retrying, setRetrying] = useState(false);
+  const retryingRef = useRef(false);
   const retryScrape = useCallback(async (): Promise<string | null> => {
+    if (retryingRef.current) return null;
+    retryingRef.current = true;
+    setRetrying(true);
     let error: string | null = null;
     try {
       const result = await readStatus(await fetch("/api/scrape", { method: "POST" }));
@@ -136,8 +144,12 @@ export function useLinkFetchStatus() {
     } catch {
       error = "Couldn't start scraping. Please try again.";
     }
+    // The server may have recorded a new failure — show the current state.
+    if (error) await refresh();
+    retryingRef.current = false;
+    if (mountedRef.current) setRetrying(false);
     return error;
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -179,7 +191,7 @@ export function useLinkFetchStatus() {
     if (mountedRef.current) setStatus(next);
   }, []);
 
-  return { status, startError, refresh, start, retryScrape, applyStatus };
+  return { status, startError, refresh, start, retryScrape, retrying, applyStatus };
 }
 
 function formatElapsed(totalSeconds: number): string {
@@ -217,6 +229,7 @@ function ProgressScreen({
   onBack,
   onOk,
   onRetry,
+  retrying = false,
 }: {
   state: ProgressState;
   startedAt: string | null;
@@ -227,6 +240,8 @@ function ProgressScreen({
   onBack: () => void;
   onOk: () => void;
   onRetry: () => void;
+  // Try Again was tapped and the restart request is still in flight.
+  retrying?: boolean;
 }) {
   const running = state === "running";
   const failed = state === "failed";
@@ -299,10 +314,13 @@ function ProgressScreen({
         <button
           type="button"
           onClick={failed ? onRetry : onOk}
-          disabled={running}
-          className="h-12 w-full rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
+          disabled={running || retrying}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#14C3CF] text-[16px] text-white disabled:opacity-50"
         >
-          {failed ? "Try Again" : "Ok"}
+          {retrying && (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          )}
+          {retrying ? "Retrying..." : failed ? "Try Again" : "Ok"}
         </button>
       </div>
     </div>
@@ -359,6 +377,7 @@ export function ScrapingPostsScreen({
   onBack,
   onOk,
   onRetry,
+  retrying = false,
 }: {
   scrape: ScrapeStatus | null;
   error?: string | null;
@@ -366,6 +385,7 @@ export function ScrapingPostsScreen({
   onBack: () => void;
   onOk: () => void;
   onRetry: () => void;
+  retrying?: boolean;
 }) {
   const state: ProgressState =
     error || scrape?.status === "failed" ? "failed" : scrape?.status === "done" ? "done" : "running";
@@ -399,6 +419,7 @@ export function ScrapingPostsScreen({
       onBack={onBack}
       onOk={onOk}
       onRetry={onRetry}
+      retrying={retrying}
     />
   );
 }

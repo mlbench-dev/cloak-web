@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import {
   ArrowDownToLine,
   BarChart3,
@@ -137,6 +138,7 @@ export default function DashboardPage() {
     status: linkFetch,
     refresh: refreshLinkFetch,
     retryScrape,
+    retrying: retryingScrape,
     applyStatus,
   } = useLinkFetchStatus();
   const scanning = linkFetch?.scrape.status === "running";
@@ -267,7 +269,10 @@ export default function DashboardPage() {
         <ScrapingPostsScreen
           scrape={linkFetch?.scrape ?? null}
           onBack={() => setShowScrapingOverlay(false)}
-          onRetry={() => void retryScrape()}
+          onRetry={() =>
+            void retryScrape().then((error) => error && toast.error(error, { id: "scrape-retry" }))
+          }
+          retrying={retryingScrape}
           onOk={() => router.push("/cloak-watch")}
         />
       )}

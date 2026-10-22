@@ -25,7 +25,7 @@ export default function LinkDiscoveryFlow({
   // The user rejected every suggested link ("None of these").
   onDismissedAll: () => void;
 }) {
-  const { status, startError, start, retryScrape, applyStatus } = useLinkFetchStatus();
+  const { status, startError, start, retryScrape, retrying, applyStatus } = useLinkFetchStatus();
   const [stage, setStage] = useState<"links" | "confirm" | "posts">("links");
   const [scrapeError, setScrapeError] = useState<string | null>(null);
 
@@ -48,6 +48,7 @@ export default function LinkDiscoveryFlow({
         onRetry={async () => {
           setScrapeError(await retryScrape());
         }}
+        retrying={retrying}
       />
     );
   }

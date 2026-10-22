@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import toast from "react-hot-toast";
 import {
   ScrapingPostsScreen,
   useLinkFetchStatus,
@@ -16,7 +17,7 @@ export default function ScrapeLoader({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const { status, refresh, retryScrape } = useLinkFetchStatus();
+  const { status, refresh, retryScrape, retrying } = useLinkFetchStatus();
 
   useEffect(() => {
     void refresh();
@@ -27,7 +28,10 @@ export default function ScrapeLoader({
       scrape={status?.scrape ?? null}
       onBack={onClose}
       onOk={onDone}
-      onRetry={() => void retryScrape()}
+      onRetry={() =>
+        void retryScrape().then((error) => error && toast.error(error, { id: "scrape-retry" }))
+      }
+      retrying={retrying}
     />
   );
 }
