@@ -1,9 +1,10 @@
 import clientPromise from "@/lib/mongodb";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { notifyVerificationResult } from "@/lib/notifications";
+import { scrapePendingIfProfileComplete } from "@/lib/fetchLinks";
 
 // Without this, the platform's default function timeout (on Vercel, as low
 // as 10-15s depending on plan) can silently kill this request mid-flight —
@@ -459,6 +460,16 @@ export async function POST() {
             verifiedAt: new Date(),
           },
         },
+      );
+
+      // Verified photos are often the last piece of the profile — scrape
+      // the links the user typed in now rather than leaving them waiting
+      // for link discovery. After the response, so the CV call doesn't
+      // hold up the verification result.
+      after(() =>
+        scrapePendingIfProfileComplete(db, userId).catch((error) =>
+          console.error("Scrape after verification failed to start:", error),
+        ),
       );
     }
 

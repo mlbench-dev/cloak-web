@@ -8,10 +8,8 @@ import {
   IDENTITY_PROFILES_COLLECTION,
   getApprovedLinks,
   getLinkAllowance,
-  getProfileCompleteness,
-  hasFirstScrapeRun,
+  scrapePendingIfProfileComplete,
   shouldAutoFetchLinks,
-  startPendingScrape,
 } from "@/lib/fetchLinks";
 import { setWatchedLinks } from "@/lib/watchedLinks";
 
@@ -143,19 +141,10 @@ export async function POST(request: Request) {
     // Links). The fetch itself goes through POST /api/fetch-urls.
     const shouldFetchLinks = await shouldAutoFetchLinks(db, userId);
 
-    // Newly typed-in links: scraped with the first scrape if it hasn't run
-    // yet (Confirm Links starts it), otherwise straight away. With no fetch
-    // coming (e.g. the plan's link limit is already full) the first scrape
-    // starts now instead.
-    let scrapeStarted = false;
-    if (linkChange.added > 0 && (await getProfileCompleteness(db, userId)).complete) {
-      const firstScrapeDone = await hasFirstScrapeRun(db, userId);
-      if (firstScrapeDone || !shouldFetchLinks) {
-        const scrape = await startPendingScrape(db, userId);
-        // 409 = a scrape is already running; these links follow it.
-        scrapeStarted = scrape.ok && scrape.started;
-      }
-    }
+    // Typed-in links are scraped as soon as the profile is complete — not
+    // held back for link discovery, which may fail or find nothing and
+    // leave them unscraped. Whatever discovery finds gets its own run.
+    const { started: scrapeStarted } = await scrapePendingIfProfileComplete(db, userId);
 
     return NextResponse.json({
       success: true,

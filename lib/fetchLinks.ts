@@ -891,6 +891,21 @@ export async function startPendingScrape(
   return result.ok ? { ok: true, started: true } : result;
 }
 
+// Called wherever the profile can become complete (identity profile saved,
+// reference photos verified): links the user typed in are scraped right
+// away instead of waiting for link discovery, which may never run or find
+// nothing. Links discovery finds later get their own run. No-op while the
+// profile is incomplete or nothing is waiting.
+export async function scrapePendingIfProfileComplete(
+  db: Db,
+  userId: ObjectId,
+): Promise<{ started: boolean }> {
+  if (!(await getProfileCompleteness(db, userId)).complete) return { started: false };
+  const result = await startPendingScrape(db, userId);
+  // 409 = a scrape is already running; finalizeScrapeIfDone picks these up.
+  return { started: result.ok && result.started };
+}
+
 // ---- Scheduled re-scrapes (paid plans) -----------------------------------
 // Every PLAN_LIMITS.autoScrapeEveryDays after the last scrape started, all
 // of a user's watched links are scraped again (the CV API skips posts it

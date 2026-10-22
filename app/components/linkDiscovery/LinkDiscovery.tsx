@@ -132,24 +132,39 @@ export function useLinkFetchStatus() {
   // hitting "already in progress".
   const [retrying, setRetrying] = useState(false);
   const retryingRef = useRef(false);
-  const retryScrape = useCallback(async (): Promise<string | null> => {
-    if (retryingRef.current) return null;
-    retryingRef.current = true;
-    setRetrying(true);
-    let error: string | null = null;
-    try {
-      const result = await readStatus(await fetch("/api/scrape", { method: "POST" }));
-      if (!result.ok) error = result.error;
-      else if (mountedRef.current) setStatus(result.status);
-    } catch {
-      error = "Couldn't start scraping. Please try again.";
-    }
-    // The server may have recorded a new failure — show the current state.
-    if (error) await refresh();
-    retryingRef.current = false;
-    if (mountedRef.current) setRetrying(false);
-    return error;
-  }, [refresh]);
+  const postScrape = useCallback(
+    async (body?: { pending: true }): Promise<string | null> => {
+      if (retryingRef.current) return null;
+      retryingRef.current = true;
+      setRetrying(true);
+      let error: string | null = null;
+      try {
+        const result = await readStatus(
+          await fetch("/api/scrape", {
+            method: "POST",
+            ...(body && {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+          }),
+        );
+        if (!result.ok) error = result.error;
+        else if (mountedRef.current) setStatus(result.status);
+      } catch {
+        error = "Couldn't start scraping. Please try again.";
+      }
+      // The server may have recorded a new failure — show the current state.
+      if (error) await refresh();
+      retryingRef.current = false;
+      if (mountedRef.current) setRetrying(false);
+      return error;
+    },
+    [refresh],
+  );
+  const retryScrape = useCallback(() => postScrape(), [postScrape]);
+  // "Check my links now": scrapes watched links that were never scraped.
+  // Shares `retrying` — either way a scrape is being started.
+  const scrapePending = useCallback(() => postScrape({ pending: true }), [postScrape]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -191,7 +206,7 @@ export function useLinkFetchStatus() {
     if (mountedRef.current) setStatus(next);
   }, []);
 
-  return { status, startError, refresh, start, retryScrape, retrying, applyStatus };
+  return { status, startError, refresh, start, retryScrape, scrapePending, retrying, applyStatus };
 }
 
 function formatElapsed(totalSeconds: number): string {
