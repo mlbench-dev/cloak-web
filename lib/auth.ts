@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { ObjectId } from "mongodb";
 import { normalizeEmail } from "@/lib/email";
+import { redeemLoginToken } from "@/lib/loginToken";
 
 // How often the jwt() callback is allowed to re-query Mongo for fresh user
 // data. This callback runs on every session check (client session fetch AND
@@ -29,6 +30,7 @@ export const authOptions: NextAuthOptions = {
       name: "OTP",
       credentials: {
         email: { label: "Email", type: "email" },
+        loginToken: { label: "Login token", type: "text" },
       },
       async authorize(credentials) {
         // Normalize before the lookup so the session is tied to the same
@@ -39,6 +41,13 @@ export const authOptions: NextAuthOptions = {
 
         const client = await clientPromise;
         const db = client.db();
+
+        // The email alone proves nothing — require the one-time token
+        // otp/verify issued after a correct code.
+        if (!(await redeemLoginToken(db, email, credentials?.loginToken))) {
+          return null;
+        }
+
         const user = await db
           .collection("users")
           .findOne({ email });

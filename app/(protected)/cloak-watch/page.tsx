@@ -63,8 +63,20 @@ export default function IncidentsPage() {
     start: startLinkFetch,
     refresh: refreshLinkFetch,
     retryScrape,
+    scrapePending,
+    retrying: retryingScrape,
     applyStatus,
   } = useLinkFetchStatus();
+  const handleRetryScrape = async () => {
+    setPostsDismissed(false);
+    const error = await retryScrape();
+    if (error) toast.error(error, { id: "scrape-retry" });
+  };
+  const handleCheckLinks = async () => {
+    setPostsDismissed(false);
+    const error = await scrapePending();
+    if (error) toast.error(error, { id: "scrape-retry" });
+  };
   // Showing the Scraping Links screen; stays up after the run finishes
   // until the user taps Ok (or goes back).
   const [watchingScrape, setWatchingScrape] = useState(false);
@@ -127,6 +139,21 @@ export default function IncidentsPage() {
     linkFetch.profileComplete &&
     !linkFetch.everFetched &&
     linkFetch.status === "idle";
+  // Links the user added that have never been scraped — e.g. an account
+  // that finished its profile before completing it started scraping.
+  // Offer to check them now instead of only offering link discovery.
+  const uncheckedCount = links.filter(
+    (link) => !link.scrapeStatus || link.scrapeStatus === "pending",
+  ).length;
+  const showCheckLinks =
+    linkFetch !== null &&
+    linkFetch.profileComplete &&
+    uncheckedCount > 0 &&
+    scrapeState !== "running" &&
+    // A failed run has its own Try again banner.
+    scrapeState !== "failed" &&
+    linkFetch.status !== "running" &&
+    !linkFetch.awaitingReview;
   const [startingScan, setStartingScan] = useState(false);
 
   const handleStartScan = async () => {
@@ -224,7 +251,8 @@ export default function IncidentsPage() {
           setWatchingPosts(false);
           setPostsDismissed(true);
         }}
-        onRetry={() => void retryScrape()}
+        onRetry={() => void handleRetryScrape()}
+        retrying={retryingScrape}
         onOk={() => {
           setWatchingPosts(false);
           setPostsDismissed(true);
@@ -334,13 +362,51 @@ export default function IncidentsPage() {
           </div>
         )}
 
-        {canStartFirstScan && (
+        {showCheckLinks && (
           <div className="mb-4 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
             <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
-              Find links about you
+              Your links haven&apos;t been checked yet
             </p>
             <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
-              Your identity profile is ready. Start a scan to find accounts and pages that match you.
+              {uncheckedCount} link{uncheckedCount === 1 ? "" : "s"} you added{" "}
+              {uncheckedCount === 1 ? "is" : "are"} waiting to be checked for posts about you.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleCheckLinks()}
+                disabled={retryingScrape}
+                className="inline-flex h-[30px] items-center justify-center gap-2 rounded-full bg-[#00C3D0] px-4 text-[14px] font-medium text-white disabled:opacity-60"
+              >
+                {retryingScrape && (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                )}
+                Check my links now
+              </button>
+              {canStartFirstScan && (
+                <button
+                  type="button"
+                  onClick={() => void handleStartScan()}
+                  disabled={startingScan || retryingScrape}
+                  className="inline-flex h-[30px] items-center justify-center gap-2 rounded-full bg-white px-4 text-[14px] font-medium text-[#00C3D0] disabled:opacity-60"
+                >
+                  {startingScan && (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#00C3D0]/30 border-t-[#00C3D0]" />
+                  )}
+                  Find more links first
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {canStartFirstScan && !showCheckLinks && (
+          <div className="mb-4 rounded-3xl border border-[#C8EEF1] bg-[#E7F9FB] p-3.5">
+            <p className="text-[14px] font-medium leading-5 text-[#2B2B2B]">
+              {links.length > 0 ? "Find more links about you" : "Find links about you"}
+            </p>
+            <p className="mt-0.5 text-[12px] leading-4 text-[#839297]">
+              Your identity profile is ready. Find accounts and pages that match you.
             </p>
             <button
               type="button"
@@ -351,7 +417,7 @@ export default function IncidentsPage() {
               {startingScan && (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
               )}
-              Start Scan
+              Find Links
             </button>
           </div>
         )}
@@ -395,13 +461,14 @@ export default function IncidentsPage() {
             </span>
             <button
               type="button"
-              onClick={() => {
-                setPostsDismissed(false);
-                void retryScrape();
-              }}
-              className="shrink-0 text-[12px] text-[#F30131]"
+              onClick={() => void handleRetryScrape()}
+              disabled={retryingScrape}
+              className="flex shrink-0 items-center gap-1.5 text-[12px] text-[#F30131] disabled:opacity-60"
             >
-              Try again
+              {retryingScrape && (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#F30131]/30 border-t-[#F30131]" />
+              )}
+              {retryingScrape ? "Retrying..." : "Try again"}
             </button>
           </div>
         )}

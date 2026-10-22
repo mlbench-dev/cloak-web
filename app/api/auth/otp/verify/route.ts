@@ -2,6 +2,7 @@ import clientPromise from "@/lib/mongodb";
 import { calculateLevel, initializeUserAchievements } from "@/lib/achievements";
 import { XP_CONFIG } from "@/lib/config";
 import { normalizeEmail } from "@/lib/email";
+import { issueLoginToken } from "@/lib/loginToken";
 import { NextResponse } from "next/server";
 
 // Most wrong guesses allowed against one issued code before it's burned and
@@ -137,8 +138,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // Redeemed by the credentials provider's authorize() — the only thing
+    // that lets the client turn this verification into a session.
+    const loginToken = await issueLoginToken(db, email);
+
     return NextResponse.json({
       message: "OTP verified successfully",
+      loginToken,
       user: {
         id: user._id.toString(),
         email: user.email,

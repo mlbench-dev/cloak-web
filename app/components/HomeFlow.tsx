@@ -316,12 +316,17 @@ function HomeFlowContent() {
         window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY);
         window.sessionStorage.removeItem(OTP_RESEND_DEADLINE_KEY);
 
-        // Use NextAuth signIn to create a session for the OTP user
-        // This ensures the session is established and data is synced
-        await signIn("credentials", {
+        // Use NextAuth signIn to create a session for the OTP user. The
+        // one-time loginToken from otp/verify is what authorizes it.
+        const signInResult = await signIn("credentials", {
           email,
+          loginToken: data.loginToken,
           redirect: false,
         });
+        if (!signInResult?.ok || signInResult.error) {
+          setError("Couldn't sign you in. Please request a new code.");
+          return;
+        }
 
         if (data.user.username) {
           router.replace("/dashboard");

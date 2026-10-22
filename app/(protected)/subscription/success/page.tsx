@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { CheckCircle2 } from "lucide-react";
 import { SubscriptionHeader, SubscriptionScreenShell } from "../_components/SubscriptionUI";
+import { useCheckoutBackGuard } from "../_lib/useCheckoutBackGuard";
 
 // PayFast's browser redirect here can arrive before the server-to-server
 // ITN has finished updating the plan — this page doesn't assume the plan
@@ -16,6 +17,8 @@ export default function SubscriptionSuccessPage() {
   const router = useRouter();
   const { update } = useSession();
   const [refreshed, setRefreshed] = useState(false);
+  // Browser back from here would land on PayFast and loop back to this page.
+  const exitCheckout = useCheckoutBackGuard(true);
 
   useEffect(() => {
     void update().finally(() => setRefreshed(true));
@@ -23,7 +26,7 @@ export default function SubscriptionSuccessPage() {
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader backHref="/profile" />
+      <SubscriptionHeader onBack={exitCheckout} />
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#1CCF84]/10">
           <CheckCircle2 className="h-8 w-8 text-[#1CCF84]" />

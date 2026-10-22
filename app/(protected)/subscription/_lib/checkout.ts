@@ -2,6 +2,8 @@
 // the plan-picker page (UpgradeModal onConfirm) and the per-plan detail
 // pages (CancelSubscriptionBlock onCancel).
 
+import { CHECKOUT_HISTORY_KEY } from "./useCheckoutBackGuard";
+
 export type PlanSlug = "cloak-pro";
 
 // PayFast's checkout is a redirect + form POST, not a fetch — build a
@@ -34,6 +36,16 @@ export async function startCheckout(plan: PlanSlug): Promise<void> {
 
   if (!res.ok || !data?.success) {
     throw new Error(data?.error || "Failed to start checkout. Please try again.");
+  }
+
+  // Lets useCheckoutBackGuard skip the PayFast history entries on return.
+  try {
+    window.sessionStorage.setItem(
+      CHECKOUT_HISTORY_KEY,
+      String(window.history.length),
+    );
+  } catch {
+    // Storage blocked — the guard falls back to replacing with /profile.
   }
 
   submitToPayfast(data.processUrl, data.fields);

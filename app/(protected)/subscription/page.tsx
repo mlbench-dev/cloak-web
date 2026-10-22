@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { Crown } from "lucide-react";
 import {
@@ -28,14 +27,23 @@ import {
   formatPlanDate,
   type SubscriptionStatus,
 } from "./_lib/status";
+import { useCheckoutBackGuard } from "./_lib/useCheckoutBackGuard";
+
+// Read from the real URL, not useSearchParams(): once the param is
+// stripped, Next's router cache can still hand a later visit to
+// /subscription the old ?checkout=cancelled, re-showing the toast on every
+// visit until a full reload.
+function readCheckoutParam(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("checkout");
+}
 
 export default function SubscriptionPage() {
-  const searchParams = useSearchParams();
   // Arrived back from PayFast (success or cancel) — history behind this
-  // page is the checkout, so back goes to Profile instead. Captured once,
-  // since the param is stripped below.
-  const [cameFromCheckout] = useState(() => searchParams.has("checkout"));
-  const backHref = cameFromCheckout ? "/profile" : undefined;
+  // page is the checkout, so back (app or browser) skips over it. Captured
+  // once, since the param is stripped below.
+  const [checkoutResult] = useState(readCheckoutParam);
+  const cameFromCheckout = checkoutResult !== null;
   const [activeModal, setActiveModal] = useState<PlanSlug | null>(null);
   const [pendingUpgrade, setPendingUpgrade] = useState<PlanSlug | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -74,16 +82,20 @@ export default function SubscriptionPage() {
   }, []);
 
   useEffect(() => {
-    const checkout = searchParams.get("checkout");
-    if (!checkout) return;
+    if (!checkoutResult) return;
 
-    if (checkout === "cancelled") {
+    if (checkoutResult === "cancelled") {
       toast.error("Checkout cancelled. No payment was made.", {
         id: "checkout-cancelled",
       });
     }
-    window.history.replaceState(null, "", "/subscription");
-  }, [searchParams]);
+    // Keep the existing state — it may already be the back guard's entry.
+    window.history.replaceState(window.history.state, "", "/subscription");
+  }, [checkoutResult]);
+
+  // After the param strip above, so the guard is pushed on the clean URL.
+  const exitCheckout = useCheckoutBackGuard(cameFromCheckout);
+  const onBack = cameFromCheckout ? exitCheckout : undefined;
 
   const handleUpgrade = async (plan: PlanSlug) => {
     if (isRedirecting) return;
@@ -124,7 +136,7 @@ export default function SubscriptionPage() {
   if (loading) {
     return (
       <SubscriptionScreenShell>
-        <SubscriptionHeader backHref={backHref} />
+        <SubscriptionHeader onBack={onBack} />
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
         </div>
@@ -141,7 +153,7 @@ export default function SubscriptionPage() {
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader backHref={backHref} />
+      <SubscriptionHeader onBack={onBack} />
 
       <div className="custom-scrollbar flex flex-1 flex-col overflow-y-auto px-5 py-4">
         <SectionLabel>Current Plan</SectionLabel>
