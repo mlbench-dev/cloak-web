@@ -538,6 +538,11 @@ export default function IncidentsPage() {
                     <p className="truncate text-[11px] leading-4 text-[#839297]">
                       {subjectName || ""}
                     </p>
+                    {link.scrapeError && (
+                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[#F30131]">
+                        {link.scrapeError}
+                      </p>
+                    )}
                   </div>
                   <LinkProgress
                     link={link}
@@ -684,6 +689,19 @@ function LinkProgress({
         className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[#14C3CF] px-1 text-[10px] text-white"
       >
         {link.newPosts}
+      </span>
+    );
+  }
+  if (link.scrapeStatus === "failed") {
+    return (
+      <span className="shrink-0 text-right text-[10px] leading-[14px] text-[#F30131]">
+        Last Check Failed
+        {link.scrapeUpdatedAt && (
+          <>
+            <br />
+            {formatAgo(link.scrapeUpdatedAt)}
+          </>
+        )}
       </span>
     );
   }

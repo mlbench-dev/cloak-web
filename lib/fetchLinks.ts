@@ -31,6 +31,8 @@ export type FetchedLink = {
   // CV-owned: pending (never scraped) / queued / in_progress / complete / failed.
   scrapeStatus?: string;
   scrapeUpdatedAt?: Date;
+  // CV-owned: why the last scrape of this link failed.
+  error?: string | null;
   // "manual" = typed into Known Websites; absent = found by the CV fetch.
   source?: "manual";
   addedAt?: Date;

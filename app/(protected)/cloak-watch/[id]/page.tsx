@@ -77,6 +77,8 @@ export default function LinkPostsPage() {
   const [posts, setPosts] = useState<CloakWatchPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Why the last scrape of this link failed (CV service), if it did.
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StatusTab>("All");
   // The watched account's picture/name/bio, from its link preview — often
   // blocked by Instagram/Facebook, so everything has a fallback.
@@ -113,6 +115,7 @@ export default function LinkPostsPage() {
           return;
         }
         setPosts(data.posts as CloakWatchPost[]);
+        setScrapeError(data.link?.scrapeError ?? null);
       })
       .catch(() => {
         if (!cancelled) setError("Couldn't load posts.");
@@ -171,6 +174,13 @@ export default function LinkPostsPage() {
             Monitoring Active
           </span>
         </div>
+
+        {scrapeError && (
+          <div className="mt-3 rounded-3xl bg-[#FFF1F1] px-3 py-3">
+            <p className="text-[12px] font-medium leading-4 text-[#F30131]">Last check failed</p>
+            <p className="mt-0.5 text-[12px] leading-4 text-[#2B2B2B]">{scrapeError}</p>
+          </div>
+        )}
 
         {profile?.description && (
           <div className="mt-4">

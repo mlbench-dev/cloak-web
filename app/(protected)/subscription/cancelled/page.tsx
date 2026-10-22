@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
 import { SubscriptionHeader, SubscriptionScreenShell } from "../_components/SubscriptionUI";
 
 export default function SubscriptionCancelledPage() {
-  const router = useRouter();
-
+  // A full load, not router.replace — see the success page's button.
   useEffect(() => {
-    router.replace("/subscription?checkout=cancelled");
-  }, [router]);
+    window.location.replace("/subscription?checkout=cancelled");
+  }, []);
 
   return (
     <SubscriptionScreenShell>
@@ -25,7 +23,7 @@ export default function SubscriptionCancelledPage() {
         </p>
         <button
           type="button"
-          onClick={() => router.replace("/subscription?checkout=cancelled")}
+          onClick={() => window.location.replace("/subscription?checkout=cancelled")}
           className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
         >
           Back to Subscription

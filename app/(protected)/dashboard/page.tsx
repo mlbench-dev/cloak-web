@@ -57,6 +57,8 @@ type DashboardSummary = {
   nextScanAt: string | null;
   matches: number;
   matchesThisWeek: number;
+  // This week's matches not yet confirmed or rejected.
+  newMatches: number;
   avgMatchConfidence: number | null;
   pendingReports: number;
   manualScan: {
@@ -655,10 +657,10 @@ export default function DashboardPage() {
                   Matches found by Cloak
                 </p>
               </div>
-              {/* New = matches found in the last 7 days. */}
-              {hasRequiredIdentityDetails && (summary?.matchesThisWeek ?? 0) > 0 && (
+              {/* New = matches found in the last 7 days, not yet reviewed. */}
+              {hasRequiredIdentityDetails && (summary?.newMatches ?? 0) > 0 && (
                 <span className="shrink-0 text-[12px] leading-4 text-[#00C3D0]">
-                  {summary?.matchesThisWeek} New
+                  {summary?.newMatches} New
                 </span>
               )}
               <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#2B2B2B]" />

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Db, ObjectId } from "mongodb";
-import { FETCH_URL_COLLECTION, type FetchUrlDoc } from "@/lib/fetchLinks";
+import { FETCH_URL_COLLECTION, type FetchUrlDoc, type FetchedLink } from "@/lib/fetchLinks";
 import { watchedLinkKey } from "@/lib/watchedLinkUrl";
 
 // Posts the CV scraper found on a watched link, for Cloak Watch's per-link
@@ -51,7 +51,7 @@ export type CloakWatchPost = {
 };
 
 export type LinkPosts = {
-  link: { uuid: string; url: string; platform: string };
+  link: { uuid: string; url: string; platform: string; scrapeError: string | null };
   posts: CloakWatchPost[];
 };
 
@@ -66,6 +66,22 @@ type ReviewDoc = {
 
 export function postIdFor(postUrl: string): string {
   return createHash("sha1").update(postUrl).digest("hex").slice(0, 12);
+}
+
+// postIdFor ids of every post the user has confirmed or rejected.
+export async function getReviewedPostIds(db: Db, userId: ObjectId): Promise<Set<string>> {
+  const reviews = await db
+    .collection<ReviewDoc>(REVIEWS_COLLECTION)
+    .find({ userId }, { projection: { postId: 1 } })
+    .toArray();
+  return new Set(reviews.map((review) => review.postId));
+}
+
+// The CV service's reason for a failed scrape. Only shown while the link is
+// actually failed — a stale error can linger after a later success.
+function linkScrapeError(link: FetchedLink): string | null {
+  if (link.scrapeStatus !== "failed") return null;
+  return typeof link.error === "string" && link.error.trim() ? link.error.trim() : null;
 }
 
 function toPercent(value: number | undefined): number | null {
@@ -138,7 +154,10 @@ export async function getLinkPosts(
     };
   });
 
-  return { link: { uuid: link.uuid, url: link.url, platform: link.platform }, posts };
+  return {
+    link: { uuid: link.uuid, url: link.url, platform: link.platform, scrapeError: linkScrapeError(link) },
+    posts,
+  };
 }
 
 // Confirm Match / Reject Match on the post detail page.
@@ -180,6 +199,8 @@ export type WatchedLinkSummary = {
   // CV progress for this link: pending / queued / in_progress / complete / failed.
   scrapeStatus: string | null;
   scrapeUpdatedAt: string | null;
+  // Why the last scrape failed, from the CV service; null unless failed.
+  scrapeError: string | null;
   totalPosts: number;
   // Posts not yet confirmed or rejected.
   newPosts: number;
@@ -241,6 +262,7 @@ export async function getCloakWatchOverview(
       platform: link.platform,
       scrapeStatus: link.scrapeStatus ?? null,
       scrapeUpdatedAt: link.scrapeUpdatedAt ? new Date(link.scrapeUpdatedAt).toISOString() : null,
+      scrapeError: linkScrapeError(link),
       totalPosts: postUrls.length,
       newPosts,
     };
