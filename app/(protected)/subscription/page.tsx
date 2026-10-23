@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useSession } from "next-auth/react";
 import { Crown } from "lucide-react";
 import {
   BillingCard,
@@ -9,6 +10,7 @@ import {
   ConfirmDialog,
   CurrentPlanCard,
   FeatureListCard,
+  PaymentReceivedView,
   PlanUpsellCard,
   PrivacyFooter,
   SectionLabel,
@@ -27,7 +29,13 @@ import {
   formatPlanDate,
   type SubscriptionStatus,
 } from "./_lib/status";
-import { useCheckoutBackGuard } from "./_lib/useCheckoutBackGuard";
+import {
+  canRewindToSubscription,
+  peekCheckoutResult,
+  rewindToSubscription,
+  takeCheckoutResult,
+  type CheckoutResult,
+} from "./_lib/checkoutReturn";
 
 // Read from the real URL, not useSearchParams(): once the param is
 // stripped, Next's router cache can still hand a later visit to
@@ -38,12 +46,27 @@ function readCheckoutParam(): string | null {
   return new URLSearchParams(window.location.search).get("checkout");
 }
 
+function showCancelledToast() {
+  toast.error("Checkout cancelled. No payment was made.", {
+    id: "checkout-cancelled",
+  });
+}
+
 export default function SubscriptionPage() {
-  // Arrived back from PayFast (success or cancel) — history behind this
-  // page is the checkout, so back (app or browser) skips over it. Captured
-  // once, since the param is stripped below.
+  const { update: refreshSession } = useSession();
+  // Arrived on a PayFast return URL (?checkout=cancelled, or =success when
+  // the success page had nothing to rewind to). Captured once, since the
+  // param is stripped below.
   const [checkoutResult] = useState(readCheckoutParam);
-  const cameFromCheckout = checkoutResult !== null;
+  // "Payment received", shown on this entry rather than its own page so
+  // browser back can't reach PayFast. Set when rewound to after a payment,
+  // or on ?checkout=success when there's nowhere to rewind to.
+  const [showPaymentReceived, setShowPaymentReceived] = useState(() =>
+    checkoutResult
+      ? checkoutResult === "success" && !canRewindToSubscription()
+      : peekCheckoutResult() === "success",
+  );
+  const [sessionRefreshed, setSessionRefreshed] = useState(false);
   const [activeModal, setActiveModal] = useState<PlanSlug | null>(null);
   const [pendingUpgrade, setPendingUpgrade] = useState<PlanSlug | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -65,37 +88,65 @@ export default function SubscriptionPage() {
       setSubscription(status);
       setLoading(false);
     });
-  }, []);
+    // Rewound to from a PayFast return page (checkoutReturn.ts) after a
+    // full reload; "success" was already picked up by showPaymentReceived's
+    // initial state. Not on a return-URL page itself: it's the one leaving
+    // the result for the page it rewinds to.
+    if (!checkoutResult && takeCheckoutResult() === "cancelled") showCancelledToast();
+  }, [checkoutResult]);
+
+  // After a payment: refresh the session (and plan) so the new plan shows
+  // once PayFast's ITN has landed — see lib/auth.ts's jwt() callback.
+  useEffect(() => {
+    if (!showPaymentReceived) return;
+    void refreshSession().finally(() => setSessionRefreshed(true));
+    void fetchSubscriptionStatus().then((status) => {
+      setSubscription(status);
+      setLoading(false);
+    });
+  }, [showPaymentReceived, refreshSession]);
 
   useEffect(() => {
-    const resetCheckoutState = () => {
+    const handlePageShow = (event: PageTransitionEvent) => {
       setActiveModal(null);
       setPendingUpgrade(null);
       setIsRedirecting(false);
+      // Restored from the back/forward cache — e.g. rewound to after
+      // checkout. The plan may have changed meanwhile.
+      if (event.persisted) {
+        const result = takeCheckoutResult();
+        if (result === "cancelled") showCancelledToast();
+        if (result === "success") setShowPaymentReceived(true);
+        void fetchSubscriptionStatus().then((status) => {
+          setSubscription(status);
+          setLoading(false);
+        });
+      }
     };
 
-    window.addEventListener("pageshow", resetCheckoutState);
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
-      window.removeEventListener("pageshow", resetCheckoutState);
+      window.removeEventListener("pageshow", handlePageShow);
     };
   }, []);
 
+  // On a PayFast return URL: rewind to the /subscription entry checkout
+  // started from, so PayFast's pages aren't behind this one (back into
+  // them bounces straight here — a loop). Ref so Strict Mode's re-run
+  // doesn't rewind twice.
+  const rewoundRef = useRef(false);
   useEffect(() => {
-    if (!checkoutResult) return;
+    if (!checkoutResult || rewoundRef.current) return;
+    rewoundRef.current = true;
+    const result: CheckoutResult = checkoutResult === "success" ? "success" : "cancelled";
+    if (rewindToSubscription(result)) return;
 
-    if (checkoutResult === "cancelled") {
-      toast.error("Checkout cancelled. No payment was made.", {
-        id: "checkout-cancelled",
-      });
-    }
-    // Keep the existing state — it may already be the back guard's entry.
+    // Nothing to rewind to (e.g. storage blocked): show it here instead
+    // ("success" is already showing via showPaymentReceived).
+    if (result === "cancelled") showCancelledToast();
     window.history.replaceState(window.history.state, "", "/subscription");
   }, [checkoutResult]);
-
-  // After the param strip above, so the guard is pushed on the clean URL.
-  const exitCheckout = useCheckoutBackGuard(cameFromCheckout);
-  const onBack = cameFromCheckout ? exitCheckout : undefined;
 
   const handleUpgrade = async (plan: PlanSlug) => {
     if (isRedirecting) return;
@@ -133,10 +184,19 @@ export default function SubscriptionPage() {
     }
   };
 
+  if (showPaymentReceived) {
+    return (
+      <PaymentReceivedView
+        confirming={!sessionRefreshed}
+        onBack={() => setShowPaymentReceived(false)}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <SubscriptionScreenShell>
-        <SubscriptionHeader onBack={onBack} />
+        <SubscriptionHeader />
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
         </div>
@@ -153,7 +213,7 @@ export default function SubscriptionPage() {
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader onBack={onBack} />
+      <SubscriptionHeader />
 
       <div className="custom-scrollbar flex flex-1 flex-col overflow-y-auto px-5 py-4">
         <SectionLabel>Current Plan</SectionLabel>

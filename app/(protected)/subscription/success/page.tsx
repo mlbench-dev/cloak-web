@@ -1,52 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { CheckCircle2 } from "lucide-react";
-import { SubscriptionHeader, SubscriptionScreenShell } from "../_components/SubscriptionUI";
-import { useCheckoutBackGuard } from "../_lib/useCheckoutBackGuard";
+import { useEffect, useRef } from "react";
+import { SubscriptionScreenShell } from "../_components/SubscriptionUI";
+import { rewindToSubscription } from "../_lib/checkoutReturn";
 
-// PayFast's browser redirect here can arrive before the server-to-server
-// ITN has finished updating the plan — this page doesn't assume the plan
-// is live yet, it just nudges the session to refresh once (which will
-// pick up the new plan once the ITN has landed, thanks to the
-// dbRefreshedAt reset in lib/auth.ts's jwt() callback) and lets the user
-// head back in either case.
+// PayFast's return URL after a successful payment. Nothing is shown here:
+// this page sits right on top of PayFast in the tab's history, so browser
+// back from it would land on PayFast. Instead it jumps back to the
+// /subscription entry checkout started from, which shows "Payment
+// received" (see _lib/checkoutReturn.ts).
 export default function SubscriptionSuccessPage() {
-  const { update } = useSession();
-  const [refreshed, setRefreshed] = useState(false);
-  // Browser back from here would land on PayFast and loop back to this page.
-  const exitCheckout = useCheckoutBackGuard(true);
-
+  // Ref so Strict Mode's effect re-run doesn't rewind twice.
+  const startedRef = useRef(false);
   useEffect(() => {
-    void update().finally(() => setRefreshed(true));
-  }, [update]);
+    if (startedRef.current) return;
+    startedRef.current = true;
+    if (!rewindToSubscription("success")) {
+      // Nothing to rewind to (e.g. storage blocked): show it there anyway.
+      window.location.replace("/subscription?checkout=success");
+    }
+  }, []);
 
   return (
     <SubscriptionScreenShell>
-      <SubscriptionHeader onBack={exitCheckout} />
-      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#1CCF84]/10">
-          <CheckCircle2 className="h-8 w-8 text-[#1CCF84]" />
-        </div>
-        <h1 className="text-[22px] font-semibold text-[#111827]">Payment received</h1>
-        <p className="mt-3 max-w-[300px] text-[14px] leading-6 text-[#8F98A0]">
-          {refreshed
-            ? "Your plan is being activated. It can take a moment to reflect everywhere."
-            : "Confirming your payment..."}
-        </p>
-        {/* replace, not push: history behind this page is the PayFast
-            checkout, so it must not stay reachable via back. A full load,
-            not router.replace: /subscription reads ?checkout= from the real
-            URL on first render, which a client-side navigation hasn't
-            updated yet — it would miss it and skip the back guard. */}
-        <button
-          type="button"
-          onClick={() => window.location.replace("/subscription?checkout=success")}
-          className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
-        >
-          Back to Subscription
-        </button>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#14C3CF]/20 border-t-[#14C3CF]" />
+        <p className="text-[14px] text-[#8F98A0]">Confirming your payment...</p>
       </div>
     </SubscriptionScreenShell>
   );
