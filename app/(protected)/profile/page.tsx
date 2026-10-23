@@ -40,6 +40,7 @@ import {
   type CloakWatchPostScope,
 } from "@/app/(protected)/community/_lib/posts";
 import { getCroppedImg } from "@/lib/cropImage";
+import { goBack } from "@/lib/navigation";
 
 const getIdentityDraftStorageKey = (scopeKey?: string | null) =>
   `cloak-identity-verification-draft:${scopeKey || "anonymous"}`;
@@ -653,9 +654,23 @@ export default function ProfilePage() {
     }
   };
 
-  const openPostsView = async (title: string, scope: ProfilePostsScope) => {
+  const openPostsView = async (
+    title: string,
+    scope: ProfilePostsScope,
+    // Opened from another posts screen (Saved via My Posts' bookmark) —
+    // its back button returns there instead of to Profile.
+    from?: ProfilePostsScope,
+  ) => {
     setPostsViewTitle(title);
-    router.push(`/profile?view=posts&scope=${scope}`);
+    router.push(`/profile?view=posts&scope=${scope}${from ? `&from=${from}` : ""}`);
+  };
+
+  const handlePostsBack = () => {
+    if (searchParams.get("from") === "my") {
+      goBack(router, "/profile?view=posts&scope=my");
+    } else {
+      router.push("/profile");
+    }
   };
 
   useEffect(() => {
@@ -821,7 +836,7 @@ export default function ProfilePage() {
       <div className="flex h-full flex-col bg-white font-sf-pro-display">
         <header className="shrink-0 bg-white">
           <div className="flex items-center justify-between ">
-            <button onClick={() => router.push("/profile")} className="-ml-3 p-2">
+            <button onClick={handlePostsBack} className="-ml-3 p-2">
               <ChevronLeft className="h-6 w-6 text-[#8F98A0]" />
             </button>
             <h1 className="text-[16px] font-medium text-[#2B2B2B]">
@@ -831,7 +846,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 aria-label="Saved posts"
-                onClick={() => void openPostsView("Saved Posts", "saved")}
+                onClick={() => void openPostsView("Saved Posts", "saved", "my")}
                 className="-mr-2 flex h-10 w-10 items-center justify-center text-[#2B2B2B]"
               >
                 <Bookmark className="h-[22px] w-[22px]" strokeWidth={1.8} />

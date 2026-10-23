@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Check,
+  CheckCircle2,
   ChevronLeft,
   Crown,
   ShieldCheck,
@@ -79,6 +80,43 @@ export function SubscriptionHeader({
       <h1 className="text-[16px] font-medium text-[#2B2B2B]">Subscription</h1>
       <div className="w-10" />
     </header>
+  );
+}
+
+// "Payment received", shown on the /subscription page itself after
+// PayFast returns (see _lib/checkoutReturn.ts). PayFast's browser redirect
+// can arrive before the server-to-server ITN has updated the plan, so this
+// doesn't assume the plan is live yet.
+export function PaymentReceivedView({
+  confirming,
+  onBack,
+}: {
+  // The session refresh that picks up the new plan is still running.
+  confirming: boolean;
+  onBack: () => void;
+}) {
+  return (
+    <SubscriptionScreenShell>
+      <SubscriptionHeader onBack={onBack} />
+      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#1CCF84]/10">
+          <CheckCircle2 className="h-8 w-8 text-[#1CCF84]" />
+        </div>
+        <h1 className="text-[22px] font-semibold text-[#111827]">Payment received</h1>
+        <p className="mt-3 max-w-[300px] text-[14px] leading-6 text-[#8F98A0]">
+          {confirming
+            ? "Confirming your payment..."
+            : "Your plan is being activated. It can take a moment to reflect everywhere."}
+        </p>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-8 w-full max-w-[280px] rounded-full bg-[#14C3CF] px-4 py-2.5 text-[16px] font-medium text-white"
+        >
+          Back to Subscription
+        </button>
+      </div>
+    </SubscriptionScreenShell>
   );
 }
 
